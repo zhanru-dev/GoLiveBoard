@@ -51,6 +51,14 @@ export default {
       to: { path: "^apps/web" },
     },
     {
+      name: "no-test-code-in-production",
+      comment:
+        "Test helpers and test files are never imported by code that ships.",
+      severity: "error",
+      from: { pathNot: "\\.test\\.ts$|/testing/" },
+      to: { path: "\\.test\\.ts$|/testing/" },
+    },
+    {
       name: "domain-is-pure",
       comment:
         "Domain code holds business rules only: no framework, database or I/O, so it can be unit-tested exhaustively.",

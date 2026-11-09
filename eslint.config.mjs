@@ -33,6 +33,11 @@ export default defineConfig([
         { argsIgnorePattern: "^_", ignoreRestSiblings: true },
       ],
       "@typescript-eslint/switch-exhaustiveness-check": "error",
+      // NestJS modules are empty classes that exist for their decorator.
+      "@typescript-eslint/no-extraneous-class": [
+        "error",
+        { allowWithDecorator: true },
+      ],
       "@typescript-eslint/restrict-template-expressions": [
         "error",
         { allowNumber: true },

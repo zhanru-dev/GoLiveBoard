@@ -33,6 +33,7 @@
 | `404`                 | Not found — **also returned for resources in another workspace**, so their existence is not revealed |
 | `409`                 | The action conflicts with the resource's state (illegal transition, hard blockers, archived event)   |
 | `412`                 | `If-Match` does not match the current version                                                        |
+| `413`                 | The request body is larger than 100 KB                                                               |
 | `422`                 | Idempotency key reused with a different request body                                                 |
 | `428`                 | `If-Match` required but missing                                                                      |
 | `429`                 | Rate limit exceeded                                                                                  |
@@ -69,19 +70,19 @@ Error codes are defined once in `packages/contracts/src/errors.ts`; clients swit
 
 ### 3.1 Health and session
 
-| Method and path                     | Role                 | Notes                                                              |
-| ----------------------------------- | -------------------- | ------------------------------------------------------------------ |
-| `GET /health/live`                  | Pub                  | Process is running                                                 |
-| `GET /health/ready`                 | Pub                  | Database and Valkey reachable; `503` otherwise                     |
-| `POST /auth/sign-up`                | Pub                  | Creates user, workspace, Owner membership. Rate-limited.           |
-| `POST /auth/sign-in`                | Pub                  | Sets session cookies. 10 failures / 15 min per account and per IP. |
-| `POST /auth/refresh`                | Pub (refresh cookie) | Rotates the refresh token                                          |
-| `POST /auth/sign-out`               | O M A                | Revokes the session                                                |
-| `POST /auth/password-reset/request` | Pub                  | Always `202`                                                       |
-| `POST /auth/password-reset/confirm` | Pub                  | Token + new password; revokes other sessions                       |
-| `POST /auth/demo`                   | Pub                  | Demo mode only                                                     |
-| `GET /me`                           | O M A                | User, memberships, active workspace and role                       |
-| `PUT /me/active-workspace`          | O M A                | Switches the session's workspace                                   |
+| Method and path                     | Role                 | Notes                                                                                                                                                                         |
+| ----------------------------------- | -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /health/live`                  | Pub                  | Process is running                                                                                                                                                            |
+| `GET /health/ready`                 | Pub                  | Database and Valkey reachable; `503` otherwise. Health responses use their own body (`HealthReport`), not problem details, because load balancers and uptime checks read them |
+| `POST /auth/sign-up`                | Pub                  | Creates user, workspace, Owner membership. Rate-limited.                                                                                                                      |
+| `POST /auth/sign-in`                | Pub                  | Sets session cookies. 10 failures / 15 min per account and per IP.                                                                                                            |
+| `POST /auth/refresh`                | Pub (refresh cookie) | Rotates the refresh token                                                                                                                                                     |
+| `POST /auth/sign-out`               | O M A                | Revokes the session                                                                                                                                                           |
+| `POST /auth/password-reset/request` | Pub                  | Always `202`                                                                                                                                                                  |
+| `POST /auth/password-reset/confirm` | Pub                  | Token + new password; revokes other sessions                                                                                                                                  |
+| `POST /auth/demo`                   | Pub                  | Demo mode only                                                                                                                                                                |
+| `GET /me`                           | O M A                | User, memberships, active workspace and role                                                                                                                                  |
+| `PUT /me/active-workspace`          | O M A                | Switches the session's workspace                                                                                                                                              |
 
 ### 3.2 Workspace and team
 
