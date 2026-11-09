@@ -1,5 +1,6 @@
 import { Controller, Get } from "@nestjs/common";
 import type { NestExpressApplication } from "@nestjs/platform-express";
+import { InjectPinoLogger, PinoLogger } from "nestjs-pino";
 import request from "supertest";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
@@ -7,6 +8,11 @@ import { createTestApp, LOG_LEVEL, LogCapture } from "../testing/test-app.js";
 
 @Controller("test-only")
 class TestOnlyController {
+  constructor(
+    @InjectPinoLogger("TestOnlyController")
+    private readonly logger: PinoLogger,
+  ) {}
+
   @Get("ok")
   ok(): { ok: true } {
     return { ok: true };
@@ -15,6 +21,16 @@ class TestOnlyController {
   @Get("crash")
   crash(): never {
     throw new Error("database exploded");
+  }
+
+  /** Logs sensitive values by mistake, as real code eventually will. */
+  @Get("careless")
+  careless(): { ok: true } {
+    this.logger.info(
+      { password: "hunter2", user: { email: "ada@example.com" } },
+      "Careless log line",
+    );
+    return { ok: true };
   }
 }
 
@@ -71,6 +87,20 @@ describe("request logging", () => {
     expect(written).not.toContain("one-time-secret");
     expect(written).not.toContain("cookie-secret");
     expect(written).not.toContain("bearer-secret");
+  });
+
+  it("redacts sensitive fields that application code logs", async () => {
+    const entries = await logsFor(
+      (id) => http().get("/api/v1/test-only/careless").set("X-Request-Id", id),
+      "log-careless",
+    );
+
+    const careless = entries.find((entry) => entry.msg === "Careless log line");
+    expect(careless).toMatchObject({
+      password: "[Redacted]",
+      user: { email: "[Redacted]" },
+    });
+    expect(logs.lines.join("\n")).not.toMatch(/hunter2|ada@example\.com/);
   });
 
   it("logs an unexpected error with its stack, linked by request ID", async () => {
