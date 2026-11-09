@@ -6,7 +6,7 @@ It answers the question operations teams struggle with most — **is this event 
 
 ## Status
 
-Planning. This repository is the reference implementation that the OpsPilot build-along course follows. Start with the development documentation:
+In development: milestone 1 (foundations). This repository is the reference implementation that the OpsPilot build-along course follows. Start with the development documentation:
 
 | Document                                                                  | What it covers                                                          |
 | ------------------------------------------------------------------------- | ----------------------------------------------------------------------- |

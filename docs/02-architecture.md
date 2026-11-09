@@ -253,7 +253,7 @@ Each process validates its environment with a Zod schema at startup and refuses 
 
 ### 7.9 Observability
 
-- **Logs**: pino, JSON, one line per event, with `requestId`, `traceId`, `workspaceId` and no personal data.
+- **Logs**: pino, JSON, one line per event, with the request ID (`req.id`, also returned to the client as `X-Request-Id`), `traceId`, `workspaceId` and no personal data.
 - **Traces**: OpenTelemetry in web (server side), api and worker. Trace context travels through HTTP headers and job payloads, so one trace shows a request and the jobs it caused.
 - **Errors**: Sentry in the browser, web server, api and worker, tagged with the release.
 - **Health**: `/api/v1/health/live` (process up) and `/api/v1/health/ready` (database and Valkey reachable).
