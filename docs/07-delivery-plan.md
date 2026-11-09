@@ -21,11 +21,11 @@ flowchart LR
   m7 --> m8
 ```
 
-| Phase | Outcome | Indicative length at three sessions a week |
-| --- | --- | --- |
-| 1 · Deployable core | Staff can sign up, prepare an event and get a trustworthy readiness verdict, on AWS with CI/CD | 7–9 weeks |
-| 2 · Golden flow | Attendees register, watch, chat and ask; staff run the event and get a report | 5–7 weeks |
-| 3 · Standout | AI triage with evaluations, observability, load and accessibility evidence, launch materials | 3–4 weeks |
+| Phase               | Outcome                                                                                        | Indicative length at three sessions a week |
+| ------------------- | ---------------------------------------------------------------------------------------------- | ------------------------------------------ |
+| 1 · Deployable core | Staff can sign up, prepare an event and get a trustworthy readiness verdict, on AWS with CI/CD | 7–9 weeks                                  |
+| 2 · Golden flow     | Attendees register, watch, chat and ask; staff run the event and get a report                  | 5–7 weeks                                  |
+| 3 · Standout        | AI triage with evaluations, observability, load and accessibility evidence, launch materials   | 3–4 weeks                                  |
 
 ## Phase 1 · Deployable core
 
@@ -87,10 +87,10 @@ flowchart LR
 
 ## Risks
 
-| Risk | Likelihood | Impact | Mitigation |
-| --- | --- | --- | --- |
-| Scope grows during the build | High | Delays the live demo | Requirements are fixed per milestone; new ideas go to a backlog, not into the current milestone |
-| A recent major (Node.js 26, NestJS 12, Vitest 5, AI SDK 7, PostgreSQL 18) has rough edges | Medium | Slower progress | Verify each in the learning folder before adopting; pin exact versions; record workarounds in ADRs |
-| AWS cost creeps up | Medium | Unexpected bills | Single instance, Budgets alerts, no NAT gateway, image lifecycle rules |
-| Real-time features are hard to test reliably | Medium | Flaky CI | Deterministic sequence-based protocol; controlled network interruption in Playwright; no timing-based assertions |
-| AI provider changes or fails | Medium | Triage unavailable | Provider-agnostic SDK, strict fallback, recorded responses for CI |
+| Risk                                                                                      | Likelihood | Impact               | Mitigation                                                                                                       |
+| ----------------------------------------------------------------------------------------- | ---------- | -------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| Scope grows during the build                                                              | High       | Delays the live demo | Requirements are fixed per milestone; new ideas go to a backlog, not into the current milestone                  |
+| A recent major (Node.js 26, NestJS 12, Vitest 5, AI SDK 7, PostgreSQL 18) has rough edges | Medium     | Slower progress      | Verify each in the learning folder before adopting; pin exact versions; record workarounds in ADRs               |
+| AWS cost creeps up                                                                        | Medium     | Unexpected bills     | Single instance, Budgets alerts, no NAT gateway, image lifecycle rules                                           |
+| Real-time features are hard to test reliably                                              | Medium     | Flaky CI             | Deterministic sequence-based protocol; controlled network interruption in Playwright; no timing-based assertions |
+| AI provider changes or fails                                                              | Medium     | Triage unavailable   | Provider-agnostic SDK, strict fallback, recorded responses for CI                                                |

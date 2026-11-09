@@ -5,7 +5,7 @@
 
 ## Context
 
-Decisions made early shape the whole system, and the reasons for them are easily forgotten. New contributors — and interviewers — ask "why is it built this way?". Code shows *what* was done, not *why*, nor which alternatives were rejected.
+Decisions made early shape the whole system, and the reasons for them are easily forgotten. New contributors — and interviewers — ask "why is it built this way?". Code shows _what_ was done, not _why_, nor which alternatives were rejected.
 
 ## Decision
 

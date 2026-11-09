@@ -58,15 +58,15 @@ flowchart TB
   worker --> s3
 ```
 
-| Container | Responsibility | Scales by |
-| --- | --- | --- |
-| **proxy** | TLS termination, routing by path, compression, security headers shared by all responses | One per host |
-| **web** | Server-rendered public pages, the staff application shell, client-side interactivity | Stateless; more instances |
-| **api** | REST API, Socket.IO gateway, server-sent events, authentication and authorisation | Stateless; more instances behind the proxy, real-time fan-out through Valkey |
-| **worker** | Outbox relay, email, webhooks, stream checks, reminders, AI triage, retention, reports, demo reset | More instances; BullMQ distributes jobs |
-| **PostgreSQL** | The system of record, including the real-time message journals | Vertical, then read replicas if ever needed |
-| **Valkey** | Job queues, rate-limit counters, Socket.IO adapter, cross-instance notifications | Single node at target scale |
-| **S3** | Holding slate images and report exports | Managed |
+| Container      | Responsibility                                                                                     | Scales by                                                                    |
+| -------------- | -------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
+| **proxy**      | TLS termination, routing by path, compression, security headers shared by all responses            | One per host                                                                 |
+| **web**        | Server-rendered public pages, the staff application shell, client-side interactivity               | Stateless; more instances                                                    |
+| **api**        | REST API, Socket.IO gateway, server-sent events, authentication and authorisation                  | Stateless; more instances behind the proxy, real-time fan-out through Valkey |
+| **worker**     | Outbox relay, email, webhooks, stream checks, reminders, AI triage, retention, reports, demo reset | More instances; BullMQ distributes jobs                                      |
+| **PostgreSQL** | The system of record, including the real-time message journals                                     | Vertical, then read replicas if ever needed                                  |
+| **Valkey**     | Job queues, rate-limit counters, Socket.IO adapter, cross-instance notifications                   | Single node at target scale                                                  |
+| **S3**         | Holding slate images and report exports                                                            | Managed                                                                      |
 
 `api` and `worker` are built from the same package (`apps/api`) with two entry points, so they share modules, types and tests ([ADR-0002](adr/0002-modular-monolith.md)).
 
@@ -74,36 +74,36 @@ flowchart TB
 
 **Version policy**: use the latest stable major of each tool, unless its ecosystem cannot support it yet; such exceptions are listed below the table with the condition for upgrading. Versions were checked in November 2026; exact versions are pinned by the lock file and Docker image tags.
 
-| Area | Choice | Why |
-| --- | --- | --- |
-| Runtime | **Node.js 26 LTS** | The current Active LTS line, supported until April 2029. |
-| Language | **TypeScript 6.0**, strict (see exceptions) | One language across the stack; shared types end to end. |
-| Repository | **npm workspaces** monorepo | One install, one lock file, shared packages, no extra tool to learn. |
-| Web | **Next.js 16.4** (App Router), **React 19.3** | Server Components for fast public pages; client components where interaction needs them. |
-| UI | **Tailwind CSS 4.3**, **shadcn/ui** (Radix primitives) | Accessible primitives we own as code; consistent design tokens. |
-| Client data | **TanStack Query 5** | Caching, revalidation and mutation state for interactive staff screens. |
-| Forms | **React Hook Form** + Zod resolver | The same schema validates in the browser and on the server. |
-| Charts | **Recharts 3** | Declarative React charts; enough for the operations room and report. |
-| API | **NestJS 12** (ES modules) | Modules, dependency injection and lifecycle hooks suit a growing modular monolith; native Standard Schema validation works with Zod. |
-| Contracts | **Zod 4.6** in `packages/contracts` | Single source of truth for request and response shapes, real-time events and the generated OpenAPI document ([ADR-0004](adr/0004-shared-zod-contracts.md)). |
-| Database | **PostgreSQL 18** | Transactions, row locks, partial unique indexes and `SKIP LOCKED` cover the hard consistency requirements; built-in `uuidv7()`. Supported by Amazon RDS. |
-| Data access | **Prisma ORM 7.10** with the `pg` driver adapter (see exceptions) | Typed queries and migrations; raw SQL where locks or aggregates need it ([ADR-0006](adr/0006-postgres-prisma-concurrency.md)). |
-| Queues | **BullMQ 6** on **Valkey 9** | Retries, backoff, delayed and repeatable jobs; Valkey is the open-source Redis fork that Amazon ElastiCache offers. |
-| Real-time | **Socket.IO** for chat and Q&A; **server-sent events** for the operations room | Two-way messaging where needed, simple one-way streaming where not ([ADR-0008](adr/0008-realtime-transports.md)). |
-| Video | **hls.js** in the watch page | Plays the customer's HLS stream in every supported browser. |
-| AI | **Vercel AI SDK 7** | Provider-agnostic structured output validated by Zod ([ADR-0012](adr/0012-ai-question-triage.md)). |
-| Email | **Nodemailer** → Amazon SES; **Mailpit** locally | Standard SMTP locally, managed sending in production. |
-| Object storage | **Amazon S3**; **SeaweedFS** locally | MinIO's community edition is archived; SeaweedFS is an Apache-licensed S3-compatible replacement for local use. |
-| Testing | **Vitest 5**, Testing Library, **Playwright**, axe-core | One unit-test runner for every workspace; browser tests for the golden flow and accessibility. |
-| Observability | **pino**, **OpenTelemetry**, **Sentry** | Vendor-neutral traces across web, API and worker ([ADR-0011](adr/0011-observability.md)). |
-| Infrastructure | **Terraform**, **AWS** (EC2, RDS, S3, SES, ECR, SSM), **GitHub Actions** with OIDC | Reproducible, reviewable infrastructure at portfolio cost ([ADR-0010](adr/0010-aws-deployment.md)). |
+| Area           | Choice                                                                             | Why                                                                                                                                                         |
+| -------------- | ---------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Runtime        | **Node.js 26 LTS**                                                                 | The current Active LTS line, supported until April 2029.                                                                                                    |
+| Language       | **TypeScript 6.0**, strict (see exceptions)                                        | One language across the stack; shared types end to end.                                                                                                     |
+| Repository     | **npm workspaces** monorepo                                                        | One install, one lock file, shared packages, no extra tool to learn.                                                                                        |
+| Web            | **Next.js 16.4** (App Router), **React 19.3**                                      | Server Components for fast public pages; client components where interaction needs them.                                                                    |
+| UI             | **Tailwind CSS 4.3**, **shadcn/ui** (Radix primitives)                             | Accessible primitives we own as code; consistent design tokens.                                                                                             |
+| Client data    | **TanStack Query 5**                                                               | Caching, revalidation and mutation state for interactive staff screens.                                                                                     |
+| Forms          | **React Hook Form** + Zod resolver                                                 | The same schema validates in the browser and on the server.                                                                                                 |
+| Charts         | **Recharts 3**                                                                     | Declarative React charts; enough for the operations room and report.                                                                                        |
+| API            | **NestJS 12** (ES modules)                                                         | Modules, dependency injection and lifecycle hooks suit a growing modular monolith; native Standard Schema validation works with Zod.                        |
+| Contracts      | **Zod 4.6** in `packages/contracts`                                                | Single source of truth for request and response shapes, real-time events and the generated OpenAPI document ([ADR-0004](adr/0004-shared-zod-contracts.md)). |
+| Database       | **PostgreSQL 18**                                                                  | Transactions, row locks, partial unique indexes and `SKIP LOCKED` cover the hard consistency requirements; built-in `uuidv7()`. Supported by Amazon RDS.    |
+| Data access    | **Prisma ORM 7.10** with the `pg` driver adapter (see exceptions)                  | Typed queries and migrations; raw SQL where locks or aggregates need it ([ADR-0006](adr/0006-postgres-prisma-concurrency.md)).                              |
+| Queues         | **BullMQ 6** on **Valkey 9**                                                       | Retries, backoff, delayed and repeatable jobs; Valkey is the open-source Redis fork that Amazon ElastiCache offers.                                         |
+| Real-time      | **Socket.IO** for chat and Q&A; **server-sent events** for the operations room     | Two-way messaging where needed, simple one-way streaming where not ([ADR-0008](adr/0008-realtime-transports.md)).                                           |
+| Video          | **hls.js** in the watch page                                                       | Plays the customer's HLS stream in every supported browser.                                                                                                 |
+| AI             | **Vercel AI SDK 7**                                                                | Provider-agnostic structured output validated by Zod ([ADR-0012](adr/0012-ai-question-triage.md)).                                                          |
+| Email          | **Nodemailer** → Amazon SES; **Mailpit** locally                                   | Standard SMTP locally, managed sending in production.                                                                                                       |
+| Object storage | **Amazon S3**; **SeaweedFS** locally                                               | MinIO's community edition is archived; SeaweedFS is an Apache-licensed S3-compatible replacement for local use.                                             |
+| Testing        | **Vitest 5**, Testing Library, **Playwright**, axe-core                            | One unit-test runner for every workspace; browser tests for the golden flow and accessibility.                                                              |
+| Observability  | **pino**, **OpenTelemetry**, **Sentry**                                            | Vendor-neutral traces across web, API and worker ([ADR-0011](adr/0011-observability.md)).                                                                   |
+| Infrastructure | **Terraform**, **AWS** (EC2, RDS, S3, SES, ECR, SSM), **GitHub Actions** with OIDC | Reproducible, reviewable infrastructure at portfolio cost ([ADR-0010](adr/0010-aws-deployment.md)).                                                         |
 
 **Exceptions to the latest-major rule**
 
-| Tool | Latest | We use | Why | Upgrade when |
-| --- | --- | --- | --- | --- |
-| TypeScript | 7.0 (native compiler, July 2026) | 6.0 | 7.0 has no stable programmatic API yet, so `typescript-eslint` (which supports TypeScript below 6.1) cannot run on it. The native `tsgo` checker may be used locally for speed alongside `tsc`. | TypeScript 7.1 ships its stable API and `typescript-eslint` supports it |
-| Prisma ORM | 8.0 (release candidate) | 7.10 (latest stable) | Release candidates are not used in production code. Prisma 7 receives fixes for 12 months after 8.0. | Prisma 8.0 is stable and its PostgreSQL extension covers our queries; evaluate in the learning folder first |
+| Tool       | Latest                           | We use               | Why                                                                                                                                                                                             | Upgrade when                                                                                                |
+| ---------- | -------------------------------- | -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| TypeScript | 7.0 (native compiler, July 2026) | 6.0                  | 7.0 has no stable programmatic API yet, so `typescript-eslint` (which supports TypeScript below 6.1) cannot run on it. The native `tsgo` checker may be used locally for speed alongside `tsc`. | TypeScript 7.1 ships its stable API and `typescript-eslint` supports it                                     |
+| Prisma ORM | 8.0 (release candidate)          | 7.10 (latest stable) | Release candidates are not used in production code. Prisma 7 receives fixes for 12 months after 8.0.                                                                                            | Prisma 8.0 is stable and its PostgreSQL extension covers our queries; evaluate in the learning folder first |
 
 ## 5. Repository layout
 
@@ -155,12 +155,12 @@ flowchart TB
 
 ### 6.2 Layers inside a feature module
 
-| Layer | File naming | Rules |
-| --- | --- | --- |
-| Transport | `*.controller.ts`, `*.gateway.ts` | Parse and validate input, call one service method, map the result. No business rules. |
-| Application | `*.service.ts` | One method per use case. Opens the transaction, checks authorisation, loads data, calls domain functions, writes, records audit and outbox entries. |
-| Domain | `domain/*.ts` | Pure functions and types: state machines, readiness rules, eligibility. No framework imports, no I/O. Unit-tested exhaustively. |
-| Data access | Prisma client inside services; `*.queries.ts` for raw SQL | Every query is scoped by `workspaceId`. Locks and aggregates in named, tested SQL. |
+| Layer       | File naming                                               | Rules                                                                                                                                               |
+| ----------- | --------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Transport   | `*.controller.ts`, `*.gateway.ts`                         | Parse and validate input, call one service method, map the result. No business rules.                                                               |
+| Application | `*.service.ts`                                            | One method per use case. Opens the transaction, checks authorisation, loads data, calls domain functions, writes, records audit and outbox entries. |
+| Domain      | `domain/*.ts`                                             | Pure functions and types: state machines, readiness rules, eligibility. No framework imports, no I/O. Unit-tested exhaustively.                     |
+| Data access | Prisma client inside services; `*.queries.ts` for raw SQL | Every query is scoped by `workspaceId`. Locks and aggregates in named, tested SQL.                                                                  |
 
 ### 6.3 Request lifecycle
 
@@ -211,14 +211,14 @@ All request bodies, query strings, route parameters, real-time messages and job 
 
 ### 7.4 Consistency and concurrency
 
-| Problem | Mechanism |
-| --- | --- |
-| Two people edit the same record | Optimistic concurrency: `version` column, `ETag` on reads, `If-Match` on writes, `412` on mismatch |
-| Two transitions race (e.g. "go live" twice) | Pessimistic lock: `SELECT … FOR UPDATE` on the event row, then re-check rules inside the transaction |
-| A client retries a create after a timeout | `Idempotency-Key` header stored with the response for 24 hours; chat uses a client-generated message ID |
-| A limit must hold under concurrency (3 pinned questions) | Database constraint: partial unique index on `(event_id, pin_slot)` |
-| A side effect must happen exactly when a change commits | Transactional outbox: the change and the outbox row commit together ([ADR-0007](adr/0007-transactional-outbox.md)) |
-| Real-time clients must not miss or duplicate messages | Per-event sequence numbers and a journal table; clients resume from their last sequence |
+| Problem                                                  | Mechanism                                                                                                          |
+| -------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| Two people edit the same record                          | Optimistic concurrency: `version` column, `ETag` on reads, `If-Match` on writes, `412` on mismatch                 |
+| Two transitions race (e.g. "go live" twice)              | Pessimistic lock: `SELECT … FOR UPDATE` on the event row, then re-check rules inside the transaction               |
+| A client retries a create after a timeout                | `Idempotency-Key` header stored with the response for 24 hours; chat uses a client-generated message ID            |
+| A limit must hold under concurrency (3 pinned questions) | Database constraint: partial unique index on `(event_id, pin_slot)`                                                |
+| A side effect must happen exactly when a change commits  | Transactional outbox: the change and the outbox row commit together ([ADR-0007](adr/0007-transactional-outbox.md)) |
+| Real-time clients must not miss or duplicate messages    | Per-event sequence numbers and a journal table; clients resume from their last sequence                            |
 
 ### 7.5 Background work
 

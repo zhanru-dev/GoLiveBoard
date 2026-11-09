@@ -8,35 +8,35 @@
 
 ## 2. HTTP conventions
 
-| Topic | Convention |
-| --- | --- |
-| Base path | `/api/v1`. Additive changes stay in `v1`; breaking changes need `v2`. |
-| Format | JSON in and out (`application/json`), field names in `camelCase`, enum values in `UPPER_SNAKE_CASE`. |
-| Time | ISO 8601 in UTC with `Z`, e.g. `2026-11-20T18:30:00Z`. |
-| IDs | UUID strings. Public pages use the event `slug` instead. |
-| Authentication | Cookies only (`HttpOnly`). No tokens in URLs or local storage. |
-| CSRF | State-changing requests must send an `Origin` header equal to the application origin. |
-| Pagination | Cursor-based: `?limit=25&cursor=…` → `{ "items": [...], "nextCursor": "…" | null }`. `limit` defaults to 25, maximum 100. Cursors are opaque. |
-| Concurrency | Reads of editable resources return `ETag: "<version>"`. Updates require `If-Match`; a missing header returns `428`, a stale one `412`. |
-| Idempotency | Creates that clients may retry accept an `Idempotency-Key` header (UUID). The same key with the same body returns the original response; with a different body, `422`. Keys expire after 24 hours. |
-| Rate limits | `429` with `Retry-After`. Limits per route are listed in the endpoint catalogue. |
-| Caching | Authenticated responses send `Cache-Control: no-store`. |
+| Topic          | Convention                                                                                                                                                                                         |
+| -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Base path      | `/api/v1`. Additive changes stay in `v1`; breaking changes need `v2`.                                                                                                                              |
+| Format         | JSON in and out (`application/json`), field names in `camelCase`, enum values in `UPPER_SNAKE_CASE`.                                                                                               |
+| Time           | ISO 8601 in UTC with `Z`, e.g. `2026-11-20T18:30:00Z`.                                                                                                                                             |
+| IDs            | UUID strings. Public pages use the event `slug` instead.                                                                                                                                           |
+| Authentication | Cookies only (`HttpOnly`). No tokens in URLs or local storage.                                                                                                                                     |
+| CSRF           | State-changing requests must send an `Origin` header equal to the application origin.                                                                                                              |
+| Pagination     | Cursor-based: `?limit=25&cursor=…` → `{ "items": [...], "nextCursor": "…"                                                                                                                          | null }`. `limit` defaults to 25, maximum 100. Cursors are opaque. |
+| Concurrency    | Reads of editable resources return `ETag: "<version>"`. Updates require `If-Match`; a missing header returns `428`, a stale one `412`.                                                             |
+| Idempotency    | Creates that clients may retry accept an `Idempotency-Key` header (UUID). The same key with the same body returns the original response; with a different body, `422`. Keys expire after 24 hours. |
+| Rate limits    | `429` with `Retry-After`. Limits per route are listed in the endpoint catalogue.                                                                                                                   |
+| Caching        | Authenticated responses send `Cache-Control: no-store`.                                                                                                                                            |
 
 ### 2.1 Status codes
 
-| Code | Meaning in OpsPilot |
-| --- | --- |
-| `200` / `201` / `204` | Success; `201` for creates with a `Location` header |
-| `400` | The request does not match its schema (field errors in `errors[]`) |
-| `401` | No valid session |
-| `403` | Signed in, but the role does not allow this action |
-| `404` | Not found — **also returned for resources in another workspace**, so their existence is not revealed |
-| `409` | The action conflicts with the resource's state (illegal transition, hard blockers, archived event) |
-| `412` | `If-Match` does not match the current version |
-| `422` | Idempotency key reused with a different request body |
-| `428` | `If-Match` required but missing |
-| `429` | Rate limit exceeded |
-| `500` | Unexpected error; the response contains only the request ID |
+| Code                  | Meaning in OpsPilot                                                                                  |
+| --------------------- | ---------------------------------------------------------------------------------------------------- |
+| `200` / `201` / `204` | Success; `201` for creates with a `Location` header                                                  |
+| `400`                 | The request does not match its schema (field errors in `errors[]`)                                   |
+| `401`                 | No valid session                                                                                     |
+| `403`                 | Signed in, but the role does not allow this action                                                   |
+| `404`                 | Not found — **also returned for resources in another workspace**, so their existence is not revealed |
+| `409`                 | The action conflicts with the resource's state (illegal transition, hard blockers, archived event)   |
+| `412`                 | `If-Match` does not match the current version                                                        |
+| `422`                 | Idempotency key reused with a different request body                                                 |
+| `428`                 | `If-Match` required but missing                                                                      |
+| `429`                 | Rate limit exceeded                                                                                  |
+| `500`                 | Unexpected error; the response contains only the request ID                                          |
 
 ### 2.2 Error format
 
@@ -50,7 +50,10 @@ All errors use `application/problem+json` ([RFC 9457](https://www.rfc-editor.org
   "code": "EVENT_HAS_BLOCKERS",
   "detail": "Resolve the blockers before moving the event to LIVE.",
   "blockers": [
-    { "criterion": "STREAM_REACHABLE", "evidence": "Last check failed 2 minutes ago (HTTP 404)." }
+    {
+      "criterion": "STREAM_REACHABLE",
+      "evidence": "Last check failed 2 minutes ago (HTTP 404)."
+    }
   ],
   "requestId": "01JD3W9Y6K0X2M7P8Q4R5S6T7V"
 }
@@ -66,102 +69,102 @@ Error codes are defined once in `packages/contracts/src/errors.ts`; clients swit
 
 ### 3.1 Health and session
 
-| Method and path | Role | Notes |
-| --- | --- | --- |
-| `GET /health/live` | Pub | Process is running |
-| `GET /health/ready` | Pub | Database and Valkey reachable; `503` otherwise |
-| `POST /auth/sign-up` | Pub | Creates user, workspace, Owner membership. Rate-limited. |
-| `POST /auth/sign-in` | Pub | Sets session cookies. 10 failures / 15 min per account and per IP. |
-| `POST /auth/refresh` | Pub (refresh cookie) | Rotates the refresh token |
-| `POST /auth/sign-out` | O M A | Revokes the session |
-| `POST /auth/password-reset/request` | Pub | Always `202` |
-| `POST /auth/password-reset/confirm` | Pub | Token + new password; revokes other sessions |
-| `POST /auth/demo` | Pub | Demo mode only |
-| `GET /me` | O M A | User, memberships, active workspace and role |
-| `PUT /me/active-workspace` | O M A | Switches the session's workspace |
+| Method and path                     | Role                 | Notes                                                              |
+| ----------------------------------- | -------------------- | ------------------------------------------------------------------ |
+| `GET /health/live`                  | Pub                  | Process is running                                                 |
+| `GET /health/ready`                 | Pub                  | Database and Valkey reachable; `503` otherwise                     |
+| `POST /auth/sign-up`                | Pub                  | Creates user, workspace, Owner membership. Rate-limited.           |
+| `POST /auth/sign-in`                | Pub                  | Sets session cookies. 10 failures / 15 min per account and per IP. |
+| `POST /auth/refresh`                | Pub (refresh cookie) | Rotates the refresh token                                          |
+| `POST /auth/sign-out`               | O M A                | Revokes the session                                                |
+| `POST /auth/password-reset/request` | Pub                  | Always `202`                                                       |
+| `POST /auth/password-reset/confirm` | Pub                  | Token + new password; revokes other sessions                       |
+| `POST /auth/demo`                   | Pub                  | Demo mode only                                                     |
+| `GET /me`                           | O M A                | User, memberships, active workspace and role                       |
+| `PUT /me/active-workspace`          | O M A                | Switches the session's workspace                                   |
 
 ### 3.2 Workspace and team
 
-| Method and path | Role | Notes |
-| --- | --- | --- |
-| `GET /workspace` · `PATCH /workspace` | O (read: O M A) | Name, retention period |
-| `GET /workspace/members` | O M A | |
-| `PATCH /workspace/members/:membershipId` | O | Role change; last Owner protected |
-| `DELETE /workspace/members/:membershipId` | O | Revokes the member's sessions |
-| `GET /workspace/invitations` · `POST /workspace/invitations` | O | Invite by email and role |
-| `DELETE /workspace/invitations/:id` | O | Revoke |
-| `POST /team-invitations/accept` | Pub | Token from the email; creates or links the user |
+| Method and path                                              | Role            | Notes                                           |
+| ------------------------------------------------------------ | --------------- | ----------------------------------------------- |
+| `GET /workspace` · `PATCH /workspace`                        | O (read: O M A) | Name, retention period                          |
+| `GET /workspace/members`                                     | O M A           |                                                 |
+| `PATCH /workspace/members/:membershipId`                     | O               | Role change; last Owner protected               |
+| `DELETE /workspace/members/:membershipId`                    | O               | Revokes the member's sessions                   |
+| `GET /workspace/invitations` · `POST /workspace/invitations` | O               | Invite by email and role                        |
+| `DELETE /workspace/invitations/:id`                          | O               | Revoke                                          |
+| `POST /team-invitations/accept`                              | Pub             | Token from the email; creates or links the user |
 
 ### 3.3 Events and Launch Control
 
-| Method and path | Role | Notes |
-| --- | --- | --- |
-| `GET /events` | O M A | `q`, `status`, `from`, `to`, cursor |
-| `POST /events` | M | `Idempotency-Key` |
-| `GET /events/:id` | O M A | `ETag` |
-| `PATCH /events/:id` | M | `If-Match` |
-| `POST /events/:id/transitions` | M | Body `{ "to": "READY" }`; `409 EVENT_HAS_BLOCKERS` or `409 ILLEGAL_TRANSITION` |
-| `GET /events/:id/readiness` | O M A | Score, criteria with evidence, blockers, next actions, rule version |
-| `GET /events/:id/runbook-tasks` · `POST …` | O M A · M | |
-| `PATCH /runbook-tasks/:id` · `DELETE …` | M | `If-Match` |
-| `POST /runbook-tasks/:id/move` | M | `{ "after": "<taskId>" | null }` |
-| `GET /events/:id/access-policy` · `PUT …` | O M A · M | `If-Match` on update |
-| `PUT /events/:id/stream` | M | `{ "url": "https://…/index.m3u8" }`; SSRF-checked |
-| `GET /events/:id/stream/checks` | O M A | Most recent first |
-| `GET /events/:id/incidents` | O M A | |
-| `POST /events/:id/assets/holding-slate` | M | Returns a presigned upload URL and the asset ID |
-| `POST /assets/:id/complete` | M | Verifies type and size in storage, marks the asset `READY` |
+| Method and path                            | Role      | Notes                                                                          |
+| ------------------------------------------ | --------- | ------------------------------------------------------------------------------ |
+| `GET /events`                              | O M A     | `q`, `status`, `from`, `to`, cursor                                            |
+| `POST /events`                             | M         | `Idempotency-Key`                                                              |
+| `GET /events/:id`                          | O M A     | `ETag`                                                                         |
+| `PATCH /events/:id`                        | M         | `If-Match`                                                                     |
+| `POST /events/:id/transitions`             | M         | Body `{ "to": "READY" }`; `409 EVENT_HAS_BLOCKERS` or `409 ILLEGAL_TRANSITION` |
+| `GET /events/:id/readiness`                | O M A     | Score, criteria with evidence, blockers, next actions, rule version            |
+| `GET /events/:id/runbook-tasks` · `POST …` | O M A · M |                                                                                |
+| `PATCH /runbook-tasks/:id` · `DELETE …`    | M         | `If-Match`                                                                     |
+| `POST /runbook-tasks/:id/move`             | M         | `{ "after": "<taskId>"                                                         | null }` |
+| `GET /events/:id/access-policy` · `PUT …`  | O M A · M | `If-Match` on update                                                           |
+| `PUT /events/:id/stream`                   | M         | `{ "url": "https://…/index.m3u8" }`; SSRF-checked                              |
+| `GET /events/:id/stream/checks`            | O M A     | Most recent first                                                              |
+| `GET /events/:id/incidents`                | O M A     |                                                                                |
+| `POST /events/:id/assets/holding-slate`    | M         | Returns a presigned upload URL and the asset ID                                |
+| `POST /assets/:id/complete`                | M         | Verifies type and size in storage, marks the asset `READY`                     |
 
 ### 3.4 Audience (staff side)
 
-| Method and path | Role | Notes |
-| --- | --- | --- |
-| `GET /events/:id/attendees` | O M A | Status filter, cursor; email shown masked to Analysts |
-| `POST /events/:id/attendees/:attendeeId/revoke` | M | Ends live sessions within 5 seconds |
-| `POST /events/:id/attendees/:attendeeId/erase` | M | UK GDPR erasure; audited |
-| `GET /events/:id/invitations` · `POST …` | M | Invitation-only events |
-| `DELETE /event-invitations/:id` | M | Also revokes the attendee if registered |
+| Method and path                                 | Role  | Notes                                                 |
+| ----------------------------------------------- | ----- | ----------------------------------------------------- |
+| `GET /events/:id/attendees`                     | O M A | Status filter, cursor; email shown masked to Analysts |
+| `POST /events/:id/attendees/:attendeeId/revoke` | M     | Ends live sessions within 5 seconds                   |
+| `POST /events/:id/attendees/:attendeeId/erase`  | M     | UK GDPR erasure; audited                              |
+| `GET /events/:id/invitations` · `POST …`        | M     | Invitation-only events                                |
+| `DELETE /event-invitations/:id`                 | M     | Also revokes the attendee if registered               |
 
 ### 3.5 Public and attendee
 
-| Method and path | Role | Notes |
-| --- | --- | --- |
-| `GET /public/events/:slug` | Pub | Data for the public page; no internal IDs |
-| `POST /public/events/:slug/registrations` | Pub | Always `202` with the same body (no enumeration). Rate-limited per IP. |
-| `POST /public/attendee-verifications` | Pub | `{ "token": "…" }`; sets the attendee session cookie |
-| `GET /public/events/:slug/me` | Att | The attendee's own registration and access state |
-| `POST /public/events/:slug/heartbeat` | Att | Every 30 s while watching; records attendance |
-| `POST /public/reminders/unsubscribe` | Pub | Token from the reminder email |
+| Method and path                           | Role | Notes                                                                  |
+| ----------------------------------------- | ---- | ---------------------------------------------------------------------- |
+| `GET /public/events/:slug`                | Pub  | Data for the public page; no internal IDs                              |
+| `POST /public/events/:slug/registrations` | Pub  | Always `202` with the same body (no enumeration). Rate-limited per IP. |
+| `POST /public/attendee-verifications`     | Pub  | `{ "token": "…" }`; sets the attendee session cookie                   |
+| `GET /public/events/:slug/me`             | Att  | The attendee's own registration and access state                       |
+| `POST /public/events/:slug/heartbeat`     | Att  | Every 30 s while watching; records attendance                          |
+| `POST /public/reminders/unsubscribe`      | Pub  | Token from the reminder email                                          |
 
 ### 3.6 Live interaction
 
 Both staff and attendee sessions are accepted; permissions differ by role.
 
-| Method and path | Role | Notes |
-| --- | --- | --- |
-| `GET /events/:id/chat/messages` | O M A Att | History; `before=<sequence>` for older pages |
-| `GET /events/:id/questions` | O M A Att | Attendees see published questions and their own pending ones |
-| `POST /events/:id/questions` | Att M | `Idempotency-Key`; rate-limited |
-| `PUT /questions/:id/vote` · `DELETE …` | Att | Idempotent by design |
-| `PATCH /questions/:id` | M | Status, pin slot, answered; `If-Match` |
-| `POST /events/:id/question-triage-runs` | M | Starts a triage run; returns `202` and the run ID |
-| `GET /question-triage-runs/:id` | M | Suggestions or the failure reason |
-| `POST /question-triage-runs/:id/decision` | M | Which groups to merge; applied in one transaction |
-| `GET /events/:id/live-ops` | O M A | Snapshot for the operations room |
-| `GET /events/:id/live-ops/stream` | O M A | Server-sent events (section 5) |
+| Method and path                           | Role      | Notes                                                        |
+| ----------------------------------------- | --------- | ------------------------------------------------------------ |
+| `GET /events/:id/chat/messages`           | O M A Att | History; `before=<sequence>` for older pages                 |
+| `GET /events/:id/questions`               | O M A Att | Attendees see published questions and their own pending ones |
+| `POST /events/:id/questions`              | Att M     | `Idempotency-Key`; rate-limited                              |
+| `PUT /questions/:id/vote` · `DELETE …`    | Att       | Idempotent by design                                         |
+| `PATCH /questions/:id`                    | M         | Status, pin slot, answered; `If-Match`                       |
+| `POST /events/:id/question-triage-runs`   | M         | Starts a triage run; returns `202` and the run ID            |
+| `GET /question-triage-runs/:id`           | M         | Suggestions or the failure reason                            |
+| `POST /question-triage-runs/:id/decision` | M         | Which groups to merge; applied in one transaction            |
+| `GET /events/:id/live-ops`                | O M A     | Snapshot for the operations room                             |
+| `GET /events/:id/live-ops/stream`         | O M A     | Server-sent events (section 5)                               |
 
 ### 3.7 Record
 
-| Method and path | Role | Notes |
-| --- | --- | --- |
-| `GET /audit-entries` | O M A | `eventId`, `actorId`, `action`, `from`, `to`, cursor |
-| `GET /webhook-endpoints` · `POST …` | O | Secret returned once on create |
-| `PATCH /webhook-endpoints/:id` · `DELETE …` | O | |
-| `POST /webhook-endpoints/:id/rotate-secret` | O | New secret returned once |
-| `GET /webhook-deliveries` | O | `endpointId`, `status`, cursor; includes attempts |
-| `POST /webhook-deliveries/:id/redeliver` | O | Creates a new attempt |
-| `GET /events/:id/report` | O M A | Available once `COMPLETED` |
-| `GET /events/:id/report.csv` | O M A | `text/csv` |
+| Method and path                             | Role  | Notes                                                |
+| ------------------------------------------- | ----- | ---------------------------------------------------- |
+| `GET /audit-entries`                        | O M A | `eventId`, `actorId`, `action`, `from`, `to`, cursor |
+| `GET /webhook-endpoints` · `POST …`         | O     | Secret returned once on create                       |
+| `PATCH /webhook-endpoints/:id` · `DELETE …` | O     |                                                      |
+| `POST /webhook-endpoints/:id/rotate-secret` | O     | New secret returned once                             |
+| `GET /webhook-deliveries`                   | O     | `endpointId`, `status`, cursor; includes attempts    |
+| `POST /webhook-deliveries/:id/redeliver`    | O     | Creates a new attempt                                |
+| `GET /events/:id/report`                    | O M A | Available once `COMPLETED`                           |
+| `GET /events/:id/report.csv`                | O M A | `text/csv`                                           |
 
 ## 4. Real-time protocol (Socket.IO)
 
@@ -186,15 +189,15 @@ sequenceDiagram
   Note over C: duplicates ignored by sequence
 ```
 
-| Direction | Name | Payload | Notes |
-| --- | --- | --- | --- |
-| client → server | `channel.join` | `{ eventId, channel, afterSequence }` | Ack returns the replay (at most 500) and the latest sequence, or `RESYNC_REQUIRED` if the gap is larger |
-| client → server | `channel.leave` | `{ eventId, channel }` | |
-| client → server | `chat.send` | `{ eventId, clientMessageId, body }` | Ack returns the stored message; retrying with the same `clientMessageId` returns the same message |
-| server → client | `chat.event` | `{ sequence, kind, message }` | `kind`: `MESSAGE_CREATED`, `MESSAGE_DELETED` |
-| server → client | `questions.event` | `{ sequence, kind, question }` | `kind`: `CREATED`, `UPDATED`, `VOTED`, `MERGED` |
-| server → client | `event.status` | `{ eventId, status }` | Switches the watch page from holding slate to stream |
-| server → client | `session.revoked` | `{ reason }` | Sent before the server disconnects a revoked client |
+| Direction       | Name              | Payload                               | Notes                                                                                                   |
+| --------------- | ----------------- | ------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| client → server | `channel.join`    | `{ eventId, channel, afterSequence }` | Ack returns the replay (at most 500) and the latest sequence, or `RESYNC_REQUIRED` if the gap is larger |
+| client → server | `channel.leave`   | `{ eventId, channel }`                |                                                                                                         |
+| client → server | `chat.send`       | `{ eventId, clientMessageId, body }`  | Ack returns the stored message; retrying with the same `clientMessageId` returns the same message       |
+| server → client | `chat.event`      | `{ sequence, kind, message }`         | `kind`: `MESSAGE_CREATED`, `MESSAGE_DELETED`                                                            |
+| server → client | `questions.event` | `{ sequence, kind, question }`        | `kind`: `CREATED`, `UPDATED`, `VOTED`, `MERGED`                                                         |
+| server → client | `event.status`    | `{ eventId, status }`                 | Switches the watch page from holding slate to stream                                                    |
+| server → client | `session.revoked` | `{ reason }`                          | Sent before the server disconnects a revoked client                                                     |
 
 **Client rules.** Keep the highest applied sequence per channel; ignore events at or below it; on reconnect join with `afterSequence` = that value; on `RESYNC_REQUIRED`, reload the snapshot over HTTP and continue from its sequence. Reconnect with exponential backoff and jitter (1 s doubling to 30 s).
 
@@ -202,13 +205,13 @@ sequenceDiagram
 
 `GET /api/v1/events/:id/live-ops/stream`, `Content-Type: text/event-stream`.
 
-| `event:` | `data:` | When |
-| --- | --- | --- |
-| `snapshot` | Full operations-room state | On connect |
-| `stream.status` | `{ ok, checkedAt, latencyMs }` | After each stream check |
-| `audience.updated` | `{ current, peak }` | Every 30 s |
-| `rates.updated` | `{ messagesPerMinute, questionsPerMinute }` | Every 30 s |
-| `incident.opened` · `incident.resolved` | The incident | On change |
+| `event:`                                | `data:`                                     | When                    |
+| --------------------------------------- | ------------------------------------------- | ----------------------- |
+| `snapshot`                              | Full operations-room state                  | On connect              |
+| `stream.status`                         | `{ ok, checkedAt, latencyMs }`              | After each stream check |
+| `audience.updated`                      | `{ current, peak }`                         | Every 30 s              |
+| `rates.updated`                         | `{ messagesPerMinute, questionsPerMinute }` | Every 30 s              |
+| `incident.opened` · `incident.resolved` | The incident                                | On change               |
 
 Each message has an increasing `id:`. On reconnect the browser sends `Last-Event-ID`; the server sends a fresh `snapshot` if it cannot replay. A comment line is sent every 15 seconds to keep proxies from closing idle connections.
 
@@ -240,12 +243,12 @@ OpsPilot-Signature: t=1795000000,v1=5f2c…
 
 ### 6.2 Event types
 
-| Type | When |
-| --- | --- |
-| `event.ready` | Event reached `READY` |
-| `event.live` | Event reached `LIVE` |
-| `event.completed` | Event reached `COMPLETED` |
-| `event.cancelled` | Event was cancelled |
+| Type                  | When                                                                                       |
+| --------------------- | ------------------------------------------------------------------------------------------ |
+| `event.ready`         | Event reached `READY`                                                                      |
+| `event.live`          | Event reached `LIVE`                                                                       |
+| `event.completed`     | Event reached `COMPLETED`                                                                  |
+| `event.cancelled`     | Event was cancelled                                                                        |
 | `attendee.registered` | An attendee verified their email (personal data included only if the workspace enables it) |
 
 ## 7. OpenAPI document

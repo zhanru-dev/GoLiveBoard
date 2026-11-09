@@ -23,4 +23,4 @@ These documents define what OpsPilot is, how it is built and how it is delivered
 
 ## Keeping the documents current
 
-A pull request that changes behaviour described here MUST update the affected document. A pull request that makes a significant, hard-to-reverse decision MUST add an ADR. Superseded decisions are not deleted: the old ADR is marked *Superseded by ADR-NNNN*.
+A pull request that changes behaviour described here MUST update the affected document. A pull request that makes a significant, hard-to-reverse decision MUST add an ADR. Superseded decisions are not deleted: the old ADR is marked _Superseded by ADR-NNNN_.

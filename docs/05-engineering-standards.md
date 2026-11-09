@@ -12,9 +12,11 @@ These standards apply to every pull request. CI enforces what a machine can chec
   ```ts
   function label(status: EventStatus): string {
     switch (status) {
-      case "DRAFT": return "Draft";
+      case "DRAFT":
+        return "Draft";
       // … every other case …
-      default: return status satisfies never;
+      default:
+        return status satisfies never;
     }
   }
   ```
@@ -37,16 +39,16 @@ These standards apply to every pull request. CI enforces what a machine can chec
 
 ## 3. Naming and files
 
-| Thing | Convention | Example |
-| --- | --- | --- |
-| Files and folders | `kebab-case` | `launch-control.service.ts` |
-| React components | `PascalCase`, one exported component per file | `ReadinessPanel` in `readiness-panel.tsx` |
-| Hooks | `useSomething` | `useChatChannel` |
-| Functions and variables | `camelCase`, verbs for functions | `assessReadiness`, `nextSequence` |
-| Types and schemas | `PascalCase`; schema and type share a name | `const EventSummary = z.object(…)`; `type EventSummary = z.infer<typeof EventSummary>` |
-| Constants | `UPPER_SNAKE_CASE` only for true constants | `MAX_PINNED_QUESTIONS` |
-| Error codes | `UPPER_SNAKE_CASE`, noun first | `EVENT_HAS_BLOCKERS` |
-| Tests | Next to the code: `*.test.ts`; integration: `*.int.test.ts`; end to end: `e2e/*.spec.ts` | `lifecycle.test.ts` |
+| Thing                   | Convention                                                                               | Example                                                                                |
+| ----------------------- | ---------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| Files and folders       | `kebab-case`                                                                             | `launch-control.service.ts`                                                            |
+| React components        | `PascalCase`, one exported component per file                                            | `ReadinessPanel` in `readiness-panel.tsx`                                              |
+| Hooks                   | `useSomething`                                                                           | `useChatChannel`                                                                       |
+| Functions and variables | `camelCase`, verbs for functions                                                         | `assessReadiness`, `nextSequence`                                                      |
+| Types and schemas       | `PascalCase`; schema and type share a name                                               | `const EventSummary = z.object(…)`; `type EventSummary = z.infer<typeof EventSummary>` |
+| Constants               | `UPPER_SNAKE_CASE` only for true constants                                               | `MAX_PINNED_QUESTIONS`                                                                 |
+| Error codes             | `UPPER_SNAKE_CASE`, noun first                                                           | `EVENT_HAS_BLOCKERS`                                                                   |
+| Tests                   | Next to the code: `*.test.ts`; integration: `*.int.test.ts`; end to end: `e2e/*.spec.ts` | `lifecycle.test.ts`                                                                    |
 
 ## 4. Writing code that teaches well
 
@@ -77,15 +79,15 @@ flowchart TB
   e2e --- int --- comp --- unit
 ```
 
-| Level | What it proves | Rules |
-| --- | --- | --- |
-| **Unit** | Domain rules are correct for every case | Pure functions only; no mocks needed. Readiness rules, lifecycle, eligibility, real-time client reducers. |
-| **Component** | Screens behave correctly for users | Query by role and label, as a user would. MSW for HTTP. Every screen tested in loading, empty, error and success states. |
-| **Integration** | Endpoints enforce authentication, authorisation, validation, concurrency and persistence | Real PostgreSQL and Valkey in containers (Testcontainers). Each test file gets a fresh schema. Includes cross-workspace access tests and race tests for every invariant in [03 §5](03-domain-and-data-model.md#5-invariants-and-where-they-are-enforced). |
-| **End to end** | The golden flow works in a browser | Runs against production builds. Includes axe checks on every page and chat recovery after a forced disconnect. |
-| **Contract** | Clients and server agree | The generated OpenAPI document must match the committed one. |
-| **AI evaluation** | Triage suggestions are useful and safe | Fixed question sets with expected groupings; scored in CI against recorded model responses, and against the live model before each release. |
-| **Load** | NFR-4 capacity | k6 scenario: 500 viewers, 20 messages per second, run before public releases. |
+| Level             | What it proves                                                                           | Rules                                                                                                                                                                                                                                                     |
+| ----------------- | ---------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Unit**          | Domain rules are correct for every case                                                  | Pure functions only; no mocks needed. Readiness rules, lifecycle, eligibility, real-time client reducers.                                                                                                                                                 |
+| **Component**     | Screens behave correctly for users                                                       | Query by role and label, as a user would. MSW for HTTP. Every screen tested in loading, empty, error and success states.                                                                                                                                  |
+| **Integration**   | Endpoints enforce authentication, authorisation, validation, concurrency and persistence | Real PostgreSQL and Valkey in containers (Testcontainers). Each test file gets a fresh schema. Includes cross-workspace access tests and race tests for every invariant in [03 §5](03-domain-and-data-model.md#5-invariants-and-where-they-are-enforced). |
+| **End to end**    | The golden flow works in a browser                                                       | Runs against production builds. Includes axe checks on every page and chat recovery after a forced disconnect.                                                                                                                                            |
+| **Contract**      | Clients and server agree                                                                 | The generated OpenAPI document must match the committed one.                                                                                                                                                                                              |
+| **AI evaluation** | Triage suggestions are useful and safe                                                   | Fixed question sets with expected groupings; scored in CI against recorded model responses, and against the live model before each release.                                                                                                               |
+| **Load**          | NFR-4 capacity                                                                           | k6 scenario: 500 viewers, 20 messages per second, run before public releases.                                                                                                                                                                             |
 
 Further rules:
 
@@ -115,13 +117,13 @@ Further rules:
 
 ## 9. Performance budgets
 
-| Metric | Budget |
-| --- | --- |
-| Public event page, Largest Contentful Paint (p75) | < 2.5 s |
-| Interaction to Next Paint (p75) | < 200 ms |
-| Cumulative Layout Shift (p75) | < 0.1 |
-| JavaScript on the public event page | ≤ 150 kB compressed |
-| API read endpoints (p95 at target load) | < 300 ms |
+| Metric                                            | Budget              |
+| ------------------------------------------------- | ------------------- |
+| Public event page, Largest Contentful Paint (p75) | < 2.5 s             |
+| Interaction to Next Paint (p75)                   | < 200 ms            |
+| Cumulative Layout Shift (p75)                     | < 0.1               |
+| JavaScript on the public event page               | ≤ 150 kB compressed |
+| API read endpoints (p95 at target load)           | < 300 ms            |
 
 Lighthouse CI runs on the public event page in every pull request that touches `apps/web`.
 
