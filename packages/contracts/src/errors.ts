@@ -14,6 +14,7 @@ export const ErrorCode = z.enum([
   "NOT_FOUND",
   "VERSION_CONFLICT",
   "IDEMPOTENCY_KEY_REUSED",
+  "PAYLOAD_TOO_LARGE",
   "PRECONDITION_REQUIRED",
   "RATE_LIMITED",
   "INTERNAL_ERROR",
@@ -48,6 +49,7 @@ export const ERROR_DEFINITIONS = {
     status: 422,
     title: "The idempotency key was already used for a different request",
   },
+  PAYLOAD_TOO_LARGE: { status: 413, title: "The request body is too large" },
   PRECONDITION_REQUIRED: {
     status: 428,
     title: "The If-Match header is required",
