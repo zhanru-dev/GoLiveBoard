@@ -31,18 +31,18 @@ flowchart LR
 
 ### M1 · Foundations
 
-- **Scope**: npm workspaces monorepo on Node.js 26; TypeScript 6.0, ESLint, Prettier, dependency-cruiser; `packages/contracts` with the first schemas and error codes; NestJS 12 API skeleton with configuration validation, problem responses and health endpoints; Next.js 16 app shell; Docker Compose with Caddy, PostgreSQL, Valkey, SeaweedFS and Mailpit; Vitest in every workspace; GitHub Actions quality and test jobs.
+- **Scope**: npm workspaces monorepo on Node.js 26; TypeScript 6.0, ESLint, Prettier, dependency-cruiser; `packages/contracts` with the first schemas and error codes; NestJS 12 API skeleton with configuration validation, problem responses and health endpoints; Next.js 16 app shell; Docker Compose with Caddy, PostgreSQL and Valkey (Mailpit joins in M2, SeaweedFS in M3, each with its first use); readiness checks against PostgreSQL and Valkey; Vitest in every workspace; GitHub Actions quality and test jobs.
 - **Exit criteria**: `npm run services:up && npm run dev` serves the web app and `GET /api/v1/health/ready` through one origin on port 3300; CI is green and required on `main`.
 - **Teaching notes**: Docker and Compose are learned first in the separate learning folder, then applied here. The course repository started on Node 22, TypeScript 5.9, NestJS 11, Jest and CommonJS; this milestone includes upgrading it to the reference stack (Node 26, TypeScript 6.0, NestJS 12 with ES modules, Vitest), which is itself a realistic exercise.
 
 ### M2 · Identity and tenancy
 
-- **Scope**: Prisma 7 schema and migrations for users, workspaces, memberships, sessions and tokens; FR-WS-1 to FR-WS-4; FR-AUTH-1 to FR-AUTH-4; guards for authentication, workspace and role; rate limiting; sign-in, sign-up, password reset, team and invitation screens.
+- **Scope**: Mailpit in Docker Compose; Prisma 7 schema and migrations for users, workspaces, memberships, sessions and tokens; FR-WS-1 to FR-WS-4; FR-AUTH-1 to FR-AUTH-4; guards for authentication, workspace and role; rate limiting; sign-in, sign-up, password reset, team and invitation screens.
 - **Exit criteria**: integration tests prove refresh-token rotation under concurrency, immediate effect of role changes, and no cross-workspace access; Playwright covers sign-up → invite → accept → sign in.
 
 ### M3 · Events and Launch Control
 
-- **Scope**: FR-EV-1 to FR-EV-4, FR-LC-1 to FR-LC-4, FR-ST-1 to FR-ST-3; lifecycle and readiness as pure domain functions; outbox and worker skeleton; stream-check job and incidents; presigned upload of the holding slate; Launch Control and event list screens.
+- **Scope**: SeaweedFS in Docker Compose; FR-EV-1 to FR-EV-4, FR-LC-1 to FR-LC-4, FR-ST-1 to FR-ST-3; lifecycle and readiness as pure domain functions; outbox and worker skeleton; stream-check job and incidents; presigned upload of the holding slate; Launch Control and event list screens.
 - **Exit criteria**: unit tests cover every readiness rule and transition; a race test proves two concurrent "go live" requests cannot bypass a blocker; the stream check opens and resolves incidents against a controllable test stream.
 
 ### M4 · Delivery

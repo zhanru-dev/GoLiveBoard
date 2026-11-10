@@ -82,7 +82,8 @@ export default {
   ],
   options: {
     doNotFollow: { path: "node_modules" },
-    exclude: { path: "(^|/)(dist|coverage|\\.next)/" },
+    // Build output, and next-env.d.ts, which Next.js generates.
+    exclude: { path: "(^|/)(dist|coverage|\\.next)/|next-env\\.d\\.ts$" },
     tsPreCompilationDeps: true,
     tsConfig: { fileName: "tsconfig.base.json" },
     enhancedResolveOptions: {

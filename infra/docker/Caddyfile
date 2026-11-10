@@ -1,0 +1,35 @@
+{
+	# Local development serves plain HTTP on one port. Production adds TLS
+	# (milestone 4).
+	auto_https off
+	# The admin API stays inside the container; the health check uses it.
+	admin localhost:2019
+}
+
+(upstream_transport) {
+	transport http {
+		# Close idle connections to an upstream before Node.js does (its
+		# keep-alive timeout is 5 seconds). Otherwise Caddy can reuse a connection
+		# at the moment Node closes it, and the request fails with a 502.
+		keepalive 4s
+	}
+}
+
+:80 {
+	# A new ID for every request, set here at the edge and never taken from the
+	# client, so one trustworthy ID follows the request through the logs.
+	request_header X-Request-Id {http.request.uuid}
+
+	@api path /api/* /realtime /realtime/*
+	handle @api {
+		reverse_proxy {$API_UPSTREAM} {
+			import upstream_transport
+		}
+	}
+
+	handle {
+		reverse_proxy {$WEB_UPSTREAM} {
+			import upstream_transport
+		}
+	}
+}

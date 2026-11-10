@@ -8,6 +8,7 @@ export default defineConfig({
   test: {
     projects: [
       "packages/*",
+      "apps/web",
       {
         extends: api,
         test: {
@@ -23,13 +24,16 @@ export default defineConfig({
           name: "api-int",
           root: "./apps/api",
           include: ["src/**/*.int.test.ts"],
+          // Starting containers takes seconds, and minutes when an image is
+          // downloaded for the first time.
+          hookTimeout: 180_000,
         },
       },
     ],
     coverage: {
       provider: "v8",
       include: ["packages/*/src/**", "apps/*/src/**"],
-      exclude: ["**/*.test.ts", "**/index.ts", "**/testing/**"],
+      exclude: ["**/*.test.{ts,tsx}", "**/index.ts", "**/testing/**"],
       reporter: ["text-summary", "html"],
     },
   },

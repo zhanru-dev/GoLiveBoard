@@ -2,29 +2,68 @@ import { describe, expect, it } from "vitest";
 
 import { ConfigError, loadConfig } from "./app-config.js";
 
+/** The variables without defaults; everything else is optional. */
+const REQUIRED = {
+  DATABASE_URL: "postgres://opspilot:secret@127.0.0.1:5443/opspilot",
+  VALKEY_URL: "redis://127.0.0.1:6392",
+};
+
 describe("loadConfig", () => {
-  it("uses local development defaults when nothing is set", () => {
-    expect(loadConfig({})).toEqual({
+  it("uses local development defaults for everything but connection strings", () => {
+    expect(loadConfig(REQUIRED)).toEqual({
       environment: "development",
       api: { host: "127.0.0.1", port: 4301 },
       log: { level: "info", format: "json" },
+      database: { url: REQUIRED.DATABASE_URL },
+      valkey: { url: REQUIRED.VALKEY_URL },
     });
   });
 
+  it("requires the connection strings", () => {
+    const load = () => loadConfig({});
+
+    expect(load).toThrow(ConfigError);
+    expect(load).toThrow(/DATABASE_URL[\s\S]*VALKEY_URL/);
+  });
+
+  it.each([
+    ["DATABASE_URL", "mysql://localhost/opspilot"],
+    ["DATABASE_URL", "not a url"],
+    ["VALKEY_URL", "http://127.0.0.1:6392"],
+  ])("rejects %s=%j", (name, value) => {
+    expect(() => loadConfig({ ...REQUIRED, [name]: value })).toThrow(
+      new RegExp(name),
+    );
+  });
+
+  it("accepts the postgresql:// spelling and TLS Valkey", () => {
+    expect(() =>
+      loadConfig({
+        DATABASE_URL: "postgresql://user:pw@db.internal:5432/opspilot",
+        VALKEY_URL: "rediss://cache.internal:6379",
+      }),
+    ).not.toThrow();
+  });
+
   it("converts the port from a string, as environment variables always are", () => {
-    expect(loadConfig({ API_PORT: "8080" }).api.port).toBe(8080);
+    expect(loadConfig({ ...REQUIRED, API_PORT: "8080" }).api.port).toBe(8080);
   });
 
   it("ignores variables it does not use", () => {
-    expect(() => loadConfig({ HOME: "/home/someone" })).not.toThrow();
+    expect(() =>
+      loadConfig({ ...REQUIRED, HOME: "/home/someone" }),
+    ).not.toThrow();
   });
 
   it.each(["0", "65536", "http", "80.5", ""])("rejects API_PORT=%j", (port) => {
-    expect(() => loadConfig({ API_PORT: port })).toThrow(/API_PORT/);
+    expect(() => loadConfig({ ...REQUIRED, API_PORT: port })).toThrow(
+      /API_PORT/,
+    );
   });
 
   it("reports every invalid variable at once", () => {
-    const load = () => loadConfig({ API_PORT: "0", LOG_LEVEL: "loud" });
+    const load = () =>
+      loadConfig({ ...REQUIRED, API_PORT: "0", LOG_LEVEL: "loud" });
 
     expect(load).toThrow(ConfigError);
     expect(load).toThrow(/API_PORT[\s\S]*LOG_LEVEL/);
@@ -32,7 +71,13 @@ describe("loadConfig", () => {
 
   it("refuses human-readable logs in production", () => {
     expect(() =>
-      loadConfig({ NODE_ENV: "production", LOG_FORMAT: "pretty" }),
+      loadConfig({ ...REQUIRED, NODE_ENV: "production", LOG_FORMAT: "pretty" }),
     ).toThrow(/LOG_FORMAT/);
+  });
+
+  it("never puts a connection string in the error message", () => {
+    expect(() =>
+      loadConfig({ ...REQUIRED, DATABASE_URL: "mysql://admin:hunter2@db/x" }),
+    ).toThrow(/^(?![\s\S]*hunter2)/);
   });
 });

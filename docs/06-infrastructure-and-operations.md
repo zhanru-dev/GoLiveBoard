@@ -18,24 +18,27 @@ Node.js 26 (from `.nvmrc`), npm 11, Docker with Compose v2.
 | worker (host)                    | —                        | —                                   | NestJS worker                                                                                                                                                                  |
 | postgres                         | `postgres:18-alpine`     | 5443                                | Database (`opspilot`; tests use their own containers). PostgreSQL 18 images keep data under `/var/lib/postgresql/18/docker`, so the volume is mounted at `/var/lib/postgresql` |
 | valkey                           | `valkey/valkey:9-alpine` | 6392                                | Queues, rate limits, pub/sub                                                                                                                                                   |
-| s3                               | `chrislusf/seaweedfs`    | 8333                                | S3-compatible object storage                                                                                                                                                   |
-| mailpit                          | `axllent/mailpit`        | 1036 (SMTP), 8036 (inbox UI)        | Captures every email sent locally                                                                                                                                              |
-| otel _(profile `observability`)_ | `grafana/otel-lgtm`      | 3310 (Grafana)                      | Local traces, logs and metrics                                                                                                                                                 |
+| s3                               | `chrislusf/seaweedfs`    | 8333                                | S3-compatible object storage (added in milestone 3, with the first upload)                                                                                                     |
+| mailpit                          | `axllent/mailpit`        | 1036 (SMTP), 8036 (inbox UI)        | Captures every email sent locally (added in milestone 2, with the first email)                                                                                                 |
+| otel _(profile `observability`)_ | `grafana/otel-lgtm`      | 3310 (Grafana)                      | Local traces, logs and metrics (added in milestone 9)                                                                                                                          |
 
-Ports are chosen so OpsPilot can run beside the course projects on the same machine. Every port is bound to `127.0.0.1` and can be overridden in `.env`. Images are pinned to exact versions in the compose file; the table shows only the series.
+Ports are chosen so OpsPilot can run beside the course projects on the same machine. Every port is bound to `127.0.0.1` and can be overridden in `.env`. Images are pinned to exact versions in the compose file; the table shows only the series. A service joins the compose file in the milestone that first uses it, so every service in it is exercised by code and tests.
+
+On Linux, containers reach the applications on the host through `host.docker.internal` (mapped to the Docker bridge), which cannot reach ports bound to `127.0.0.1`; bind the applications to `0.0.0.0` there (`API_HOST=0.0.0.0`, and `--hostname 0.0.0.0` in the web app's `dev` script) and keep a firewall in front of the machine. Docker Desktop on macOS and Windows needs no change.
 
 ### 1.3 Everyday commands
 
-| Command               | What it does                                                                             |
-| --------------------- | ---------------------------------------------------------------------------------------- |
-| `npm run services:up` | Start the services and wait until all health checks pass                                 |
-| `npm run db:migrate`  | Apply migrations to the development database                                             |
-| `npm run db:seed`     | Load the demo workspace and sample events                                                |
-| `npm run dev`         | Start web, api and worker with hot reload                                                |
-| `npm test`            | Unit and component tests in every workspace                                              |
-| `npm run test:int`    | API integration tests (starts its own containers)                                        |
-| `npm run test:e2e`    | Production builds plus Playwright                                                        |
-| `npm run check`       | Everything CI's quality job runs: format, lint, types, architecture rules, OpenAPI drift |
+| Command                 | What it does                                                                             |
+| ----------------------- | ---------------------------------------------------------------------------------------- |
+| `npm run services:up`   | Start the services and wait until all health checks pass                                 |
+| `npm run services:down` | Stop the services; database data is kept in a named volume                               |
+| `npm run db:migrate`    | Apply migrations to the development database                                             |
+| `npm run db:seed`       | Load the demo workspace and sample events                                                |
+| `npm run dev`           | Start web, api and worker with hot reload                                                |
+| `npm test`              | Unit and component tests in every workspace                                              |
+| `npm run test:int`      | API integration tests (starts its own containers)                                        |
+| `npm run test:e2e`      | Production builds plus Playwright                                                        |
+| `npm run check`         | Everything CI's quality job runs: format, lint, types, architecture rules, OpenAPI drift |
 
 ## 2. Environments
 

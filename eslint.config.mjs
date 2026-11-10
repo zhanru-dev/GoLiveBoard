@@ -1,6 +1,7 @@
 // @ts-check
 import eslint from "@eslint/js";
 import prettier from "eslint-config-prettier/flat";
+import nextCoreWebVitals from "eslint-config-next/core-web-vitals";
 import { defineConfig, globalIgnores } from "eslint/config";
 import globals from "globals";
 import tseslint from "typescript-eslint";
@@ -43,6 +44,13 @@ export default defineConfig([
         { allowNumber: true },
       ],
     },
+  },
+  {
+    // Next.js rules (React, hooks, accessibility, Core Web Vitals) for the web app.
+    files: ["apps/web/**/*.{ts,tsx}"],
+    extends: [nextCoreWebVitals],
+    languageOptions: { globals: { ...globals.browser } },
+    settings: { next: { rootDir: "apps/web/" } },
   },
   {
     // Plain JavaScript config files have no type information to check.

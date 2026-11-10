@@ -9,6 +9,9 @@
     "apps/*"
   ],
   "scripts": {
+    "dev": "npm run build -w @opspilot/contracts && concurrently --names contracts,api,web --prefix-colors blue,magenta,green \"npm run dev -w @opspilot/contracts\" \"npm run dev -w @opspilot/api\" \"npm run dev -w @opspilot/web\"",
+    "services:up": "docker compose up --detach --wait",
+    "services:down": "docker compose down",
     "build": "npm run build --workspaces --if-present",
     "typecheck": "tsc --noEmit -p tsconfig.json && npm run typecheck --workspaces --if-present",
     "lint": "eslint --max-warnings=0 .",
@@ -29,8 +32,10 @@
     "@eslint/js": "^10.0.1",
     "@types/node": "^26.0.0",
     "@vitest/coverage-v8": "^5.1.0",
+    "concurrently": "^10.0.7",
     "dependency-cruiser": "^18.7.2",
     "eslint": "^10.14.0",
+    "eslint-config-next": "^16.4.6",
     "eslint-config-prettier": "^10.1.8",
     "globals": "^17.14.0",
     "prettier": "^3.9.10",

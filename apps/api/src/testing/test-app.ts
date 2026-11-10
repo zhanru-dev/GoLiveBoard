@@ -32,6 +32,10 @@ export async function createTestApp(
   const config = loadConfig({
     NODE_ENV: "test",
     LOG_LEVEL: options.logs === undefined ? "silent" : "info",
+    // Nothing listens on port 1. Clients connect lazily, so tests that never
+    // touch the database or Valkey need neither.
+    DATABASE_URL: "postgres://test:test@127.0.0.1:1/test",
+    VALKEY_URL: "redis://127.0.0.1:1",
     ...options.env,
   });
   const builder = Test.createTestingModule({

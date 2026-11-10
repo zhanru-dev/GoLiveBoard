@@ -19,3 +19,23 @@ In development: milestone 1 (foundations). This repository is the reference impl
 | [Infrastructure and operations](docs/06-infrastructure-and-operations.md) | Local environment, CI/CD, AWS, observability, runbooks                  |
 | [Delivery plan](docs/07-delivery-plan.md)                                 | Milestones, exit criteria and how they map to lessons                   |
 | [Architecture decision records](docs/adr/README.md)                       | Why each significant decision was made                                  |
+
+## Run locally
+
+Requirements: Node.js 26 (see `.nvmrc`), npm 11, and Docker with Compose v2.
+
+```bash
+cp .env.example .env     # local settings; adjust ports here if they clash
+npm ci
+npm run services:up      # PostgreSQL, Valkey and the Caddy proxy
+npm run dev              # web app, API and contracts in watch mode
+```
+
+Open <http://localhost:3300>. The API answers under the same origin, for example <http://localhost:3300/api/v1/health/ready>.
+
+| Command                 | What it does                                      |
+| ----------------------- | ------------------------------------------------- |
+| `npm run check`         | Formatting, lint, types and architecture rules    |
+| `npm test`              | Unit and component tests                          |
+| `npm run test:int`      | API integration tests (starts its own containers) |
+| `npm run services:down` | Stop the local services                           |

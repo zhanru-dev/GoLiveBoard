@@ -13,8 +13,9 @@ const LOG_LEVELS = [
 const MAX_TCP_PORT = 65_535;
 
 /**
- * The environment variables the API reads. Each has a default that suits local
- * development, so a fresh clone starts without a `.env` file.
+ * The environment variables the API reads. Settings have defaults that suit
+ * local development; connection strings are required, because they hold
+ * credentials (`.env.example` has the local values).
  */
 const AppConfigSchema = z
   .object({
@@ -25,6 +26,14 @@ const AppConfigSchema = z
     API_PORT: z.coerce.number().int().min(1).max(MAX_TCP_PORT).default(4301),
     LOG_LEVEL: z.enum(LOG_LEVELS).default("info"),
     LOG_FORMAT: z.enum(["json", "pretty"]).default("json"),
+    DATABASE_URL: z.url({
+      protocol: /^postgres(ql)?$/,
+      error: "Must be a postgres:// URL",
+    }),
+    VALKEY_URL: z.url({
+      protocol: /^rediss?$/,
+      error: "Must be a redis:// or rediss:// URL",
+    }),
   })
   .refine(
     (env) => !(env.NODE_ENV === "production" && env.LOG_FORMAT === "pretty"),
@@ -38,6 +47,8 @@ const AppConfigSchema = z
     environment: env.NODE_ENV,
     api: { host: env.API_HOST, port: env.API_PORT },
     log: { level: env.LOG_LEVEL, format: env.LOG_FORMAT },
+    database: { url: env.DATABASE_URL },
+    valkey: { url: env.VALKEY_URL },
   }));
 
 export type AppConfig = z.output<typeof AppConfigSchema>;
