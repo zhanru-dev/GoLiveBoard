@@ -70,7 +70,12 @@ flowchart LR
 
 - Jobs run in parallel where they do not depend on each other; `npm ci` uses the npm cache keyed by the lock file.
 - The same container images built in `build` are used by `e2e` and, after merge, deployed. What was tested is what ships.
-- `main` requires every job to pass.
+- `main` requires every job to pass. A final **CI result** job depends on all the others and fails if any did not succeed, so branch protection requires that one check and never needs updating when jobs are added.
+- Actions are pinned to full commit SHAs, and Dependabot proposes weekly updates for npm packages and actions.
+
+**What runs today.** [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) runs quality, unit, integration, security and build (compiling every workspace). The other jobs in the diagram join with the milestones that introduce what they check: container images and Trivy in M4, Playwright, axe and Lighthouse CI in M5, AI evaluation in M8, OpenAPI drift with the first generated document.
+
+**Dependency audit.** CI fails on any known vulnerability of moderate severity or above in **production** dependencies. Development tools (linters, test runners, build tools) never reach users and run only on our own inputs, so their advisories are reviewed when Dependabot proposes an update rather than blocking every pull request.
 
 ## 4. Continuous delivery
 
