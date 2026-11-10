@@ -2,20 +2,34 @@ import type { NestExpressApplication } from "@nestjs/platform-express";
 import { HealthReport } from "@opspilot/contracts";
 import type { StartedPostgreSqlContainer } from "@testcontainers/postgresql";
 import type { StartedValkeyContainer } from "@testcontainers/valkey";
+import { Redis } from "ioredis";
+import { Client } from "pg";
 import request from "supertest";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { getContainerRuntimeClient } from "testcontainers";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 import { startPostgres, startValkey } from "../testing/containers.js";
-import { createTestApp } from "../testing/test-app.js";
+import { createTestApp, LogCapture } from "../testing/test-app.js";
+
+/** Freezes a container's processes, as a hung server would be. */
+async function pauseContainer(id: string): Promise<() => Promise<void>> {
+  const runtime = await getContainerRuntimeClient();
+  const container = runtime.container.getById(id);
+  await container.pause();
+  return async () => {
+    await container.unpause();
+  };
+}
 
 /**
  * Readiness against real PostgreSQL and Valkey servers, including what happens
- * when one of them goes away.
+ * when one of them hangs or goes away.
  */
 describe("readiness with real dependencies", () => {
   let postgres: StartedPostgreSqlContainer;
   let valkey: StartedValkeyContainer;
   let app: NestExpressApplication;
+  const logs = new LogCapture();
 
   beforeAll(async () => {
     [postgres, valkey] = await Promise.all([startPostgres(), startValkey()]);
@@ -24,6 +38,7 @@ describe("readiness with real dependencies", () => {
         DATABASE_URL: postgres.getConnectionUri(),
         VALKEY_URL: valkey.getConnectionUrl(),
       },
+      logs,
     });
   });
 
@@ -45,6 +60,61 @@ describe("readiness with real dependencies", () => {
       checks: { database: { status: "up" }, valkey: { status: "up" } },
     });
   });
+
+  it("logs a failed idle database connection without a request attached", async () => {
+    await ready(); // leaves an idle pooled connection, opened during a request
+    const admin = new Client({ connectionString: postgres.getConnectionUri() });
+    await admin.connect();
+    await admin.query(
+      "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE application_name = 'opspilot-api'",
+    );
+    await admin.end();
+
+    const entry = await vi.waitFor(() => {
+      const found = logs
+        .entries()
+        .find((line) => line.msg === "Idle database connection failed");
+      expect(found).toBeDefined();
+      return found;
+    });
+    expect(entry).toMatchObject({ context: "DatabaseModule" });
+    expect(entry).not.toHaveProperty("req");
+    expect((await ready()).status).toBe(200);
+  });
+
+  // Three checks that each wait for the 2-second health check timeout.
+  const FROZEN_TEST_TIMEOUT_MS = 20_000;
+
+  it(
+    "leaves nothing behind while Valkey is frozen, and recovers at once",
+    { timeout: FROZEN_TEST_TIMEOUT_MS },
+    async () => {
+      const resume = await pauseContainer(valkey.getId());
+      try {
+        for (let attempt = 0; attempt < 3; attempt += 1) {
+          const startedAt = performance.now();
+          const response = await ready();
+          expect(response.status).toBe(503);
+          expect(performance.now() - startedAt).toBeLessThan(3_000);
+        }
+      } finally {
+        await resume();
+      }
+
+      expect((await ready()).status).toBe(200);
+      // Every timed-out check closed its connection, so once Valkey has caught
+      // up no health-check connection remains open.
+      const observer = new Redis(valkey.getConnectionUrl());
+      try {
+        await vi.waitFor(async () => {
+          const clients = String(await observer.call("CLIENT", "LIST"));
+          expect(clients).not.toContain("name=opspilot-api-health");
+        });
+      } finally {
+        observer.disconnect();
+      }
+    },
+  );
 
   it("answers 503 within the check timeout once Valkey stops", async () => {
     await valkey.stop();

@@ -33,6 +33,13 @@ export const REDACTION_CENSOR = "[Redacted]";
 /** Injection token for the request-logging middleware. */
 export const HTTP_LOGGER = Symbol("HTTP_LOGGER");
 
+/**
+ * Injection token for the root logger, for code that runs outside any request:
+ * connection events, timers, background work. (`PinoLogger` would attach the
+ * request during which such a callback happened to be registered.)
+ */
+export const ROOT_LOGGER = Symbol("ROOT_LOGGER");
+
 const HEALTH_PATH_PREFIX = `/${API_PREFIX}/health/`;
 
 /**

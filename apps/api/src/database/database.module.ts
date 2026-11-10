@@ -1,8 +1,9 @@
 import { Inject, Module, type OnApplicationShutdown } from "@nestjs/common";
-import { InjectPinoLogger, PinoLogger } from "nestjs-pino";
 import type { Pool } from "pg";
+import type { Logger } from "pino";
 
 import { APP_CONFIG, type AppConfig } from "../config/app-config.js";
+import { ROOT_LOGGER } from "../observability/logger.js";
 import { DatabaseHealthIndicator } from "./database-health.indicator.js";
 import { createDatabasePool, DATABASE_POOL } from "./database.js";
 
@@ -20,11 +21,13 @@ import { createDatabasePool, DATABASE_POOL } from "./database.js";
 export class DatabaseModule implements OnApplicationShutdown {
   constructor(
     @Inject(DATABASE_POOL) private readonly pool: Pool,
-    @InjectPinoLogger(DatabaseModule.name) logger: PinoLogger,
+    @Inject(ROOT_LOGGER) rootLogger: Logger,
   ) {
+    const logger = rootLogger.child({ context: DatabaseModule.name });
     // An idle connection can fail at any time (for example when the database
     // restarts). Without a listener, Node treats the "error" event as fatal and
-    // the whole API process would crash.
+    // the whole API process would crash. The event belongs to no request, so it
+    // is logged with the root logger.
     pool.on("error", (error) => {
       logger.error({ err: error }, "Idle database connection failed");
     });
