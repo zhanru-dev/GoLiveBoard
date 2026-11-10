@@ -43,13 +43,39 @@ describe("toProblemResponse", () => {
     expect(body).toMatchObject({ code: "FORBIDDEN", requiredRole: "OWNER" });
   });
 
-  it("never lets extension members overwrite standard members", () => {
+  it("never lets extension members replace standard members", () => {
     const { body } = toProblemResponse(
-      new DomainError("FORBIDDEN", { extensions: { status: 200, code: "OK" } }),
+      new DomainError("FORBIDDEN", {
+        extensions: { status: 200, code: "OK", requestId: "forged" },
+      }),
       REQUEST_ID,
     );
 
-    expect(body).toMatchObject({ status: 403, code: "FORBIDDEN" });
+    expect(body).toMatchObject({
+      status: 403,
+      code: "FORBIDDEN",
+      requestId: REQUEST_ID,
+    });
+  });
+
+  it("drops extension members named like optional standard members", () => {
+    const { body } = toProblemResponse(
+      new DomainError("FORBIDDEN", {
+        extensions: {
+          detail: 123,
+          errors: "not-a-list",
+          instance: "/x",
+          ok: 1,
+        },
+      }),
+      REQUEST_ID,
+    );
+
+    expect(body).not.toHaveProperty("detail");
+    expect(body).not.toHaveProperty("errors");
+    expect(body).not.toHaveProperty("instance");
+    expect(body).toHaveProperty("ok", 1);
+    expect(ProblemDetails.safeParse(body).success).toBe(true);
   });
 
   it("lists field errors for a validation failure", () => {
@@ -108,6 +134,15 @@ describe("toProblemResponse", () => {
     expect(toProblemResponse(tooLarge, REQUEST_ID)).toMatchObject({
       status: 413,
       body: { code: "PAYLOAD_TOO_LARGE" },
+    });
+  });
+
+  it("maps an unsupported character set or encoding to 415", () => {
+    const unsupported = new HttpException('unsupported charset "LATIN1"', 415);
+
+    expect(toProblemResponse(unsupported, REQUEST_ID)).toMatchObject({
+      status: 415,
+      body: { code: "UNSUPPORTED_MEDIA_TYPE" },
     });
   });
 

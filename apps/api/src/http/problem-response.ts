@@ -3,7 +3,7 @@ import {
   ERROR_DEFINITIONS,
   type ErrorCode,
   type FieldError,
-  type ProblemDetails,
+  ProblemDetails,
   problemTypeFor,
 } from "@opspilot/contracts";
 
@@ -24,6 +24,7 @@ const CODE_BY_HTTP_STATUS: ReadonlyMap<number, ErrorCode> = new Map([
   [403, "FORBIDDEN"],
   [404, "NOT_FOUND"],
   [413, "PAYLOAD_TOO_LARGE"],
+  [415, "UNSUPPORTED_MEDIA_TYPE"],
   [429, "RATE_LIMITED"],
   [503, "SERVICE_UNAVAILABLE"],
 ]);
@@ -42,6 +43,23 @@ function isMalformedJsonError(cause: unknown): boolean {
   );
 }
 
+/**
+ * Members defined by RFC 9457 or by our contract. Extensions may add members
+ * but never replace these, so every body still matches `ProblemDetails`.
+ */
+const RESERVED_MEMBERS: ReadonlySet<string> = new Set([
+  ...Object.keys(ProblemDetails.shape),
+  "instance",
+]);
+
+function extensionMembers(
+  extensions: Readonly<Record<string, unknown>> = {},
+): Record<string, unknown> {
+  return Object.fromEntries(
+    Object.entries(extensions).filter(([key]) => !RESERVED_MEMBERS.has(key)),
+  );
+}
+
 interface ProblemOptions {
   readonly detail?: string | undefined;
   readonly errors?: readonly FieldError[];
@@ -55,8 +73,7 @@ function problem(
 ): ProblemResponse {
   const { status, title } = ERROR_DEFINITIONS[code];
   const body: ProblemDetails = {
-    // Extensions first, so they can never overwrite the standard members.
-    ...options.extensions,
+    ...extensionMembers(options.extensions),
     type: problemTypeFor(code),
     title,
     status,

@@ -129,6 +129,15 @@ describe("request logging", () => {
     expect(entry?.res?.statusCode).toBe(400);
   });
 
+  it("logs requests whose URL cannot be decoded", async () => {
+    const [entry] = await logsFor(
+      (id) => http().get("/api/v1/%FF").set("X-Request-Id", id),
+      "log-bad-url",
+    );
+
+    expect(entry?.res?.statusCode).toBe(400);
+  });
+
   it("does not log health probes", async () => {
     await http().get("/api/v1/health/live").set("X-Request-Id", "log-health");
     await logsFor(

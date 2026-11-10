@@ -7,7 +7,10 @@ import { PROBLEM_JSON_CONTENT_TYPE } from "@opspilot/contracts";
 import type { Request, Response } from "express";
 import { InjectPinoLogger, PinoLogger } from "nestjs-pino";
 
-import { resolveRequestId } from "../observability/request-id.js";
+import {
+  REQUEST_ID_HEADER,
+  resolveRequestId,
+} from "../observability/request-id.js";
 import { toProblemResponse } from "./problem-response.js";
 
 /**
@@ -30,7 +33,8 @@ export class ProblemDetailsFilter implements ExceptionFilter {
     const request = http.getRequest<Request & { id?: unknown }>();
     const response = http.getResponse<Response>();
 
-    // Normally set by the request logger; a request it never saw gets a new ID.
+    // Set by the request logger, which runs first; the fallback only guards
+    // against a future change in middleware order.
     const requestId =
       typeof request.id === "string"
         ? request.id
@@ -40,13 +44,16 @@ export class ProblemDetailsFilter implements ExceptionFilter {
     if (problem.unexpected) {
       this.logger.error({ err: exception }, "Unhandled error");
     }
-    // A response that has started streaming cannot be replaced; Express will
-    // close the connection.
+    // Part of a response has already been sent, so a problem body can no longer
+    // replace it. Ending normally would let the client take the partial body
+    // as complete; destroying the connection tells it the response failed.
     if (response.headersSent) {
+      response.destroy();
       return;
     }
     response
       .status(problem.status)
+      .setHeader(REQUEST_ID_HEADER, requestId)
       .type(PROBLEM_JSON_CONTENT_TYPE)
       .json(problem.body);
   }

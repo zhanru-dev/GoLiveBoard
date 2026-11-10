@@ -3,7 +3,10 @@ import type { ErrorCode } from "@opspilot/contracts";
 export interface DomainErrorOptions {
   /** Explanation for this occurrence, shown to the user. Never include secrets. */
   readonly detail?: string;
-  /** Extra members for the problem response, e.g. `{ blockers: [...] }`. */
+  /**
+   * Extra members for the problem response, e.g. `{ blockers: [...] }`.
+   * Standard members (`type`, `status`, `detail`, `errors`, …) are ignored here.
+   */
   readonly extensions?: Readonly<Record<string, unknown>>;
   readonly cause?: unknown;
 }

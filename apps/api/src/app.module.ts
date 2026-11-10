@@ -1,11 +1,5 @@
-import {
-  type DynamicModule,
-  type MiddlewareConsumer,
-  Module,
-  type NestModule,
-} from "@nestjs/common";
+import { type DynamicModule, Module } from "@nestjs/common";
 import { APP_FILTER, APP_PIPE } from "@nestjs/core";
-import { json } from "express";
 import { LoggerModule } from "nestjs-pino";
 import type { DestinationStream } from "pino";
 
@@ -14,13 +8,11 @@ import { ConfigModule } from "./config/config.module.js";
 import { HealthModule } from "./health/health.module.js";
 import { ProblemDetailsFilter } from "./http/problem-details.filter.js";
 import { createValidationPipe } from "./http/request-validation.js";
-import { createHttpLoggerOptions } from "./observability/logger-options.js";
-
-/**
- * Largest accepted JSON body. Our requests are small forms; a low limit stops
- * a client from making the server parse megabytes of JSON.
- */
-export const JSON_BODY_LIMIT = "100kb";
+import {
+  createHttpLogger,
+  createLogger,
+  HTTP_LOGGER,
+} from "./observability/logger.js";
 
 export interface AppModuleOptions {
   /** Where logs are written; tests pass a stream to inspect them. */
@@ -28,37 +20,27 @@ export interface AppModuleOptions {
 }
 
 @Module({})
-export class AppModule implements NestModule {
+export class AppModule {
   static forRoot(
     config: AppConfig,
     options: AppModuleOptions = {},
   ): DynamicModule {
-    const httpLoggerOptions = createHttpLoggerOptions(config);
+    const logger = createLogger(config, options.logDestination);
     return {
       module: AppModule,
       imports: [
         ConfigModule.forRoot(config),
-        LoggerModule.forRoot({
-          pinoHttp:
-            options.logDestination === undefined
-              ? httpLoggerOptions
-              : [httpLoggerOptions, options.logDestination],
-        }),
+        // `useExisting`: the request-logging middleware is mounted by
+        // configureApp, ahead of routing; nestjs-pino only makes each request's
+        // logger available to `PinoLogger` and uses ours for everything else.
+        LoggerModule.forRoot({ pinoHttp: { logger }, useExisting: true }),
         HealthModule,
       ],
       providers: [
+        { provide: HTTP_LOGGER, useValue: createHttpLogger(logger) },
         { provide: APP_FILTER, useClass: ProblemDetailsFilter },
         { provide: APP_PIPE, useFactory: createValidationPipe },
       ],
     };
-  }
-
-  /**
-   * The JSON body parser runs as module middleware, after the request logger,
-   * so a request with a malformed or oversized body still gets a request ID and
-   * a log line. The app is created with `bodyParser: false` for this reason.
-   */
-  configure(consumer: MiddlewareConsumer): void {
-    consumer.apply(json({ limit: JSON_BODY_LIMIT })).forRoutes("{*splat}");
   }
 }

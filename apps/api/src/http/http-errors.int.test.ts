@@ -1,6 +1,7 @@
-import { Body, Controller, Get, Post } from "@nestjs/common";
+import { Body, Controller, Get, Post, Res } from "@nestjs/common";
 import type { NestExpressApplication } from "@nestjs/platform-express";
 import { ProblemDetails } from "@opspilot/contracts";
+import type { Response } from "express";
 import request from "supertest";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { z } from "zod";
@@ -33,6 +34,13 @@ class TestOnlyController {
   @Get("crash")
   crash(): never {
     throw new Error("password authentication failed for user opspilot");
+  }
+
+  /** Fails after part of the response has been sent, as a stream can. */
+  @Get("half-sent")
+  halfSent(@Res() response: Response): never {
+    response.write("partial");
+    throw new Error("failed mid-response");
   }
 }
 
@@ -130,6 +138,36 @@ describe("HTTP errors", () => {
     });
   });
 
+  it.each([
+    [
+      "a non-UTF character set",
+      { "Content-Type": "application/json; charset=latin1" },
+    ],
+    [
+      "an unsupported content encoding",
+      { "Content-Type": "application/json", "Content-Encoding": "compress" },
+    ],
+  ])("answers a body with %s with 415", async (_case, headers) => {
+    const response = await http()
+      .post("/api/v1/test-only/things")
+      .set(headers)
+      .send('{"name":"Launch"}');
+
+    expect(response.status).toBe(415);
+    expect(ProblemDetails.parse(response.body).code).toBe(
+      "UNSUPPORTED_MEDIA_TYPE",
+    );
+  });
+
+  it("gives a malformed URL a request ID in both header and body", async () => {
+    const response = await http().get("/api/v1/%FF");
+
+    expect(response.status).toBe(400);
+    const requestId = response.headers["x-request-id"];
+    expect(requestId).toEqual(expect.any(String));
+    expect(ProblemDetails.parse(response.body).requestId).toBe(requestId);
+  });
+
   it("refuses a body larger than the limit", async () => {
     const response = await http()
       .post("/api/v1/test-only/things")
@@ -159,6 +197,21 @@ describe("HTTP errors", () => {
       ["code", "requestId", "status", "title", "type"].sort(),
     );
     expect(response.text).not.toContain("password");
+  });
+
+  it("drops the connection when an error follows a partly sent response", async () => {
+    const outcome: unknown = await http()
+      .get("/api/v1/test-only/half-sent")
+      .timeout(2_000)
+      .then(
+        () => "completed",
+        (error: unknown) => error,
+      );
+
+    // The request must fail because the connection closed, not hang until
+    // the client gives up.
+    expect(outcome).toBeInstanceOf(Error);
+    expect(outcome).not.toHaveProperty("timeout");
   });
 
   it("sends security headers and hides the framework", async () => {
