@@ -22,6 +22,10 @@ const nextConfig: NextConfig = {
   partialPrefetching: true,
   // The header only advertises the framework to attackers.
   poweredByHeader: false,
+  // `next dev` writes an AGENTS.md when it detects an AI coding agent. A file
+  // that appears for some developers and not others makes `git status` differ
+  // from machine to machine, so the project opts out.
+  agentRules: false,
   headers: () =>
     Promise.resolve([{ source: "/:path*", headers: SECURITY_HEADERS }]),
   turbopack: {
