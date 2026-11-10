@@ -34,6 +34,7 @@
 | `409`                 | The action conflicts with the resource's state (illegal transition, hard blockers, archived event)   |
 | `412`                 | `If-Match` does not match the current version                                                        |
 | `413`                 | The request body is larger than 100 KB                                                               |
+| `415`                 | The request body uses a non-UTF character set or an unsupported `Content-Encoding`                   |
 | `422`                 | Idempotency key reused with a different request body                                                 |
 | `428`                 | `If-Match` required but missing                                                                      |
 | `429`                 | Rate limit exceeded                                                                                  |
