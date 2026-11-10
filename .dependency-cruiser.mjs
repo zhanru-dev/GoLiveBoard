@@ -21,20 +21,31 @@ export default {
       to: { couldNotResolve: true },
     },
     {
-      name: "contracts-are-portable",
+      name: "contracts-import-only-zod",
       comment:
-        "Contracts run in the browser and on the server, so they may not use Node.js built-ins.",
+        "Contracts are shared by every app and run in the browser too, so they import only each other and Zod: no Node.js built-ins, frameworks or app code.",
       severity: "error",
-      from: { path: "^packages/contracts/src" },
-      to: { dependencyTypes: ["core"] },
+      from: { path: "^packages/contracts/src/", pathNot: "\\.test\\.ts$" },
+      to: { pathNot: ["^packages/contracts/src/", "node_modules/zod/"] },
     },
     {
-      name: "contracts-depend-only-on-zod",
+      name: "no-undeclared-dependencies",
       comment:
-        "Contracts stay small and safe to share: Zod is their only runtime dependency.",
+        "Every package a workspace imports is listed in that workspace's package.json, so it does not depend on what npm happens to hoist.",
       severity: "error",
-      from: { path: "^packages/contracts/src" },
-      to: { dependencyTypes: ["npm"], pathNot: "node_modules/zod/" },
+      from: {},
+      to: { dependencyTypes: ["npm-no-pkg", "npm-unknown"] },
+    },
+    {
+      name: "no-dev-dependencies-in-production",
+      comment:
+        "Code that ships never imports a devDependency: production installs leave them out.",
+      severity: "error",
+      from: {
+        path: "^(apps|packages)/[^/]+/src/",
+        pathNot: "\\.test\\.ts$|/testing/",
+      },
+      to: { dependencyTypes: ["npm-dev"], dependencyTypesNot: ["type-only"] },
     },
     {
       name: "web-does-not-import-api",
