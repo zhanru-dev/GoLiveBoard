@@ -3,3 +3,4 @@ package-lock.json
 **/.next/
 **/coverage/
 **/next-env.d.ts
+**/generated/

@@ -24,6 +24,9 @@ export default defineConfig({
           name: "api-int",
           root: "./apps/api",
           include: ["src/**/*.int.test.ts"],
+          // One PostgreSQL server with a migrated template database for all
+          // integration test files (each copies it into a database of its own).
+          globalSetup: ["./src/testing/global-setup.ts"],
           // Starting containers takes seconds, and minutes when an image is
           // downloaded for the first time.
           hookTimeout: 180_000,
@@ -33,7 +36,12 @@ export default defineConfig({
     coverage: {
       provider: "v8",
       include: ["packages/*/src/**", "apps/*/src/**"],
-      exclude: ["**/*.test.{ts,tsx}", "**/index.ts", "**/testing/**"],
+      exclude: [
+        "**/*.test.{ts,tsx}",
+        "**/index.ts",
+        "**/testing/**",
+        "**/generated/**",
+      ],
       reporter: ["text-summary", "html"],
     },
   },

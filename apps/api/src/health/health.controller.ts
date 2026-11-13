@@ -2,8 +2,11 @@ import { Controller, Get, Header, HttpStatus, Res } from "@nestjs/common";
 import type { HealthReport, LivenessReport } from "@opspilot/contracts";
 import type { Response } from "express";
 
+import { Public } from "../auth/actor.js";
 import { HealthService } from "./health.service.js";
 
+/** Public: load balancers and uptime checks call these without a session. */
+@Public()
 @Controller("health")
 export class HealthController {
   constructor(private readonly health: HealthService) {}

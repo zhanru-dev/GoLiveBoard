@@ -6,16 +6,26 @@ import { ConfigError, loadConfig } from "./app-config.js";
 const REQUIRED = {
   DATABASE_URL: "postgres://opspilot:secret@127.0.0.1:5443/opspilot",
   VALKEY_URL: "redis://127.0.0.1:6392",
+  APP_ORIGIN: "http://localhost:3300/",
+  JWT_SECRET: "a".repeat(32),
+  SMTP_URL: "smtp://127.0.0.1:1036",
+  MAIL_FROM: "OpsPilot <no-reply@opspilot.test>",
 };
 
 describe("loadConfig", () => {
-  it("uses local development defaults for everything but connection strings", () => {
+  it("uses local development defaults for everything but connection strings and secrets", () => {
     expect(loadConfig(REQUIRED)).toEqual({
       environment: "development",
       api: { host: "127.0.0.1", port: 4301 },
       log: { level: "info", format: "json" },
       database: { url: REQUIRED.DATABASE_URL },
       valkey: { url: REQUIRED.VALKEY_URL },
+      app: { origin: "http://localhost:3300" },
+      auth: { jwtSecret: "a".repeat(32), jwtPreviousSecret: undefined },
+      mail: {
+        smtpUrl: REQUIRED.SMTP_URL,
+        from: "OpsPilot <no-reply@opspilot.test>",
+      },
     });
   });
 
@@ -23,7 +33,7 @@ describe("loadConfig", () => {
     const load = () => loadConfig({});
 
     expect(load).toThrow(ConfigError);
-    expect(load).toThrow(/DATABASE_URL[\s\S]*VALKEY_URL/);
+    expect(load).toThrow(/DATABASE_URL[\s\S]*VALKEY_URL[\s\S]*JWT_SECRET/);
   });
 
   it.each([
@@ -39,10 +49,17 @@ describe("loadConfig", () => {
   it("accepts the postgresql:// spelling and TLS Valkey", () => {
     expect(() =>
       loadConfig({
+        ...REQUIRED,
         DATABASE_URL: "postgresql://user:pw@db.internal:5432/opspilot",
         VALKEY_URL: "rediss://cache.internal:6379",
       }),
     ).not.toThrow();
+  });
+
+  it("rejects a signing key shorter than 32 characters", () => {
+    expect(() => loadConfig({ ...REQUIRED, JWT_SECRET: "too-short" })).toThrow(
+      /JWT_SECRET/,
+    );
   });
 
   it("converts the port from a string, as environment variables always are", () => {

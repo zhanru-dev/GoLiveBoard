@@ -7,7 +7,8 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { z } from "zod";
 
 import { DomainError } from "../shared/domain/domain-error.js";
-import { createTestApp } from "../testing/test-app.js";
+import { Public } from "../auth/actor.js";
+import { createTestApp, TEST_ORIGIN } from "../testing/test-app.js";
 
 const CreateThing = z.object({
   name: z.string().min(3),
@@ -16,6 +17,7 @@ const CreateThing = z.object({
 type CreateThing = z.infer<typeof CreateThing>;
 
 /** Routes that exist only in this test, to trigger each kind of error. */
+@Public()
 @Controller("test-only")
 class TestOnlyController {
   @Post("things")
@@ -101,6 +103,7 @@ describe("HTTP errors", () => {
   it("lists every invalid field of a request body", async () => {
     const response = await http()
       .post("/api/v1/test-only/things")
+      .set("Origin", TEST_ORIGIN)
       .send({ name: "ab", schedule: { endsAt: "tomorrow" } });
 
     expect(response.status).toBe(400);
@@ -119,7 +122,10 @@ describe("HTTP errors", () => {
       schedule: { endsAt: "2026-12-01T18:00:00Z" },
     };
 
-    const response = await http().post("/api/v1/test-only/things").send(thing);
+    const response = await http()
+      .post("/api/v1/test-only/things")
+      .set("Origin", TEST_ORIGIN)
+      .send(thing);
 
     expect(response.status).toBe(201);
     expect(response.body).toEqual(thing);
@@ -128,6 +134,7 @@ describe("HTTP errors", () => {
   it("explains a body that is not valid JSON", async () => {
     const response = await http()
       .post("/api/v1/test-only/things")
+      .set("Origin", TEST_ORIGIN)
       .set("Content-Type", "application/json")
       .send('{"name": ');
 
@@ -150,6 +157,7 @@ describe("HTTP errors", () => {
   ])("answers a body with %s with 415", async (_case, headers) => {
     const response = await http()
       .post("/api/v1/test-only/things")
+      .set("Origin", TEST_ORIGIN)
       .set(headers)
       .send('{"name":"Launch"}');
 
@@ -171,6 +179,7 @@ describe("HTTP errors", () => {
   it("refuses a body larger than the limit", async () => {
     const response = await http()
       .post("/api/v1/test-only/things")
+      .set("Origin", TEST_ORIGIN)
       .send({ name: "x".repeat(200_000) });
 
     expect(response.status).toBe(413);

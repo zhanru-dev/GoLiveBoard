@@ -11,6 +11,12 @@ const LOG_LEVELS = [
 ] as const;
 
 const MAX_TCP_PORT = 65_535;
+/** HS256 keys shorter than the hash output (32 bytes) weaken the signature. */
+const MIN_SECRET_LENGTH = 32;
+
+const Secret = z
+  .string()
+  .min(MIN_SECRET_LENGTH, `Must be at least ${MIN_SECRET_LENGTH} characters`);
 
 /**
  * The environment variables the API reads. Settings have defaults that suit
@@ -34,6 +40,17 @@ const AppConfigSchema = z
       protocol: /^rediss?$/,
       error: "Must be a redis:// or rediss:// URL",
     }),
+    /** Where browsers load the app; state-changing requests must come from it. */
+    APP_ORIGIN: z.url({ protocol: /^https?$/ }),
+    /** Signs access tokens. */
+    JWT_SECRET: Secret,
+    /**
+     * The previous signing key during a rotation: tokens it signed stay valid
+     * until they expire, so rotating the key signs nobody out.
+     */
+    JWT_SECRET_PREVIOUS: Secret.optional(),
+    SMTP_URL: z.url({ protocol: /^smtps?$/ }),
+    MAIL_FROM: z.string().min(1),
   })
   .refine(
     (env) => !(env.NODE_ENV === "production" && env.LOG_FORMAT === "pretty"),
@@ -49,6 +66,13 @@ const AppConfigSchema = z
     log: { level: env.LOG_LEVEL, format: env.LOG_FORMAT },
     database: { url: env.DATABASE_URL },
     valkey: { url: env.VALKEY_URL },
+    // `new URL(…).origin` normalises the value (no trailing slash, lower case).
+    app: { origin: new URL(env.APP_ORIGIN).origin },
+    auth: {
+      jwtSecret: env.JWT_SECRET,
+      jwtPreviousSecret: env.JWT_SECRET_PREVIOUS,
+    },
+    mail: { smtpUrl: env.SMTP_URL, from: env.MAIL_FROM },
   }));
 
 export type AppConfig = z.output<typeof AppConfigSchema>;

@@ -1,4 +1,16 @@
 export {
+  Accepted,
+  Email,
+  Me,
+  MembershipSummary,
+  Password,
+  PASSWORD_MIN_LENGTH,
+  PersonName,
+  Role,
+  SignInRequest,
+  SignUpRequest,
+} from "./auth.js";
+export {
   ERROR_DEFINITIONS,
   ErrorCode,
   type ErrorDefinition,

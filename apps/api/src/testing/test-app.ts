@@ -7,11 +7,15 @@ import { z } from "zod";
 
 import { AppModule } from "../app.module.js";
 import { APP_OPTIONS, configureApp } from "../app.setup.js";
-import { loadConfig } from "../config/app-config.js";
 import {
   HEALTH_INDICATORS,
   type HealthIndicator,
 } from "../health/health-indicator.js";
+import { Mailer } from "../mail/mailer.js";
+import { loadTestConfig } from "./config.js";
+import type { Clock } from "../shared/clock.js";
+
+export { TEST_ORIGIN } from "./config.js";
 
 export interface TestAppOptions {
   /** Environment variables on top of the test defaults. */
@@ -20,6 +24,15 @@ export interface TestAppOptions {
   readonly controllers?: Type[];
   readonly healthIndicators?: readonly HealthIndicator[];
   readonly logs?: LogCapture;
+  readonly clock?: Clock;
+  /** Replaces SMTP; by default, email goes nowhere. */
+  readonly mailer?: Mailer;
+}
+
+class DiscardingMailer extends Mailer {
+  send(): Promise<void> {
+    return Promise.resolve();
+  }
 }
 
 /**
@@ -29,19 +42,22 @@ export interface TestAppOptions {
 export async function createTestApp(
   options: TestAppOptions = {},
 ): Promise<NestExpressApplication> {
-  const config = loadConfig({
-    NODE_ENV: "test",
+  const config = loadTestConfig({
     LOG_LEVEL: options.logs === undefined ? "silent" : "info",
-    // Nothing listens on port 1. Clients connect lazily, so tests that never
-    // touch the database or Valkey need neither.
-    DATABASE_URL: "postgres://test:test@127.0.0.1:1/test",
-    VALKEY_URL: "redis://127.0.0.1:1",
     ...options.env,
   });
   const builder = Test.createTestingModule({
-    imports: [AppModule.forRoot(config, { logDestination: options.logs })],
+    imports: [
+      AppModule.forRoot(config, {
+        logDestination: options.logs,
+        clock: options.clock,
+      }),
+    ],
     controllers: options.controllers ?? [],
   });
+  builder
+    .overrideProvider(Mailer)
+    .useValue(options.mailer ?? new DiscardingMailer());
   if (options.healthIndicators !== undefined) {
     builder
       .overrideProvider(HEALTH_INDICATORS)

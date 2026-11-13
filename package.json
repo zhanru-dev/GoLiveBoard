@@ -10,8 +10,10 @@
   ],
   "scripts": {
     "dev": "npm run build -w @opspilot/contracts && concurrently --names contracts,api,web --prefix-colors blue,magenta,green \"npm run dev -w @opspilot/contracts\" \"npm run dev -w @opspilot/api\" \"npm run dev -w @opspilot/web\"",
-    "services:up": "docker compose up --detach --wait",
+    "services:up": "docker compose up --detach --wait --wait-timeout 120",
     "services:down": "docker compose down",
+    "db:migrate": "npm run db:migrate -w @opspilot/api --",
+    "db:deploy": "npm run db:deploy -w @opspilot/api",
     "build": "npm run build --workspaces --if-present",
     "typecheck": "tsc --noEmit -p tsconfig.json && npm run typecheck --workspaces --if-present",
     "lint": "eslint --max-warnings=0 .",

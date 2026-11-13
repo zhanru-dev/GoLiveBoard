@@ -4,8 +4,15 @@ import { InjectPinoLogger, PinoLogger } from "nestjs-pino";
 import request from "supertest";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
-import { createTestApp, LOG_LEVEL, LogCapture } from "../testing/test-app.js";
+import { Public } from "../auth/actor.js";
+import {
+  createTestApp,
+  LOG_LEVEL,
+  LogCapture,
+  TEST_ORIGIN,
+} from "../testing/test-app.js";
 
+@Public()
 @Controller("test-only")
 class TestOnlyController {
   constructor(
@@ -120,6 +127,7 @@ describe("request logging", () => {
       (id) =>
         http()
           .post("/api/v1/test-only/ok")
+          .set("Origin", TEST_ORIGIN)
           .set("Content-Type", "application/json")
           .set("X-Request-Id", id)
           .send("{not json"),

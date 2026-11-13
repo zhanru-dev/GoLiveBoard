@@ -7,7 +7,13 @@ import globals from "globals";
 import tseslint from "typescript-eslint";
 
 export default defineConfig([
-  globalIgnores(["**/dist/", "**/.next/", "**/coverage/", "**/next-env.d.ts"]),
+  globalIgnores([
+    "**/dist/",
+    "**/.next/",
+    "**/coverage/",
+    "**/next-env.d.ts",
+    "**/generated/",
+  ]),
   eslint.configs.recommended,
   tseslint.configs.strictTypeChecked,
   tseslint.configs.stylisticTypeChecked,

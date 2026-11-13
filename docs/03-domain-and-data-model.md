@@ -74,7 +74,6 @@ erDiagram
   Workspace {
     uuid id PK
     text name
-    text slug UK
     int retentionDays
     boolean isDemo
   }
@@ -90,6 +89,7 @@ erDiagram
     uuid activeWorkspaceId FK
     text refreshTokenHash UK
     text previousRefreshTokenHash
+    timestamptz rotatedAt
     timestamptz refreshExpiresAt
     timestamptz revokedAt
   }

@@ -10,7 +10,11 @@ import { z } from "zod";
 export const ErrorCode = z.enum([
   "VALIDATION_FAILED",
   "UNAUTHENTICATED",
+  "CREDENTIALS_INVALID",
+  "TOKEN_INVALID",
   "FORBIDDEN",
+  "ORIGIN_FORBIDDEN",
+  "OWNER_REQUIRED",
   "NOT_FOUND",
   "VERSION_CONFLICT",
   "IDEMPOTENCY_KEY_REUSED",
@@ -37,9 +41,25 @@ export interface ErrorDefinition {
 export const ERROR_DEFINITIONS = {
   VALIDATION_FAILED: { status: 400, title: "The request is not valid" },
   UNAUTHENTICATED: { status: 401, title: "You need to sign in" },
+  CREDENTIALS_INVALID: {
+    status: 401,
+    title: "The email address or password is incorrect",
+  },
+  TOKEN_INVALID: {
+    status: 400,
+    title: "The link is invalid, has expired or has already been used",
+  },
   FORBIDDEN: {
     status: 403,
     title: "Your role does not allow this action",
+  },
+  ORIGIN_FORBIDDEN: {
+    status: 403,
+    title: "The request did not come from the OpsPilot web app",
+  },
+  OWNER_REQUIRED: {
+    status: 409,
+    title: "A workspace must always have at least one Owner",
   },
   NOT_FOUND: { status: 404, title: "The resource was not found" },
   VERSION_CONFLICT: {

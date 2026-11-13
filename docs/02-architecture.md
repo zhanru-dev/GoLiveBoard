@@ -111,10 +111,9 @@ flowchart TB
 opspilot/
 ├── apps/
 │   ├── web/                 Next.js application
-│   └── api/                 NestJS: src/main.ts (api) and src/worker.ts (worker)
+│   └── api/                 NestJS: src/main.ts (api), src/worker.ts (worker), prisma/ (schema, migrations)
 ├── packages/
 │   └── contracts/           Zod schemas, inferred types, error codes, event names
-├── prisma/                  schema, migrations, seed (owned by apps/api)
 ├── e2e/                     Playwright tests for the whole system
 ├── infra/
 │   ├── docker/              Dockerfiles, Caddyfile

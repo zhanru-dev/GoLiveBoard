@@ -1,5 +1,7 @@
 import type { NestApplicationOptions } from "@nestjs/common";
 import type { NestExpressApplication } from "@nestjs/platform-express";
+import type { NextFunction, Request, Response } from "express";
+import cookieParser from "cookie-parser";
 import helmet from "helmet";
 import { Logger } from "nestjs-pino";
 import type { HttpLogger } from "pino-http";
@@ -12,6 +14,11 @@ import { HTTP_LOGGER } from "./observability/logger.js";
  * a client from making the server parse megabytes of JSON.
  */
 export const JSON_BODY_LIMIT = "100kb";
+
+function noStore(_request: Request, response: Response, next: NextFunction) {
+  response.setHeader("Cache-Control", "no-store");
+  next();
+}
 
 /** Options for `NestFactory.create`, shared by the server and the tests. */
 export const APP_OPTIONS = {
@@ -39,5 +46,8 @@ export function configureApp(app: NestExpressApplication): void {
   // Security headers such as `X-Content-Type-Options: nosniff`; also removes
   // `X-Powered-By`, which only helps attackers fingerprint the server.
   app.use(helmet());
+  // API responses are personal or change constantly; no cache may keep them.
+  app.use(noStore);
+  app.use(cookieParser());
   app.useBodyParser("json", { limit: JSON_BODY_LIMIT });
 }

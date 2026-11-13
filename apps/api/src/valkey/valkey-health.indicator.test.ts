@@ -2,8 +2,8 @@ import { createServer, type Server, type Socket } from "node:net";
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { loadConfig } from "../config/app-config.js";
 import { runCheck } from "../health/health.service.js";
+import { loadTestConfig } from "../testing/config.js";
 import { ValkeyHealthIndicator } from "./valkey-health.indicator.js";
 
 /** A server that accepts connections and never answers: a stalled Valkey. */
@@ -37,10 +37,7 @@ function closeServer(server: Server): Promise<void> {
 
 function indicatorFor(port: number): ValkeyHealthIndicator {
   return new ValkeyHealthIndicator(
-    loadConfig({
-      DATABASE_URL: "postgres://test:test@127.0.0.1:1/test",
-      VALKEY_URL: `redis://127.0.0.1:${port}`,
-    }),
+    loadTestConfig({ VALKEY_URL: `redis://127.0.0.1:${String(port)}` }),
   );
 }
 
