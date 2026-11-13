@@ -25,6 +25,8 @@ function listPath(filters: EventListFilters, cursor: string | undefined) {
   const params = new URLSearchParams();
   if (filters.q !== undefined) params.set("q", filters.q);
   if (filters.status !== undefined) params.set("status", filters.status);
+  if (filters.from !== undefined) params.set("from", filters.from);
+  if (filters.to !== undefined) params.set("to", filters.to);
   if (cursor !== undefined) params.set("cursor", cursor);
   const query = params.toString();
   return query === "" ? "/events" : `/events?${query}`;
@@ -54,7 +56,7 @@ export function EventsTable({
   }
   const items = events.data.pages.flatMap((page) => page.items);
   if (items.length === 0) {
-    const filtered = filters.q !== undefined || filters.status !== undefined;
+    const filtered = Object.keys(filters).length > 0;
     return (
       <p className="text-muted-foreground">
         {filtered

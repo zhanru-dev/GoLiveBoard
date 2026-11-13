@@ -1,8 +1,9 @@
 "use client";
 
-import { RunbookTask } from "@opspilot/contracts";
+import { type EventDetail, RunbookTask } from "@opspilot/contracts";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowDown, ArrowUp, Trash2 } from "lucide-react";
+import { ArrowDown, ArrowUp, Pencil, Trash2 } from "lucide-react";
+import { useState } from "react";
 import { toast } from "sonner";
 import { z } from "zod";
 
@@ -10,10 +11,12 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api";
 import { errorMessage } from "@/lib/errors";
+import { formatInZone } from "@/lib/time";
 
 import { eventKeys } from "../events/event-keys";
 import { AddTaskForm } from "./add-task-form";
 import { Section } from "./section";
+import { TaskEditor } from "./task-editor";
 import type { LaunchControl } from "./use-launch-control";
 
 const Tasks = z.array(RunbookTask);
@@ -21,9 +24,11 @@ const Tasks = z.array(RunbookTask);
 /** FR-LC-1: the event's runbook. */
 export function RunbookSection({
   control,
-  eventId,
-}: Readonly<{ control: LaunchControl; eventId: string }>) {
+  event,
+}: Readonly<{ control: LaunchControl; event: EventDetail }>) {
   const { workspaceId } = control;
+  const eventId = event.id;
+  const [editing, setEditing] = useState<string | undefined>();
   const queryClient = useQueryClient();
   const runbookKey = eventKeys.runbook(workspaceId, eventId);
   const tasks = useQuery({
@@ -119,23 +124,40 @@ export function RunbookSection({
                     toggle.mutate(task);
                   }}
                 />
-                <div className="grid flex-1 gap-0.5">
-                  <span
-                    className={task.status === "DONE" ? "line-through" : ""}
-                  >
-                    {task.title}
-                  </span>
-                  {task.completedBy === null ? null : (
-                    <span className="text-xs text-muted-foreground">
-                      Done by {task.completedBy.name}
+                {editing === task.id ? (
+                  <TaskEditor
+                    control={control}
+                    task={task}
+                    timeZone={event.timeZone}
+                    onDone={() => {
+                      setEditing(undefined);
+                    }}
+                  />
+                ) : (
+                  <div className="grid flex-1 gap-0.5">
+                    <span
+                      className={task.status === "DONE" ? "line-through" : ""}
+                    >
+                      {task.title}
                     </span>
-                  )}
-                </div>
+                    <TaskDetails task={task} timeZone={event.timeZone} />
+                  </div>
+                )}
                 {task.isCritical ? (
                   <Badge variant="destructive">Critical</Badge>
                 ) : null}
-                {control.canEdit ? (
+                {control.canEdit && editing !== task.id ? (
                   <div className="flex gap-1">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      aria-label={`Edit ${task.title}`}
+                      onClick={() => {
+                        setEditing(task.id);
+                      }}
+                    >
+                      <Pencil aria-hidden="true" />
+                    </Button>
                     <Button
                       variant="ghost"
                       size="icon"
@@ -177,8 +199,30 @@ export function RunbookSection({
         </ol>
       ) : null}
       {control.canEdit ? (
-        <AddTaskForm control={control} eventId={eventId} />
+        <AddTaskForm
+          control={control}
+          eventId={eventId}
+          timeZone={event.timeZone}
+        />
       ) : null}
     </Section>
+  );
+}
+
+/** Owner, due time and completion, in the event's time zone. */
+function TaskDetails({
+  task,
+  timeZone,
+}: Readonly<{ task: RunbookTask; timeZone: string }>) {
+  const parts = [
+    task.owner === null ? null : `Owner: ${task.owner.name}`,
+    task.dueAt === null ? null : `Due ${formatInZone(task.dueAt, timeZone)}`,
+    task.completedBy === null ? null : `Done by ${task.completedBy.name}`,
+  ].filter((part) => part !== null);
+  if (parts.length === 0) {
+    return null;
+  }
+  return (
+    <span className="text-xs text-muted-foreground">{parts.join(" · ")}</span>
   );
 }

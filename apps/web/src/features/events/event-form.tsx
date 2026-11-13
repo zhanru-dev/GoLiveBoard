@@ -3,7 +3,7 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import type { EventOwner } from "@opspilot/contracts";
 import { useMemo, useState } from "react";
-import { useForm } from "react-hook-form";
+import { useForm, useWatch } from "react-hook-form";
 
 import { FormAlert } from "@/components/form-alert";
 import { FormField } from "@/components/form-field";
@@ -18,6 +18,7 @@ import {
   EVENT_FORM_FIELDS,
   EventFormValues,
 } from "./event-form-values";
+import { OccurrenceChoiceField } from "./occurrence-choice";
 
 interface EventFormProps {
   readonly defaultValues: EventFormValues;
@@ -42,10 +43,16 @@ export function EventForm({
     register,
     handleSubmit,
     setError,
+    control,
     formState: { errors, isSubmitting },
   } = useForm<EventFormValues>({
     resolver: zodResolver(EventFormValues),
     defaultValues,
+  });
+
+  const [startsLocal, endsLocal, timeZone] = useWatch({
+    control,
+    name: ["startsLocal", "endsLocal", "timeZone"],
   });
 
   const submit = handleSubmit(async (values) => {
@@ -90,6 +97,18 @@ export function EventForm({
             type="datetime-local"
             error={errors.endsLocal?.message}
             {...register("endsLocal")}
+          />
+          <OccurrenceChoiceField
+            label="Starts"
+            local={startsLocal}
+            timeZone={timeZone}
+            registration={register("startsOccurrence")}
+          />
+          <OccurrenceChoiceField
+            label="Ends"
+            local={endsLocal}
+            timeZone={timeZone}
+            registration={register("endsOccurrence")}
           />
         </div>
         <div className="grid gap-4 sm:grid-cols-2">

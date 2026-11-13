@@ -29,33 +29,75 @@ export function offsetMinutes(instant: Date, timeZone: string): number {
   return parseOffset(label ?? "GMT");
 }
 
+/** Around a clock change the offset differs this far before and after. */
+const HALF_DAY_MS = 12 * 60 * MS_PER_MINUTE;
+
 /**
- * Converts a wall-clock time in a zone to an ISO instant in UTC:
- * ("2026-07-01T18:00", "Europe/London") → "2026-07-01T17:00:00.000Z".
+ * What a wall-clock time in a zone means:
  *
- * The offset depends on the instant, which is what we are computing, so it
- * is applied twice: once from a first guess, then again from the corrected
- * instant, which settles it around daylight-saving changes. A time that does
- * not exist (skipped by the clocks going forward) lands just after the gap.
- *
- * @param local - `YYYY-MM-DDTHH:mm`, as a `datetime-local` input gives it
+ * - `exact`: one instant, the usual case;
+ * - `ambiguous`: the clocks went back, so it happened twice (01:30 on the
+ *   first Sunday of November in New York is 05:30Z and then 06:30Z);
+ * - `missing`: the clocks went forward over it (02:30 on the second Sunday
+ *   of March in New York never happens).
  */
-export function zonedToUtc(local: string, timeZone: string): string {
+export type ZonedTime =
+  | { readonly kind: "exact"; readonly utc: string }
+  | {
+      readonly kind: "ambiguous";
+      readonly earlier: string;
+      readonly later: string;
+    }
+  | { readonly kind: "missing" };
+
+/** "YYYY-MM-DDTHH:mm" read as if it were UTC, in milliseconds. */
+function wallClockMs(local: string): number {
   const [date = "", time = "00:00"] = local.split("T");
   const [year, month, day] = date.split("-").map(Number);
   const [hour, minute] = time.split(":").map(Number);
-  const wallClock = Date.UTC(
+  return Date.UTC(
     year ?? 1970,
     (month ?? 1) - 1,
     day ?? 1,
     hour ?? 0,
     minute ?? 0,
   );
-  const firstGuess =
-    wallClock - offsetMinutes(new Date(wallClock), timeZone) * MS_PER_MINUTE;
-  const settled =
-    wallClock - offsetMinutes(new Date(firstGuess), timeZone) * MS_PER_MINUTE;
-  return new Date(settled).toISOString();
+}
+
+/**
+ * Finds every instant that shows `local` on the zone's clocks. Only two
+ * offsets can apply on one day, the ones half a day before and after, so
+ * each is tried and kept if it really maps back to the same wall clock.
+ *
+ * @param local - `YYYY-MM-DDTHH:mm`, as a `datetime-local` input gives it
+ */
+export function resolveZonedTime(local: string, timeZone: string): ZonedTime {
+  const wallClock = wallClockMs(local);
+  const offsets = new Set([
+    offsetMinutes(new Date(wallClock - HALF_DAY_MS), timeZone),
+    offsetMinutes(new Date(wallClock + HALF_DAY_MS), timeZone),
+  ]);
+  const instants = [...offsets]
+    .map((offset) => new Date(wallClock - offset * MS_PER_MINUTE).toISOString())
+    .filter((utc) => utcToZoned(utc, timeZone) === local.slice(0, 16))
+    .sort();
+  const [earlier, later] = instants;
+  if (earlier === undefined) {
+    return { kind: "missing" };
+  }
+  if (later === undefined || later === earlier) {
+    return { kind: "exact", utc: earlier };
+  }
+  return { kind: "ambiguous", earlier, later };
+}
+
+/** "UTC−05:00" for an instant in a zone, to tell repeated times apart. */
+export function offsetLabel(utc: string, timeZone: string): string {
+  const minutes = offsetMinutes(new Date(utc), timeZone);
+  const sign = minutes < 0 ? "−" : "+";
+  const absolute = Math.abs(minutes);
+  const pad = (value: number) => String(value).padStart(2, "0");
+  return `UTC${sign}${pad(Math.floor(absolute / 60))}:${pad(absolute % 60)}`;
 }
 
 /**

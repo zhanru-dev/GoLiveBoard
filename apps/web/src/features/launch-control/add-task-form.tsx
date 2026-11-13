@@ -10,26 +10,33 @@ import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api";
 import { errorMessage } from "@/lib/errors";
 
+import { planFields, type TaskPlan, TaskPlanFields } from "./task-fields";
 import type { LaunchControl } from "./use-launch-control";
+
+const EMPTY_PLAN: TaskPlan = { ownerUserId: "", dueLocal: "" };
 
 export function AddTaskForm({
   control,
   eventId,
-}: Readonly<{ control: LaunchControl; eventId: string }>) {
+  timeZone,
+}: Readonly<{ control: LaunchControl; eventId: string; timeZone: string }>) {
   const [title, setTitle] = useState("");
   const [isCritical, setIsCritical] = useState(false);
+  const [plan, setPlan] = useState<TaskPlan>(EMPTY_PLAN);
   const [error, setError] = useState("");
+  const [dueError, setDueError] = useState<string | undefined>();
   const add = useMutation({
-    mutationFn: () =>
+    mutationFn: (body: object) =>
       api(`/events/${eventId}/runbook-tasks`, {
         method: "POST",
-        body: { title, isCritical },
+        body,
         schema: RunbookTask,
         workspaceId: control.workspaceId,
       }),
     onSuccess: () => {
       setTitle("");
       setIsCritical(false);
+      setPlan(EMPTY_PLAN);
     },
     onError: (failure) => {
       setError(errorMessage(failure));
@@ -40,17 +47,27 @@ export function AddTaskForm({
   function submit(event: SubmitEvent<HTMLFormElement>) {
     event.preventDefault();
     setError("");
+    setDueError(undefined);
     if (title.trim() === "") {
       setError("Enter what needs doing.");
       return;
     }
-    add.mutate();
+    const fields = planFields(plan, timeZone);
+    if ("problem" in fields) {
+      setDueError(fields.problem);
+      return;
+    }
+    add.mutate({ title, isCritical, ...fields });
   }
 
   return (
-    <form onSubmit={submit} noValidate className="grid gap-3">
+    <form
+      onSubmit={submit}
+      noValidate
+      className="grid gap-3 rounded-lg border border-dashed p-3"
+    >
       <FormAlert message={error} />
-      <div className="grid gap-3 sm:grid-cols-[1fr_auto_auto] sm:items-end">
+      <div className="grid gap-3 sm:grid-cols-[1fr_auto] sm:items-end">
         <FormField
           label="New task"
           value={title}
@@ -69,10 +86,22 @@ export function AddTaskForm({
           />
           Critical
         </label>
-        <Button type="submit" variant="outline" disabled={add.isPending}>
-          Add task
-        </Button>
       </div>
+      <TaskPlanFields
+        control={control}
+        timeZone={timeZone}
+        plan={plan}
+        onChange={setPlan}
+        dueError={dueError}
+      />
+      <Button
+        type="submit"
+        variant="outline"
+        disabled={add.isPending}
+        className="justify-self-start"
+      >
+        Add task
+      </Button>
     </form>
   );
 }

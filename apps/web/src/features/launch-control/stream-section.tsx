@@ -1,8 +1,8 @@
 "use client";
 
 import { EventDetail, Incident, StreamCheckPage } from "@opspilot/contracts";
-import { useMutation, useQuery } from "@tanstack/react-query";
-import { type SubmitEvent, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { type SubmitEvent, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { z } from "zod";
 
@@ -15,7 +15,7 @@ import { formatInZone } from "@/lib/time";
 
 import { eventKeys } from "../events/event-keys";
 import { Section } from "./section";
-import type { LaunchControl } from "./use-launch-control";
+import { LIVE_REFRESH_MS, type LaunchControl } from "./use-launch-control";
 
 /** Shown in Launch Control; the full history is in the API. */
 const RECENT_CHECKS = 5;
@@ -128,7 +128,7 @@ function RecentChecks({
         signal,
       }),
     // A requested check finishes a moment later in the worker.
-    refetchInterval: 10_000,
+    refetchInterval: LIVE_REFRESH_MS,
   });
   const incidents = useQuery({
     queryKey: eventKeys.incidents(workspaceId, event.id),
@@ -138,7 +138,23 @@ function RecentChecks({
         workspaceId,
         signal,
       }),
+    refetchInterval: LIVE_REFRESH_MS,
   });
+  // A new check can change readiness and open or resolve an incident: show
+  // those at the same moment as the check itself.
+  const queryClient = useQueryClient();
+  const latestCheck = checks.data?.items[0]?.id;
+  useEffect(() => {
+    if (latestCheck === undefined) {
+      return;
+    }
+    void queryClient.invalidateQueries({
+      queryKey: eventKeys.readiness(workspaceId, event.id),
+    });
+    void queryClient.invalidateQueries({
+      queryKey: eventKeys.incidents(workspaceId, event.id),
+    });
+  }, [latestCheck, queryClient, workspaceId, event.id]);
   const open =
     incidents.data?.filter((incident) => incident.resolvedAt === null) ?? [];
 

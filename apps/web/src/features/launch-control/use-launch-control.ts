@@ -9,6 +9,13 @@ import { eventKeys } from "../events/event-keys";
 import { useMe } from "../shell/me-context";
 
 /**
+ * Stream checks and incidents happen in the background, and readiness
+ * depends on the clock (a check counts for 5 minutes), so these refresh on
+ * their own.
+ */
+export const LIVE_REFRESH_MS = 10_000;
+
+/**
  * What every Launch Control section needs: the event, who may change it,
  * and a way to refresh everything after a change (the readiness score
  * depends on all sections, so they are refreshed together).

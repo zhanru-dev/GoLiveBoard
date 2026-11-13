@@ -10,14 +10,18 @@ import { router } from "@/testing/setup";
 
 import { NewEventPage } from "./new-event-page";
 
-async function fillForm() {
+async function fillForm(
+  starts = "2026-07-01T18:00",
+  ends = "2026-07-01T19:30",
+  zone = "Europe/London",
+) {
   const user = userEvent.setup();
   await user.type(screen.getByLabelText("Title"), "Product launch");
+  await user.selectOptions(screen.getByLabelText("Time zone"), zone);
   await user.clear(screen.getByLabelText("Starts"));
-  await user.type(screen.getByLabelText("Starts"), "2026-07-01T18:00");
+  await user.type(screen.getByLabelText("Starts"), starts);
   await user.clear(screen.getByLabelText("Ends"));
-  await user.type(screen.getByLabelText("Ends"), "2026-07-01T19:30");
-  await user.selectOptions(screen.getByLabelText("Time zone"), "Europe/London");
+  await user.type(screen.getByLabelText("Ends"), ends);
   return user;
 }
 
@@ -89,6 +93,50 @@ describe("NewEventPage", () => {
       "aria-invalid",
       "true",
     );
+  });
+
+  it("refuses a time the clocks skip", async () => {
+    renderScreen(<NewEventPage />, OWNER);
+    const user = await fillForm(
+      "2026-03-08T02:30",
+      "2026-03-08T04:00",
+      "America/New_York",
+    );
+
+    await user.click(screen.getByRole("button", { name: "Create event" }));
+
+    expect(
+      await screen.findByText(
+        "This time does not exist in America/New_York: the clocks go forward over it.",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("asks which one is meant when a time happens twice, and sends that one", async () => {
+    let body: { startsAt?: string } = {};
+    server.use(
+      http.post("*/api/v1/events", async ({ request }) => {
+        body = (await request.json()) as { startsAt?: string };
+        return HttpResponse.json(anEvent(), { status: 201 });
+      }),
+    );
+    renderScreen(<NewEventPage />, OWNER);
+    const user = await fillForm(
+      "2026-11-01T01:30",
+      "2026-11-01T03:00",
+      "America/New_York",
+    );
+
+    await user.click(screen.getByRole("button", { name: "Create event" }));
+    expect(
+      await screen.findByText(/This time happens twice in America\/New_York/),
+    ).toBeInTheDocument();
+    await user.click(screen.getByLabelText("The second 01:30 (UTC−05:00)"));
+    await user.click(screen.getByRole("button", { name: "Create event" }));
+
+    await vi.waitFor(() => {
+      expect(body.startsAt).toBe("2026-11-01T06:30:00.000Z");
+    });
   });
 
   it("shows the API's field errors next to the form's fields", async () => {

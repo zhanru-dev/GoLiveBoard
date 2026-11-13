@@ -6,10 +6,13 @@ import { toast } from "sonner";
 import { z } from "zod";
 
 import { api } from "@/lib/api";
-import { utcToZoned } from "@/lib/time";
 
 import { EventForm } from "../events/event-form";
-import { toEventFields } from "../events/event-form-values";
+import {
+  changedEventFields,
+  type EventFormValues,
+  timeFieldsFor,
+} from "../events/event-form-values";
 import { teamKeys } from "../team/roles";
 import { Section } from "./section";
 import type { LaunchControl } from "./use-launch-control";
@@ -43,6 +46,21 @@ export function DetailsSection({
     onSettled: () => control.refresh(),
   });
 
+  const starts = timeFieldsFor(event.startsAt, event.timeZone);
+  const ends = timeFieldsFor(event.endsAt, event.timeZone);
+  const original: EventFormValues = {
+    title: event.title,
+    description: event.description,
+    startsLocal: starts.local,
+    startsOccurrence: starts.occurrence,
+    endsLocal: ends.local,
+    endsOccurrence: ends.occurrence,
+    timeZone: event.timeZone,
+    expectedAttendance:
+      event.expectedAttendance === null ? "" : String(event.expectedAttendance),
+    ownerUserId: event.owner?.userId ?? "",
+  };
+
   return (
     <Section id="details" title="Details">
       <EventForm
@@ -56,23 +74,14 @@ export function DetailsSection({
             name: member.name,
           })) ?? []
         }
-        defaultValues={{
-          title: event.title,
-          description: event.description,
-          startsLocal: utcToZoned(event.startsAt, event.timeZone),
-          endsLocal: utcToZoned(event.endsAt, event.timeZone),
-          timeZone: event.timeZone,
-          expectedAttendance:
-            event.expectedAttendance === null
-              ? ""
-              : String(event.expectedAttendance),
-          ownerUserId: event.owner?.userId ?? "",
-        }}
+        defaultValues={original}
         onSubmit={async (values) => {
-          await save.mutateAsync({
-            ...toEventFields(values),
-            ownerUserId: values.ownerUserId === "" ? null : values.ownerUserId,
-          });
+          const changes = changedEventFields(values, original);
+          if (Object.keys(changes).length === 0) {
+            toast.info("Nothing has changed.");
+            return;
+          }
+          await save.mutateAsync(changes);
         }}
       />
     </Section>

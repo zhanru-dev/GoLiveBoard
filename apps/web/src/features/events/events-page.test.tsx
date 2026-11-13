@@ -91,6 +91,41 @@ describe("EventsPage", () => {
     expect(last?.searchParams.get("status")).toBe("READY");
   });
 
+  it("filters by a range of days, including the last one", async () => {
+    const requests = serveEvents({ "": { items: [], nextCursor: null } });
+    renderScreen(<EventsPage />, OWNER);
+    const user = userEvent.setup();
+    await screen.findByText(/No events yet/);
+
+    await user.type(screen.getByLabelText("Starting from"), "2026-12-01");
+    await user.type(screen.getByLabelText("Until"), "2026-12-07");
+    await user.click(screen.getByRole("button", { name: "Search" }));
+
+    await screen.findByText("No events match these filters.");
+    const last = requests.at(-1);
+    expect(last?.searchParams.get("from")).toBe(
+      new Date("2026-12-01T00:00").toISOString(),
+    );
+    expect(last?.searchParams.get("to")).toBe(
+      new Date("2026-12-08T00:00").toISOString(),
+    );
+  });
+
+  it("refuses a range that ends before it starts", async () => {
+    serveEvents({ "": { items: [], nextCursor: null } });
+    renderScreen(<EventsPage />, OWNER);
+    const user = userEvent.setup();
+    await screen.findByText(/No events yet/);
+
+    await user.type(screen.getByLabelText("Starting from"), "2026-12-07");
+    await user.type(screen.getByLabelText("Until"), "2026-12-01");
+    await user.click(screen.getByRole("button", { name: "Search" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "The last day must not be before the first.",
+    );
+  });
+
   it("says when the events cannot be loaded", async () => {
     server.use(
       http.get("*/api/v1/events", () =>

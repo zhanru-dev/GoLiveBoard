@@ -36,7 +36,7 @@ export function LaunchControlPage({ eventId }: Readonly<{ eventId: string }>) {
       <EventHeader control={control} event={event.data} />
       <div className="grid gap-8 lg:grid-cols-[1fr_20rem] lg:items-start">
         <div className="grid gap-8">
-          <RunbookSection control={control} eventId={eventId} />
+          <RunbookSection control={control} event={event.data} />
           <AccessPolicySection control={control} eventId={eventId} />
           <StreamSection control={control} event={event.data} />
           <HoldingSlateSection control={control} eventId={eventId} />

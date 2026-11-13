@@ -11,7 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { api } from "@/lib/api";
 
 import { eventKeys } from "../events/event-keys";
-import type { LaunchControl } from "./use-launch-control";
+import { LIVE_REFRESH_MS, type LaunchControl } from "./use-launch-control";
 
 const CRITERION_LABELS: Readonly<Record<ReadinessCriterion, string>> = {
   ACCESS_POLICY: "Access policy",
@@ -44,6 +44,7 @@ export function ReadinessPanel({
         workspaceId: control.workspaceId,
         signal,
       }),
+    refetchInterval: LIVE_REFRESH_MS,
   });
 
   return (

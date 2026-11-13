@@ -166,6 +166,109 @@ describe("LaunchControlPage", () => {
     expect(ifMatch).toBe('"4"');
   });
 
+  describe("task owners and due times (FR-LC-1)", () => {
+    const GRACE = {
+      membershipId: "0195f0a0-0000-7000-8000-0000000000b2",
+      userId: "0195f0a0-0000-7000-8000-000000000002",
+      name: "Grace Hopper",
+      email: "grace@example.com",
+      role: "MANAGER" as const,
+      joinedAt: "2026-11-13T10:00:00.000Z",
+    };
+
+    it("adds a task with an owner and a due time in the event's zone", async () => {
+      serveEvent();
+      let body: unknown;
+      server.use(
+        http.get("*/api/v1/workspace/members", () =>
+          HttpResponse.json([GRACE]),
+        ),
+        http.post(
+          `*/api/v1/events/${EVENT_ID}/runbook-tasks`,
+          async ({ request }) => {
+            body = await request.json();
+            return HttpResponse.json(TASK, { status: 201 });
+          },
+        ),
+      );
+      renderScreen(<LaunchControlPage eventId={EVENT_ID} />, OWNER);
+      const user = userEvent.setup();
+
+      await user.type(
+        await screen.findByLabelText("New task"),
+        "Brief the speakers",
+      );
+      const owner = await screen.findByRole("combobox", { name: "Task owner" });
+      await within(owner).findByRole("option", { name: "Grace Hopper" });
+      await user.selectOptions(owner, GRACE.userId);
+      await user.type(screen.getByLabelText("Due"), "2026-07-01T17:00");
+      await user.click(screen.getByRole("button", { name: "Add task" }));
+
+      await vi.waitFor(() => {
+        expect(body).toEqual({
+          title: "Brief the speakers",
+          isCritical: false,
+          ownerUserId: GRACE.userId,
+          // 17:00 in London in July is 16:00 UTC.
+          dueAt: "2026-07-01T16:00:00.000Z",
+        });
+      });
+    });
+
+    it("shows a task's owner and due time, and changes only what was edited", async () => {
+      serveEvent();
+      server.use(
+        http.get("*/api/v1/workspace/members", () =>
+          HttpResponse.json([GRACE]),
+        ),
+        http.get(`*/api/v1/events/${EVENT_ID}/runbook-tasks`, () =>
+          HttpResponse.json([
+            {
+              ...TASK,
+              owner: { userId: GRACE.userId, name: GRACE.name },
+              dueAt: "2026-12-01T17:00:00.000Z",
+            },
+          ]),
+        ),
+      );
+      let patch: { body?: unknown; ifMatch?: string | null } = {};
+      server.use(
+        http.patch(`*/api/v1/runbook-tasks/${TASK.id}`, async ({ request }) => {
+          patch = {
+            body: await request.json(),
+            ifMatch: request.headers.get("if-match"),
+          };
+          return HttpResponse.json(TASK);
+        }),
+      );
+      renderScreen(<LaunchControlPage eventId={EVENT_ID} />, OWNER);
+      const user = userEvent.setup();
+
+      const details = await screen.findByText(/Owner: Grace Hopper/);
+      expect(details).toHaveTextContent(
+        "Owner: Grace Hopper · Due Tue, 1 Dec 2026, 17:00 GMT",
+      );
+      await user.click(
+        screen.getByRole("button", { name: "Edit Rehearse the opening" }),
+      );
+      const due = await screen.findAllByLabelText("Due");
+      // The editor's field comes first; the add-task form's is below it.
+      const editorDue = due[0];
+      if (editorDue === undefined) throw new Error("No due field");
+      expect(editorDue).toHaveValue("2026-12-01T17:00");
+      await user.clear(editorDue);
+      await user.type(editorDue, "2026-12-01T16:30");
+      await user.click(screen.getByRole("button", { name: "Save task" }));
+
+      await vi.waitFor(() => {
+        expect(patch).toEqual({
+          body: { dueAt: "2026-12-01T16:30:00.000Z" },
+          ifMatch: '"4"',
+        });
+      });
+    });
+  });
+
   it("creates the access policy without a version, then saves with one", async () => {
     serveEvent();
     const ifMatches: (string | null)[] = [];
@@ -287,6 +390,112 @@ describe("LaunchControlPage", () => {
     expect(screen.queryByLabelText("New task")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Upload an image")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Save details" })).toBeDisabled();
+  });
+
+  it("saves only what changed, so a time in a repeated hour does not move", async () => {
+    // 06:30Z is the second 01:30 of the night New York's clocks go back.
+    serveEvent(
+      anEvent({
+        timeZone: "America/New_York",
+        startsAt: "2026-11-01T06:30:00.000Z",
+        endsAt: "2026-11-01T08:00:00.000Z",
+      }),
+    );
+    let body: unknown;
+    server.use(
+      http.patch(`*/api/v1/events/${EVENT_ID}`, async ({ request }) => {
+        body = await request.json();
+        return HttpResponse.json(anEvent({ version: 4 }));
+      }),
+    );
+    renderScreen(<LaunchControlPage eventId={EVENT_ID} />, OWNER);
+    const user = userEvent.setup();
+
+    const title = await screen.findByLabelText("Title", { exact: true });
+    expect(screen.getByLabelText("The second 01:30 (UTC−05:00)")).toBeChecked();
+    await user.clear(title);
+    await user.type(title, "Renamed launch");
+    await user.click(screen.getByRole("button", { name: "Save details" }));
+
+    await vi.waitFor(() => {
+      expect(body).toEqual({ title: "Renamed launch" });
+    });
+  });
+
+  it("shows a stream failure found in the background, without a reload", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      let failing = false;
+      serveEvent(
+        anEvent({ streamUrl: "https://stream.example.com/live.m3u8" }),
+      );
+      server.use(
+        http.get(`*/api/v1/events/${EVENT_ID}/readiness`, () =>
+          HttpResponse.json(
+            failing
+              ? aReadiness({
+                  blockers: [
+                    {
+                      criterion: "STREAM_REACHABLE",
+                      evidence: "The last stream check failed.",
+                    },
+                  ],
+                })
+              : aReadiness({ blockers: [] }),
+          ),
+        ),
+        http.get(`*/api/v1/events/${EVENT_ID}/stream/checks`, () =>
+          HttpResponse.json({
+            items: failing
+              ? [
+                  {
+                    id: "0195f0a0-0000-7000-8000-0000000000c9",
+                    url: "https://stream.example.com/live.m3u8",
+                    checkedAt: "2026-11-13T09:00:30.000Z",
+                    ok: false,
+                    httpStatus: 404,
+                    latencyMs: 80,
+                    failure: "HTTP 404",
+                  },
+                ]
+              : [],
+            nextCursor: null,
+          }),
+        ),
+        http.get(`*/api/v1/events/${EVENT_ID}/incidents`, () =>
+          HttpResponse.json(
+            failing
+              ? [
+                  {
+                    id: "0195f0a0-0000-7000-8000-0000000000d1",
+                    kind: "STREAM_UNREACHABLE",
+                    openedAt: "2026-11-13T09:00:30.000Z",
+                    resolvedAt: null,
+                  },
+                ]
+              : [],
+          ),
+        ),
+      );
+      renderScreen(<LaunchControlPage eventId={EVENT_ID} />, OWNER);
+      expect(
+        await screen.findByText(
+          "No hard blockers: the event can be marked ready.",
+        ),
+      ).toBeInTheDocument();
+
+      failing = true;
+      await vi.advanceTimersByTimeAsync(10_000);
+
+      expect(
+        await screen.findByText(/1 hard blocker must be resolved/),
+      ).toBeInTheDocument();
+      expect(
+        await screen.findByText(/Stream unreachable since/),
+      ).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("says when the event does not exist", async () => {
