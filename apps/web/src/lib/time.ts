@@ -18,19 +18,42 @@ function parseOffset(label: string): number {
   return sign === "-" ? -total : total;
 }
 
+/** Building a formatter is slow; one per zone is enough. */
+const offsetFormatters = new Map<string, Intl.DateTimeFormat>();
+
+function offsetFormatter(timeZone: string): Intl.DateTimeFormat {
+  let formatter = offsetFormatters.get(timeZone);
+  if (formatter === undefined) {
+    formatter = new Intl.DateTimeFormat("en-GB", {
+      timeZone,
+      timeZoneName: "longOffset",
+    });
+    offsetFormatters.set(timeZone, formatter);
+  }
+  return formatter;
+}
+
 /** The zone's offset from UTC at an instant, in minutes. */
 export function offsetMinutes(instant: Date, timeZone: string): number {
-  const label = new Intl.DateTimeFormat("en-GB", {
-    timeZone,
-    timeZoneName: "longOffset",
-  })
+  const label = offsetFormatter(timeZone)
     .formatToParts(instant)
     .find((part) => part.type === "timeZoneName")?.value;
   return parseOffset(label ?? "GMT");
 }
 
-/** Around a clock change the offset differs this far before and after. */
-const HALF_DAY_MS = 12 * 60 * MS_PER_MINUTE;
+const MS_PER_HOUR = 60 * MS_PER_MINUTE;
+
+/**
+ * Where to sample the zone's offset, relative to the wall clock read as UTC.
+ * The real instant is the wall clock minus the offset, and offsets run from
+ * UTC−12 to UTC+14, so a clock change that touches this wall clock lies
+ * within 14 hours either side. Samples a day either side are beyond it, and
+ * the ones in between catch a zone whose offset changes on that very day.
+ * (±12 hours missed the repeated hour in Pacific/Auckland, UTC+13.)
+ */
+const SAMPLE_OFFSETS_MS = [-24, -16, -8, 0, 8, 16, 24].map(
+  (hours) => hours * MS_PER_HOUR,
+);
 
 /**
  * What a wall-clock time in a zone means:
@@ -65,18 +88,19 @@ function wallClockMs(local: string): number {
 }
 
 /**
- * Finds every instant that shows `local` on the zone's clocks. Only two
- * offsets can apply on one day, the ones half a day before and after, so
- * each is tried and kept if it really maps back to the same wall clock.
+ * Finds every instant that shows `local` on the zone's clocks. It collects
+ * the offsets the zone uses around that time, tries each, and keeps those
+ * that really map back to the same wall clock.
  *
  * @param local - `YYYY-MM-DDTHH:mm`, as a `datetime-local` input gives it
  */
 export function resolveZonedTime(local: string, timeZone: string): ZonedTime {
   const wallClock = wallClockMs(local);
-  const offsets = new Set([
-    offsetMinutes(new Date(wallClock - HALF_DAY_MS), timeZone),
-    offsetMinutes(new Date(wallClock + HALF_DAY_MS), timeZone),
-  ]);
+  const offsets = new Set(
+    SAMPLE_OFFSETS_MS.map((delta) =>
+      offsetMinutes(new Date(wallClock + delta), timeZone),
+    ),
+  );
   const instants = [...offsets]
     .map((offset) => new Date(wallClock - offset * MS_PER_MINUTE).toISOString())
     .filter((utc) => utcToZoned(utc, timeZone) === local.slice(0, 16))

@@ -6,6 +6,7 @@ import { type SubmitEvent, useState } from "react";
 
 import { FormAlert } from "@/components/form-alert";
 import { FormField } from "@/components/form-field";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api";
 import { errorMessage } from "@/lib/errors";
@@ -14,21 +15,50 @@ import { utcToZoned } from "@/lib/time";
 import { planFields, type TaskPlan, TaskPlanFields } from "./task-fields";
 import type { LaunchControl } from "./use-launch-control";
 
+interface EditorProps {
+  readonly control: LaunchControl;
+  /** The task as it is stored now; refreshes while the editor is open. */
+  readonly task: RunbookTask;
+  readonly timeZone: string;
+  readonly onDone: () => void;
+}
+
 /**
- * Edits a task in place. Only changed fields are sent, with the version the
- * task was loaded at, so a concurrent edit is refused rather than lost.
+ * Edits a task in place. The draft and the version it is based on are taken
+ * together when editing starts, and stay together: a refresh that brings a
+ * newer version must not pair the old draft with the new version, or saving
+ * would overwrite a colleague's change (the milestone 3 re-review). Instead
+ * the editor says the task changed and offers to start again from it; saving
+ * the old draft sends the old version, which the API refuses.
  */
-export function TaskEditor({
+export function TaskEditor(props: EditorProps) {
+  const [base, setBase] = useState(props.task);
+  const changedElsewhere = props.task.version !== base.version;
+  return (
+    <TaskDraft
+      // Starting again from the latest version resets every field.
+      key={base.version}
+      {...props}
+      task={base}
+      changedElsewhere={changedElsewhere}
+      onReload={() => {
+        setBase(props.task);
+      }}
+    />
+  );
+}
+
+function TaskDraft({
   control,
   task,
   timeZone,
   onDone,
-}: Readonly<{
-  control: LaunchControl;
-  task: RunbookTask;
-  timeZone: string;
-  onDone: () => void;
-}>) {
+  changedElsewhere,
+  onReload,
+}: EditorProps & {
+  readonly changedElsewhere: boolean;
+  readonly onReload: () => void;
+}) {
   const [title, setTitle] = useState(task.title);
   const [isCritical, setIsCritical] = useState(task.isCritical);
   const [plan, setPlan] = useState<TaskPlan>({
@@ -81,6 +111,21 @@ export function TaskEditor({
 
   return (
     <form onSubmit={submit} noValidate className="grid w-full gap-3">
+      {changedElsewhere ? (
+        <Alert role="alert">
+          <AlertDescription className="flex flex-wrap items-center gap-2">
+            Someone else changed this task while you were editing it.
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={onReload}
+            >
+              Start again from their version
+            </Button>
+          </AlertDescription>
+        </Alert>
+      ) : null}
       <FormAlert message={error} />
       <div className="grid gap-3 sm:grid-cols-[1fr_auto] sm:items-end">
         <FormField

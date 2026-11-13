@@ -1,4 +1,4 @@
-import type { EventDetail, Readiness } from "@opspilot/contracts";
+import type { EventDetail, Readiness, RunbookTask } from "@opspilot/contracts";
 import { screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { http, HttpResponse } from "msw";
@@ -266,6 +266,91 @@ describe("LaunchControlPage", () => {
           ifMatch: '"4"',
         });
       });
+    });
+
+    it("never pairs an open draft with a newer version of the task", async () => {
+      const OTHER = {
+        ...TASK,
+        id: "0195f0a0-0000-7000-8000-0000000000f2",
+        title: "Test the stream",
+        position: 2,
+        version: 1,
+      };
+      let stored: RunbookTask[] = [TASK, OTHER];
+      serveEvent();
+      const patches: { id: string; body: unknown; ifMatch: string | null }[] =
+        [];
+      server.use(
+        http.get(`*/api/v1/events/${EVENT_ID}/runbook-tasks`, () =>
+          HttpResponse.json(stored),
+        ),
+        http.patch(
+          "*/api/v1/runbook-tasks/:id",
+          async ({ request, params }) => {
+            const ifMatch = request.headers.get("if-match");
+            patches.push({
+              id: String(params.id),
+              body: await request.json(),
+              ifMatch,
+            });
+            const current = stored.find((task) => task.id === params.id);
+            if (ifMatch !== `"${String(current?.version)}"`) {
+              return HttpResponse.json(problem(412, "PRECONDITION_FAILED"), {
+                status: 412,
+              });
+            }
+            return HttpResponse.json(current);
+          },
+        ),
+      );
+      renderScreen(<LaunchControlPage eventId={EVENT_ID} />, OWNER);
+      const user = userEvent.setup();
+
+      await user.click(
+        await screen.findByRole("button", {
+          name: "Edit Rehearse the opening",
+        }),
+      );
+      // A colleague renames the task; then something refreshes the runbook.
+      stored = [
+        { ...TASK, title: "Rehearse the welcome", version: 5 },
+        { ...OTHER, status: "DONE", version: 2 },
+      ];
+      await user.click(
+        screen.getByRole("checkbox", { name: "Test the stream done" }),
+      );
+      expect(
+        await screen.findByText(
+          "Someone else changed this task while you were editing it.",
+        ),
+      ).toBeInTheDocument();
+      const editorDue = (await screen.findAllByLabelText("Due"))[0];
+      if (editorDue === undefined) throw new Error("No due field");
+      await user.type(editorDue, "2026-12-01T16:30");
+      await user.click(screen.getByRole("button", { name: "Save task" }));
+
+      // The old draft goes with the old version, so it is refused, and the
+      // colleague's title is never sent back over theirs.
+      await vi.waitFor(() => {
+        expect(patches.filter((patch) => patch.id === TASK.id)).toEqual([
+          {
+            id: TASK.id,
+            body: { dueAt: "2026-12-01T16:30:00.000Z" },
+            ifMatch: '"4"',
+          },
+        ]);
+      });
+      await user.click(
+        screen.getByRole("button", { name: "Start again from their version" }),
+      );
+      expect(screen.getByLabelText("Task title")).toHaveValue(
+        "Rehearse the welcome",
+      );
+      expect(
+        screen.queryByText(
+          "Someone else changed this task while you were editing it.",
+        ),
+      ).not.toBeInTheDocument();
     });
   });
 

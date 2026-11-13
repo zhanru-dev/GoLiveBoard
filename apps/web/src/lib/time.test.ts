@@ -3,9 +3,46 @@ import { describe, expect, it } from "vitest";
 import {
   formatInZone,
   offsetLabel,
+  offsetMinutes,
   resolveZonedTime,
+  timeZones,
   utcToZoned,
 } from "./time";
+
+const MINUTE_MS = 60_000;
+const DAY_MS = 24 * 60 * MINUTE_MS;
+
+/**
+ * Every instant in 2026 at which the zone's offset changes, to the minute:
+ * a daily scan finds the day, then halving finds the minute.
+ */
+function clockChanges(timeZone: string): number[] {
+  const changes: number[] = [];
+  const start = Date.UTC(2026, 0, 1);
+  const offsetAt = (ms: number) => offsetMinutes(new Date(ms), timeZone);
+  for (let day = start; day < Date.UTC(2027, 0, 1); day += DAY_MS) {
+    if (offsetAt(day) === offsetAt(day + DAY_MS)) {
+      continue;
+    }
+    let before = day;
+    let after = day + DAY_MS;
+    while (after - before > MINUTE_MS) {
+      const middle =
+        before + Math.floor((after - before) / 2 / MINUTE_MS) * MINUTE_MS;
+      if (offsetAt(middle) === offsetAt(day)) before = middle;
+      else after = middle;
+    }
+    changes.push(after);
+  }
+  return changes;
+}
+
+const outcomes = (local: string, zone: string): string[] => {
+  const resolved = resolveZonedTime(local, zone);
+  if (resolved.kind === "exact") return [resolved.utc];
+  if (resolved.kind === "ambiguous") return [resolved.earlier, resolved.later];
+  return [];
+};
 
 describe("resolveZonedTime", () => {
   it.each([
@@ -77,6 +114,20 @@ describe("resolveZonedTime", () => {
       "2026-10-25T00:15:00.000Z",
       "2026-10-25T01:15:00.000Z",
     ],
+    [
+      "Auckland (UTC+13 before)",
+      "2026-04-05T02:30",
+      "Pacific/Auckland",
+      "2026-04-04T13:30:00.000Z",
+      "2026-04-04T14:30:00.000Z",
+    ],
+    [
+      "Chatham (UTC+13:45 before)",
+      "2026-04-05T03:00",
+      "Pacific/Chatham",
+      "2026-04-04T13:15:00.000Z",
+      "2026-04-04T14:15:00.000Z",
+    ],
   ])(
     "finds both instants of a time repeated when %s's clocks go back",
     (_label, local, zone, earlier, later) => {
@@ -91,12 +142,31 @@ describe("resolveZonedTime", () => {
   it.each([
     ["New York", "2026-03-08T02:30", "America/New_York"],
     ["London", "2026-03-29T01:30", "Europe/London"],
+    ["Auckland", "2026-09-27T02:30", "Pacific/Auckland"],
   ])(
     "reports a time skipped when %s's clocks go forward",
     (_label, local, zone) => {
       expect(resolveZonedTime(local, zone)).toEqual({ kind: "missing" });
     },
   );
+
+  it("finds every instant around every clock change of 2026, in every zone", () => {
+    const misses: string[] = [];
+    for (const zone of timeZones()) {
+      for (const change of clockChanges(zone)) {
+        // Every quarter hour from three hours before to three hours after.
+        for (let step = -12; step <= 12; step += 1) {
+          const instant = new Date(change + step * 15 * MINUTE_MS);
+          const utc = instant.toISOString();
+          const local = utcToZoned(utc, zone);
+          if (!outcomes(local, zone).includes(utc)) {
+            misses.push(`${zone} ${local} → ${utc}`);
+          }
+        }
+      }
+    }
+    expect(misses).toEqual([]);
+  });
 });
 
 describe("utcToZoned", () => {
