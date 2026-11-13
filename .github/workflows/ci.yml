@@ -140,6 +140,12 @@ jobs:
       JWT_SECRET: ci-only-signing-key-that-is-long-enough
       SMTP_URL: smtp://127.0.0.1:1036
       MAIL_FROM: OpsPilot <no-reply@opspilot.test>
+      S3_ENDPOINT: http://127.0.0.1:8333
+      S3_PUBLIC_ENDPOINT: http://localhost:8333
+      S3_ACCESS_KEY_ID: opspilot
+      S3_SECRET_ACCESS_KEY: opspilot-local-only
+      S3_FORCE_PATH_STYLE: "true"
+      S3_CREATE_BUCKET: "true"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -149,7 +155,7 @@ jobs:
           node-version-file: .nvmrc
           cache: npm
       - run: npm ci
-      - name: Start PostgreSQL, Valkey, Mailpit and the proxy
+      - name: Start PostgreSQL, Valkey, Mailpit, SeaweedFS and the proxy
         run: npm run services:up
       - run: npm run db:deploy
       - run: npm run build

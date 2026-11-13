@@ -1,4 +1,13 @@
 export {
+  Asset,
+  AssetStatus,
+  AssetUpload,
+  CreateHoldingSlateUploadRequest,
+  HOLDING_SLATE_MAX_BYTES,
+  HoldingSlate,
+  ImageContentType,
+} from "./assets.js";
+export {
   Accepted,
   Email,
   Me,

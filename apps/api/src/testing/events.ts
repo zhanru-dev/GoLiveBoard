@@ -95,8 +95,8 @@ export async function prepareForLaunch(
     [eventId, streamUrl, checkedAt],
   );
   await database.query(
-    `INSERT INTO assets (event_id, kind, storage_key, status)
-     VALUES ($1, 'HOLDING_SLATE', $2, 'READY')`,
+    `INSERT INTO assets (event_id, kind, storage_key, status, content_type, size_bytes)
+     VALUES ($1, 'HOLDING_SLATE', $2, 'READY', 'image/png', 1024)`,
     [eventId, `slates/${eventId}`],
   );
   const task = await addTask(api, session, eventId, {

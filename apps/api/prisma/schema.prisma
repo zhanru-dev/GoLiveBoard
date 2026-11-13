@@ -379,9 +379,10 @@ model Asset {
   kind        AssetKind
   storageKey  String      @unique @map("storage_key")
   status      AssetStatus @default(PENDING)
-  /// Known once the upload is verified.
-  contentType String?     @map("content_type")
-  sizeBytes   Int?        @map("size_bytes")
+  /// Declared when the upload starts and signed into the upload URL; checked
+  /// against the stored file's first bytes and size when it completes.
+  contentType String      @map("content_type")
+  sizeBytes   Int         @map("size_bytes")
   createdAt   DateTime    @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt   DateTime    @default(now()) @map("updated_at") @db.Timestamptz(3)
 

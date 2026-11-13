@@ -22,6 +22,8 @@ export const ErrorCode = z.enum([
   "ILLEGAL_TRANSITION",
   "EVENT_HAS_BLOCKERS",
   "STREAM_NOT_SET",
+  "UPLOAD_NOT_FOUND",
+  "ASSET_REJECTED",
   "VERSION_CONFLICT",
   "IDEMPOTENCY_KEY_REUSED",
   "PAYLOAD_TOO_LARGE",
@@ -91,6 +93,14 @@ export const ERROR_DEFINITIONS = {
   STREAM_NOT_SET: {
     status: 409,
     title: "The event has no stream URL to check",
+  },
+  UPLOAD_NOT_FOUND: {
+    status: 409,
+    title: "The file has not been uploaded yet",
+  },
+  ASSET_REJECTED: {
+    status: 422,
+    title: "The uploaded file is not an accepted image",
   },
   VERSION_CONFLICT: {
     status: 412,

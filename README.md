@@ -27,7 +27,7 @@ Requirements: Node.js 26 (see `.nvmrc`), npm 11, and Docker with Compose v2.
 ```bash
 cp .env.example .env     # local settings; adjust ports here if they clash
 npm ci
-npm run services:up      # PostgreSQL, Valkey, Mailpit and the Caddy proxy
+npm run services:up      # PostgreSQL, Valkey, Mailpit, SeaweedFS (S3) and the Caddy proxy
 npm run db:deploy        # apply database migrations
 npm run dev              # web app, API, worker and contracts in watch mode
 ```

@@ -27,6 +27,15 @@ describe("loadConfig", () => {
         smtpUrl: REQUIRED.SMTP_URL,
         from: "OpsPilot <no-reply@opspilot.test>",
       },
+      storage: {
+        endpoint: undefined,
+        publicEndpoint: undefined,
+        region: "eu-west-2",
+        bucket: "opspilot-assets",
+        credentials: undefined,
+        forcePathStyle: false,
+        createBucket: false,
+      },
     });
   });
 
@@ -38,6 +47,27 @@ describe("loadConfig", () => {
       );
     },
   );
+
+  it("signs browser URLs for the public storage endpoint when one is set", () => {
+    const config = loadConfig({
+      ...REQUIRED,
+      S3_ENDPOINT: "http://s3:8333",
+      S3_PUBLIC_ENDPOINT: "http://localhost:8333",
+      S3_FORCE_PATH_STYLE: "true",
+    });
+
+    expect(config.storage).toMatchObject({
+      endpoint: "http://s3:8333",
+      publicEndpoint: "http://localhost:8333",
+      forcePathStyle: true,
+    });
+  });
+
+  it("requires both storage credentials or neither", () => {
+    expect(() => loadConfig({ ...REQUIRED, S3_ACCESS_KEY_ID: "key" })).toThrow(
+      /S3_SECRET_ACCESS_KEY/,
+    );
+  });
 
   it("requires the connection strings", () => {
     const load = () => loadConfig({});

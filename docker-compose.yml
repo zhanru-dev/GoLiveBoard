@@ -81,5 +81,36 @@ services:
       timeout: 3s
       retries: 10
 
+  # S3-compatible object storage for uploads (holding slates). Production
+  # uses Amazon S3; the API creates the bucket and its CORS rule locally.
+  s3:
+    image: chrislusf/seaweedfs:4.53
+    command:
+      - server
+      - -s3
+      - -s3.config=/etc/seaweedfs/s3.json
+      - -dir=/data
+      - -ip.bind=0.0.0.0
+    ports:
+      - "127.0.0.1:${S3_PORT:-8333}:8333"
+    volumes:
+      # Local credentials only (infra/docker/seaweedfs-s3.json).
+      - ./infra/docker/seaweedfs-s3.json:/etc/seaweedfs/s3.json:ro
+      - s3-data:/data
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "wget",
+          "-q",
+          "-O",
+          "/dev/null",
+          "http://127.0.0.1:8333/healthz",
+        ]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
 volumes:
   postgres-data:
+  s3-data:

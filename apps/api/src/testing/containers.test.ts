@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 
 import { describe, expect, it } from "vitest";
 
-import { POSTGRES_IMAGE, VALKEY_IMAGE } from "./containers.js";
+import { POSTGRES_IMAGE, SEAWEEDFS_IMAGE, VALKEY_IMAGE } from "./containers.js";
 
 const compose = readFileSync(
   new URL("../../../../docker-compose.yml", import.meta.url),
@@ -10,7 +10,7 @@ const compose = readFileSync(
 );
 
 describe("test container images", () => {
-  it.each([POSTGRES_IMAGE, VALKEY_IMAGE])(
+  it.each([POSTGRES_IMAGE, VALKEY_IMAGE, SEAWEEDFS_IMAGE])(
     "%s is the image docker-compose.yml runs",
     (image) => {
       expect(compose).toContain(`image: ${image}`);

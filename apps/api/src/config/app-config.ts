@@ -14,6 +14,12 @@ const MAX_TCP_PORT = 65_535;
 /** HS256 keys shorter than the hash output (32 bytes) weaken the signature. */
 const MIN_SECRET_LENGTH = 32;
 
+/** "true" or "false" in the environment. */
+const Flag = z
+  .enum(["true", "false"])
+  .default("false")
+  .transform((value) => value === "true");
+
 const Secret = z
   .string()
   .min(MIN_SECRET_LENGTH, `Must be at least ${MIN_SECRET_LENGTH} characters`);
@@ -62,6 +68,22 @@ const AppConfigSchema = z
       .string()
       .regex(/^[a-z0-9-]{1,40}$/)
       .default("opspilot"),
+    /** Amazon S3 when unset; SeaweedFS locally. */
+    S3_ENDPOINT: z.url({ protocol: /^https?$/ }).optional(),
+    /**
+     * The endpoint browsers reach, which presigned URLs name. Differs from
+     * S3_ENDPOINT when the API reaches storage over an internal network.
+     */
+    S3_PUBLIC_ENDPOINT: z.url({ protocol: /^https?$/ }).optional(),
+    S3_REGION: z.string().min(1).default("eu-west-2"),
+    S3_BUCKET: z.string().min(3).max(63).default("opspilot-assets"),
+    /** Unset in production, where the instance role supplies credentials. */
+    S3_ACCESS_KEY_ID: z.string().min(1).optional(),
+    S3_SECRET_ACCESS_KEY: z.string().min(1).optional(),
+    /** SeaweedFS needs path-style URLs (`host/bucket/key`). */
+    S3_FORCE_PATH_STYLE: Flag,
+    /** Create the bucket and its CORS rule at start-up (local and tests). */
+    S3_CREATE_BUCKET: Flag,
     SMTP_URL: z.url({ protocol: /^smtps?$/ }),
     MAIL_FROM: z.string().min(1),
   })
@@ -71,6 +93,15 @@ const AppConfigSchema = z
       path: ["LOG_FORMAT"],
       message:
         "Must be json in production, where logs are collected by machines",
+    },
+  )
+  .refine(
+    (env) =>
+      (env.S3_ACCESS_KEY_ID === undefined) ===
+      (env.S3_SECRET_ACCESS_KEY === undefined),
+    {
+      path: ["S3_SECRET_ACCESS_KEY"],
+      message: "Set both S3_ACCESS_KEY_ID and S3_SECRET_ACCESS_KEY, or neither",
     },
   )
   .transform((env) => ({
@@ -91,6 +122,22 @@ const AppConfigSchema = z
       jwtPreviousSecret: env.JWT_SECRET_PREVIOUS,
     },
     mail: { smtpUrl: env.SMTP_URL, from: env.MAIL_FROM },
+    storage: {
+      endpoint: env.S3_ENDPOINT,
+      publicEndpoint: env.S3_PUBLIC_ENDPOINT ?? env.S3_ENDPOINT,
+      region: env.S3_REGION,
+      bucket: env.S3_BUCKET,
+      credentials:
+        env.S3_ACCESS_KEY_ID === undefined ||
+        env.S3_SECRET_ACCESS_KEY === undefined
+          ? undefined
+          : {
+              accessKeyId: env.S3_ACCESS_KEY_ID,
+              secretAccessKey: env.S3_SECRET_ACCESS_KEY,
+            },
+      forcePathStyle: env.S3_FORCE_PATH_STYLE,
+      createBucket: env.S3_CREATE_BUCKET,
+    },
   }));
 
 export type AppConfig = z.output<typeof AppConfigSchema>;

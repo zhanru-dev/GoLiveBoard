@@ -3,6 +3,7 @@ import { APP_FILTER, APP_PIPE } from "@nestjs/core";
 import { LoggerModule } from "nestjs-pino";
 import type { DestinationStream } from "pino";
 
+import { AssetsModule } from "./assets/assets.module.js";
 import { AuthModule } from "./auth/auth.module.js";
 import type { AppConfig } from "./config/app-config.js";
 import { ConfigModule } from "./config/config.module.js";
@@ -52,6 +53,7 @@ export class AppModule {
         EventsModule,
         LaunchControlModule,
         StreamsModule,
+        AssetsModule,
       ],
       providers: [
         { provide: APP_FILTER, useClass: ProblemDetailsFilter },
