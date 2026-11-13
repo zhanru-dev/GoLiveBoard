@@ -92,3 +92,56 @@ export async function createTestDatabase(): Promise<TestDatabase> {
       }),
   };
 }
+
+export interface WriteBlock {
+  /** Resolves once `count` sessions are waiting for a lock in this database. */
+  waitForWaiters(count: number): Promise<void>;
+  release(): Promise<void>;
+}
+
+const WAITER_POLL_MS = 20;
+const WAITER_TIMEOUT_MS = 5_000;
+
+/**
+ * Holds `LOCK TABLE … IN SHARE MODE`: reads go on, but every INSERT, UPDATE
+ * and DELETE on the table waits. A race test starts its requests, waits until
+ * all of them are stuck at their write (after reading whatever they check),
+ * then releases them together, so they truly overlap instead of hoping the
+ * scheduler interleaves them.
+ */
+export async function blockWrites(
+  databaseUrl: string,
+  table: string,
+): Promise<WriteBlock> {
+  const client = new Client({ connectionString: databaseUrl });
+  await client.connect();
+  await client.query("BEGIN");
+  await client.query(`LOCK TABLE "${table}" IN SHARE MODE`);
+  return {
+    async waitForWaiters(count) {
+      const deadline = Date.now() + WAITER_TIMEOUT_MS;
+      for (;;) {
+        // Inside a transaction PostgreSQL keeps showing the first snapshot
+        // of pg_stat_activity unless it is cleared.
+        await client.query("SELECT pg_stat_clear_snapshot()");
+        const result = await client.query<{ waiting: number }>(
+          `SELECT count(*)::int AS waiting FROM pg_stat_activity
+           WHERE datname = current_database() AND wait_event_type = 'Lock'`,
+        );
+        if ((result.rows[0]?.waiting ?? 0) >= count) {
+          return;
+        }
+        if (Date.now() > deadline) {
+          throw new Error(
+            `Only ${String(result.rows[0]?.waiting)} of ${String(count)} sessions reached the lock`,
+          );
+        }
+        await new Promise((resolve) => setTimeout(resolve, WAITER_POLL_MS));
+      }
+    },
+    async release() {
+      await client.query("COMMIT");
+      await client.end();
+    },
+  };
+}

@@ -43,6 +43,19 @@ describe("toProblemResponse", () => {
     expect(body).toMatchObject({ code: "FORBIDDEN", requiredRole: "OWNER" });
   });
 
+  it("reports a domain error's field errors like a validation failure", () => {
+    const errors = [
+      { path: "endsAt", code: "custom", message: "End must be after start." },
+    ];
+    const { status, body } = toProblemResponse(
+      new DomainError("VALIDATION_FAILED", { errors }),
+      REQUEST_ID,
+    );
+
+    expect(status).toBe(400);
+    expect(body).toMatchObject({ code: "VALIDATION_FAILED", errors });
+  });
+
   it("never lets extension members replace standard members", () => {
     const { body } = toProblemResponse(
       new DomainError("FORBIDDEN", {

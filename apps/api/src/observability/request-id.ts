@@ -23,3 +23,16 @@ export function resolveRequestId(
   }
   return generate();
 }
+
+/**
+ * The ID the request logger gave this request (`req.id`). The fallback only
+ * guards against a future change in middleware order.
+ */
+export function requestIdOf(request: {
+  readonly id?: unknown;
+  readonly headers: Readonly<Record<string, string | string[] | undefined>>;
+}): string {
+  return typeof request.id === "string"
+    ? request.id
+    : resolveRequestId(request.headers["x-request-id"]);
+}

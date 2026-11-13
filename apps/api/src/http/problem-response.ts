@@ -112,6 +112,7 @@ export function toProblemResponse(
     return problem(error.code, requestId, {
       detail: error.detail,
       extensions: error.extensions,
+      ...(error.errors !== undefined && { errors: error.errors }),
     });
   }
   if (error instanceof HttpException) {

@@ -133,11 +133,14 @@ erDiagram
     timestamptz endsAt
     text timeZone
     uuid ownerUserId FK
+    int expectedAttendance
     enum status
     text streamUrl
     int version
     bigint chatSequence
     bigint questionsSequence
+    timestamptz createdAt
+    timestamptz updatedAt
   }
   RunbookTask {
     uuid id PK
@@ -268,6 +271,7 @@ erDiagram
     uuid workspaceId FK
     uuid eventId FK
     enum actorKind "USER | ATTENDEE | SYSTEM"
+    uuid actorUserId FK
     text action
     text targetType
     uuid targetId
@@ -313,7 +317,7 @@ erDiagram
   }
 ```
 
-`IdempotencyRecord (scope, key, requestHash, responseStatus, responseBody, expiresAt)` stores responses to retried requests for 24 hours.
+`IdempotencyRecord (scope, key, requestHash, responseStatus, responseBody, expiresAt)` stores responses to retried requests for 24 hours. The primary key is `(scope, key)`; the scope names the workspace, the user and the operation (`<workspaceId>:<userId>:create-event`), so a key never replays another user's response. Requests with the same key are serialised by a transaction-scoped advisory lock on the scope and key, and the record is written in the same transaction as the create.
 
 ## 5. Invariants and where they are enforced
 
@@ -325,6 +329,8 @@ The rule of thumb: **if a rule must hold under concurrency, the database enforce
 | A workspace always has at least one Owner                    | Checked in the transaction that changes roles, with the workspace's memberships locked                                                                                             |
 | Only the newest invitation link for an address works         | Partial unique index `(workspaceId, email) WHERE acceptedAt IS NULL AND revokedAt IS NULL`; creates for one address are serialised by an advisory lock and revoke the previous one |
 | No session survives a password reset                         | Sign-in re-reads the password hash `FOR SHARE` in the transaction that creates the session; the reset updates the user row, then revokes sessions, in one transaction              |
+| An event ends after it starts                                | Check constraint `ends_at > starts_at`; the API checks the merged values first to name the field                                                                                   |
+| A retried create never creates twice                         | Primary key `(scope, key)` on `IdempotencyRecord`, written in the create's transaction under an advisory lock on the key                                                           |
 | An event cannot reach `READY` or `LIVE` with a hard blocker  | Event row locked, readiness re-evaluated inside the transaction                                                                                                                    |
 | Edits based on stale data are rejected                       | `version` compared in the `UPDATE … WHERE id = $1 AND version = $2`; zero rows updated → `412`                                                                                     |
 | At most 3 pinned questions per event                         | `pinSlot` in 1–3 (check constraint) + partial unique index `(eventId, pinSlot) WHERE pinSlot IS NOT NULL`                                                                          |
@@ -350,7 +356,7 @@ Every foreign key is indexed. Additional indexes follow the main queries:
 
 | Query                                  | Index                                                                     |
 | -------------------------------------- | ------------------------------------------------------------------------- |
-| Event list per workspace by start time | `(workspaceId, startsAt DESC, id)`                                        |
+| Event list per workspace by start time | `(workspaceId, startsAt DESC, id DESC)`                                   |
 | Event search by title                  | trigram index on `title` (`pg_trgm`)                                      |
 | Real-time catch-up                     | primary key `(eventId, channel, sequence)`                                |
 | Published questions by votes           | `(eventId, status, voteCount DESC)`                                       |

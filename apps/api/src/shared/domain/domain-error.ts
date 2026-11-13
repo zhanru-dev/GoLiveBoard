@@ -1,4 +1,4 @@
-import type { ErrorCode } from "@opspilot/contracts";
+import type { ErrorCode, FieldError } from "@opspilot/contracts";
 
 export interface DomainErrorOptions {
   /** Explanation for this occurrence, shown to the user. Never include secrets. */
@@ -8,6 +8,11 @@ export interface DomainErrorOptions {
    * Standard members (`type`, `status`, `detail`, `errors`, …) are ignored here.
    */
   readonly extensions?: Readonly<Record<string, unknown>>;
+  /**
+   * Field-level problems found by a rule that needs stored data, such as an
+   * end time that is no longer after the stored start time.
+   */
+  readonly errors?: readonly FieldError[];
   readonly cause?: unknown;
 }
 
@@ -20,6 +25,7 @@ export class DomainError extends Error {
   override readonly name = "DomainError";
   readonly detail: string | undefined;
   readonly extensions: Readonly<Record<string, unknown>>;
+  readonly errors: readonly FieldError[] | undefined;
 
   constructor(
     readonly code: ErrorCode,
@@ -28,5 +34,6 @@ export class DomainError extends Error {
     super(options.detail ?? code, { cause: options.cause });
     this.detail = options.detail;
     this.extensions = options.extensions ?? {};
+    this.errors = options.errors;
   }
 }

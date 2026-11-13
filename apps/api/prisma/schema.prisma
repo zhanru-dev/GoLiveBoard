@@ -39,6 +39,8 @@ model User {
   sessions            Session[]
   passwordResetTokens PasswordResetToken[]
   invitationsSent     TeamInvitation[]
+  ownedEvents         Event[]
+  auditEntries        AuditEntry[]
 
   @@map("users")
 }
@@ -54,6 +56,8 @@ model Workspace {
   memberships    Membership[]
   invitations    TeamInvitation[]
   activeSessions Session[]
+  events         Event[]
+  auditEntries   AuditEntry[]
 
   @@map("workspaces")
 }
@@ -134,4 +138,106 @@ model PasswordResetToken {
 
   @@index([userId])
   @@map("password_reset_tokens")
+}
+
+/// docs/03-domain-and-data-model.md, section 2. The allowed moves between
+/// these states live in src/events/domain/lifecycle.ts.
+enum EventStatus {
+  DRAFT
+  CONFIGURING
+  READY
+  LIVE
+  COMPLETED
+  ARCHIVED
+  CANCELLED
+
+  @@map("event_status")
+}
+
+/// An online event a workspace prepares and runs (FR-EV-1).
+/// The migration adds CHECK (ends_at > starts_at), which Prisma cannot express.
+model Event {
+  id                 String      @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  workspaceId        String      @map("workspace_id") @db.Uuid
+  /// Used in public URLs instead of the ID: readable title plus a random suffix.
+  slug               String      @unique
+  title              String
+  description        String      @default("")
+  startsAt           DateTime    @map("starts_at") @db.Timestamptz(3)
+  endsAt             DateTime    @map("ends_at") @db.Timestamptz(3)
+  /// IANA time zone the event is shown in, e.g. "Europe/London".
+  timeZone           String      @map("time_zone")
+  ownerUserId        String?     @map("owner_user_id") @db.Uuid
+  expectedAttendance Int?        @map("expected_attendance")
+  status             EventStatus @default(DRAFT)
+  /// Incremented by every change; clients send it back in If-Match.
+  version            Int         @default(1)
+  createdAt          DateTime    @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt          DateTime    @default(now()) @map("updated_at") @db.Timestamptz(3)
+
+  workspace    Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  owner        User?        @relation(fields: [ownerUserId], references: [id], onDelete: SetNull)
+  auditEntries AuditEntry[]
+
+  // The event list: one workspace, newest start first, ID as tie-breaker.
+  @@index([workspaceId, startsAt(sort: Desc), id(sort: Desc)])
+  // Title search with ILIKE '%…%', which a B-tree index cannot serve.
+  @@index([title(ops: raw("gin_trgm_ops"))], map: "events_title_trgm_idx", type: Gin)
+  @@index([ownerUserId])
+  @@map("events")
+}
+
+enum ActorKind {
+  USER
+  ATTENDEE
+  SYSTEM
+
+  @@map("actor_kind")
+}
+
+/// Who did what, when, with before and after values (FR-RC-1). Written in the
+/// same transaction as the change it records, and never holds secrets or
+/// attendee email addresses.
+model AuditEntry {
+  id          String    @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  workspaceId String    @map("workspace_id") @db.Uuid
+  eventId     String?   @map("event_id") @db.Uuid
+  actorKind   ActorKind @map("actor_kind")
+  actorUserId String?   @map("actor_user_id") @db.Uuid
+  /// What happened, as `<target>.<verb>`: "event.created", "event.transitioned".
+  action      String
+  targetType  String    @map("target_type")
+  targetId    String    @map("target_id") @db.Uuid
+  before      Json?
+  after       Json?
+  requestId   String?   @map("request_id")
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  event     Event?    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  actorUser User?     @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId, createdAt(sort: Desc)])
+  @@index([workspaceId, eventId, createdAt(sort: Desc)])
+  @@index([eventId])
+  @@index([actorUserId])
+  @@map("audit_entries")
+}
+
+/// The stored response to a create that carried an Idempotency-Key, so a
+/// retry returns the original response instead of creating a duplicate.
+model IdempotencyRecord {
+  /// Who and what the key belongs to, e.g. "<workspace>:<user>:create-event".
+  scope          String
+  key            String   @db.Uuid
+  /// SHA-256 of the request body, to refuse the same key with another body.
+  requestHash    String   @map("request_hash")
+  responseStatus Int      @map("response_status")
+  responseBody   Json     @map("response_body")
+  expiresAt      DateTime @map("expires_at") @db.Timestamptz(3)
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@id([scope, key])
+  @@index([expiresAt])
+  @@map("idempotency_records")
 }

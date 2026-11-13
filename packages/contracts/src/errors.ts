@@ -18,6 +18,7 @@ export const ErrorCode = z.enum([
   "MEMBERSHIP_EXISTS",
   "WORKSPACE_CHANGED",
   "NOT_FOUND",
+  "EVENT_ARCHIVED",
   "VERSION_CONFLICT",
   "IDEMPOTENCY_KEY_REUSED",
   "PAYLOAD_TOO_LARGE",
@@ -72,6 +73,10 @@ export const ERROR_DEFINITIONS = {
     title: "The session has switched to another workspace",
   },
   NOT_FOUND: { status: 404, title: "The resource was not found" },
+  EVENT_ARCHIVED: {
+    status: 409,
+    title: "The event is archived and can no longer be changed",
+  },
   VERSION_CONFLICT: {
     status: 412,
     title: "The resource has changed since you loaded it",

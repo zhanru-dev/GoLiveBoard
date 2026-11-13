@@ -7,10 +7,7 @@ import { PROBLEM_JSON_CONTENT_TYPE } from "@opspilot/contracts";
 import type { Request, Response } from "express";
 import { InjectPinoLogger, PinoLogger } from "nestjs-pino";
 
-import {
-  REQUEST_ID_HEADER,
-  resolveRequestId,
-} from "../observability/request-id.js";
+import { REQUEST_ID_HEADER, requestIdOf } from "../observability/request-id.js";
 import { toProblemResponse } from "./problem-response.js";
 
 /**
@@ -30,15 +27,10 @@ export class ProblemDetailsFilter implements ExceptionFilter {
       throw exception;
     }
     const http = host.switchToHttp();
-    const request = http.getRequest<Request & { id?: unknown }>();
+    const request = http.getRequest<Request>();
     const response = http.getResponse<Response>();
 
-    // Set by the request logger, which runs first; the fallback only guards
-    // against a future change in middleware order.
-    const requestId =
-      typeof request.id === "string"
-        ? request.id
-        : resolveRequestId(request.headers["x-request-id"]);
+    const requestId = requestIdOf(request);
     const problem = toProblemResponse(exception, requestId);
 
     if (problem.unexpected) {

@@ -365,6 +365,7 @@ describe("workspace and team", () => {
         sessionId: session.access,
         workspaceId,
         role: "OWNER",
+        requestId: "test-request",
       });
       const service = app.get(MembersService);
 

@@ -13,6 +13,8 @@ export interface Actor {
   /** The session's active workspace; every query is scoped by it. */
   readonly workspaceId: string;
   readonly role: Role;
+  /** The request being served, recorded with audit entries to correlate them with logs. */
+  readonly requestId: string;
 }
 
 export type RequestWithActor = Request & { actor?: Actor };

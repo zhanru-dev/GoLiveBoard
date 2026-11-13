@@ -21,6 +21,7 @@ import {
   type RequestWithActor,
 } from "./actor.js";
 import { readAccessCookie } from "./cookies.js";
+import { requestIdOf } from "../observability/request-id.js";
 
 /**
  * The workspace the client believes is active. The active workspace lives in
@@ -51,7 +52,10 @@ export class SessionGuard implements CanActivate {
       return true;
     }
     const request = context.switchToHttp().getRequest<RequestWithActor>();
-    const actor = await this.loadActor(readAccessCookie(request));
+    const actor = await this.loadActor(
+      readAccessCookie(request),
+      requestIdOf(request),
+    );
     if (actor === undefined) {
       throw new DomainError("UNAUTHENTICATED");
     }
@@ -75,6 +79,7 @@ export class SessionGuard implements CanActivate {
 
   private async loadActor(
     accessToken: string | undefined,
+    requestId: string,
   ): Promise<Actor | undefined> {
     if (accessToken === undefined) {
       return undefined;
@@ -116,6 +121,7 @@ export class SessionGuard implements CanActivate {
       sessionId: session.id,
       workspaceId: session.activeWorkspaceId,
       role: membership.role,
+      requestId,
     };
   }
 }

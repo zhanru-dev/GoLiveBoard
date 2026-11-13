@@ -8,20 +8,20 @@
 
 ## 2. HTTP conventions
 
-| Topic          | Convention                                                                                                                                                                                             |
-| -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Base path      | `/api/v1`. Additive changes stay in `v1`; breaking changes need `v2`.                                                                                                                                  |
-| Format         | JSON in and out (`application/json`), field names in `camelCase`, enum values in `UPPER_SNAKE_CASE`.                                                                                                   |
-| Time           | ISO 8601 in UTC with `Z`, e.g. `2026-11-20T18:30:00Z`.                                                                                                                                                 |
-| IDs            | UUID strings. Public pages use the event `slug` instead.                                                                                                                                               |
-| Authentication | Cookies only (`HttpOnly`). No tokens in URLs or local storage.                                                                                                                                         |
-| CSRF           | State-changing requests must send an `Origin` header equal to the application origin.                                                                                                                  |
-| Workspace      | Workspace routes act on the session's active workspace. Clients send `X-Workspace-Id` with the workspace they are showing; if the session has switched since, the API answers `409 WORKSPACE_CHANGED`. |
-| Pagination     | Cursor-based: `?limit=25&cursor=…` → `{ "items": [...], "nextCursor": "…"                                                                                                                              | null }`. `limit` defaults to 25, maximum 100. Cursors are opaque. |
-| Concurrency    | Reads of editable resources return `ETag: "<version>"`. Updates require `If-Match`; a missing header returns `428`, a stale one `412`.                                                                 |
-| Idempotency    | Creates that clients may retry accept an `Idempotency-Key` header (UUID). The same key with the same body returns the original response; with a different body, `422`. Keys expire after 24 hours.     |
-| Rate limits    | `429` with `Retry-After`. Limits per route are listed in the endpoint catalogue.                                                                                                                       |
-| Caching        | Authenticated responses send `Cache-Control: no-store`.                                                                                                                                                |
+| Topic          | Convention                                                                                                                                                                                                                              |
+| -------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Base path      | `/api/v1`. Additive changes stay in `v1`; breaking changes need `v2`.                                                                                                                                                                   |
+| Format         | JSON in and out (`application/json`), field names in `camelCase`, enum values in `UPPER_SNAKE_CASE`.                                                                                                                                    |
+| Time           | ISO 8601 in UTC with `Z`, e.g. `2026-11-20T18:30:00Z`.                                                                                                                                                                                  |
+| IDs            | UUID strings. Public pages use the event `slug` instead.                                                                                                                                                                                |
+| Authentication | Cookies only (`HttpOnly`). No tokens in URLs or local storage.                                                                                                                                                                          |
+| CSRF           | State-changing requests must send an `Origin` header equal to the application origin.                                                                                                                                                   |
+| Workspace      | Workspace routes act on the session's active workspace. Clients send `X-Workspace-Id` with the workspace they are showing; if the session has switched since, the API answers `409 WORKSPACE_CHANGED`.                                  |
+| Pagination     | Cursor-based: `?limit=25&cursor=…` → `{ "items": [...], "nextCursor": "…"                                                                                                                                                               | null }`. `limit` defaults to 25, maximum 100. Cursors are opaque. |
+| Concurrency    | Reads of editable resources return `ETag: "<version>"`. Updates require `If-Match`; a missing header (or `*`, which would match any version) returns `428`, a stale one `412`. A weak tag or a list never matches, so it is also `412`. |
+| Idempotency    | Creates that clients may retry accept an `Idempotency-Key` header (UUID). The same key with the same body returns the original response; with a different body, `422`. Keys expire after 24 hours and belong to one user.               |
+| Rate limits    | `429` with `Retry-After`. Limits per route are listed in the endpoint catalogue.                                                                                                                                                        |
+| Caching        | Authenticated responses send `Cache-Control: no-store`.                                                                                                                                                                                 |
 
 ### 2.1 Status codes
 
@@ -104,23 +104,23 @@ A membership, invitation or workspace outside the session's active workspace is 
 
 ### 3.3 Events and Launch Control
 
-| Method and path                            | Role      | Notes                                                                          |
-| ------------------------------------------ | --------- | ------------------------------------------------------------------------------ |
-| `GET /events`                              | O M A     | `q`, `status`, `from`, `to`, cursor                                            |
-| `POST /events`                             | M         | `Idempotency-Key`                                                              |
-| `GET /events/:id`                          | O M A     | `ETag`                                                                         |
-| `PATCH /events/:id`                        | M         | `If-Match`                                                                     |
-| `POST /events/:id/transitions`             | M         | Body `{ "to": "READY" }`; `409 EVENT_HAS_BLOCKERS` or `409 ILLEGAL_TRANSITION` |
-| `GET /events/:id/readiness`                | O M A     | Score, criteria with evidence, blockers, next actions, rule version            |
-| `GET /events/:id/runbook-tasks` · `POST …` | O M A · M |                                                                                |
-| `PATCH /runbook-tasks/:id` · `DELETE …`    | M         | `If-Match`                                                                     |
-| `POST /runbook-tasks/:id/move`             | M         | `{ "after": "<taskId>"                                                         | null }` |
-| `GET /events/:id/access-policy` · `PUT …`  | O M A · M | `If-Match` on update                                                           |
-| `PUT /events/:id/stream`                   | M         | `{ "url": "https://…/index.m3u8" }`; SSRF-checked                              |
-| `GET /events/:id/stream/checks`            | O M A     | Most recent first                                                              |
-| `GET /events/:id/incidents`                | O M A     |                                                                                |
-| `POST /events/:id/assets/holding-slate`    | M         | Returns a presigned upload URL and the asset ID                                |
-| `POST /assets/:id/complete`                | M         | Verifies type and size in storage, marks the asset `READY`                     |
+| Method and path                            | Role      | Notes                                                                                                   |
+| ------------------------------------------ | --------- | ------------------------------------------------------------------------------------------------------- |
+| `GET /events`                              | O M A     | `q` (title, case-insensitive), `status` (repeatable), `from` ≤ start < `to`, cursor; latest start first |
+| `POST /events`                             | M         | `Idempotency-Key`                                                                                       |
+| `GET /events/:id`                          | O M A     | `ETag`                                                                                                  |
+| `PATCH /events/:id`                        | M         | `If-Match`; `409 EVENT_ARCHIVED` once archived                                                          |
+| `POST /events/:id/transitions`             | M         | Body `{ "to": "READY" }`; `409 EVENT_HAS_BLOCKERS` or `409 ILLEGAL_TRANSITION`                          |
+| `GET /events/:id/readiness`                | O M A     | Score, criteria with evidence, blockers, next actions, rule version                                     |
+| `GET /events/:id/runbook-tasks` · `POST …` | O M A · M |                                                                                                         |
+| `PATCH /runbook-tasks/:id` · `DELETE …`    | M         | `If-Match`                                                                                              |
+| `POST /runbook-tasks/:id/move`             | M         | `{ "after": "<taskId>"                                                                                  | null }` |
+| `GET /events/:id/access-policy` · `PUT …`  | O M A · M | `If-Match` on update                                                                                    |
+| `PUT /events/:id/stream`                   | M         | `{ "url": "https://…/index.m3u8" }`; SSRF-checked                                                       |
+| `GET /events/:id/stream/checks`            | O M A     | Most recent first                                                                                       |
+| `GET /events/:id/incidents`                | O M A     |                                                                                                         |
+| `POST /events/:id/assets/holding-slate`    | M         | Returns a presigned upload URL and the asset ID                                                         |
+| `POST /assets/:id/complete`                | M         | Verifies type and size in storage, marks the asset `READY`                                              |
 
 ### 3.4 Audience (staff side)
 
