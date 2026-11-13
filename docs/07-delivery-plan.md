@@ -1,6 +1,6 @@
 # 07 · Delivery plan
 
-OpsPilot is delivered in three phases and ten milestones. Each milestone ends with a working, deployed (from Milestone 4 onwards) system and has exit criteria that can be checked. Requirement IDs refer to [Product requirements](01-product-requirements.md).
+OpsPilot is delivered in three phases and ten milestones. Each milestone ends with a working system that runs in production form locally (from Milestone 4 onwards) and has exit criteria that can be checked. Cloud deployment comes last, in Milestone 10, once the product is complete; everything that can differ between development and production is exercised locally and in CI from Milestone 4, so the move to AWS changes the environment, not the code. Requirement IDs refer to [Product requirements](01-product-requirements.md).
 
 This repository is the **reference implementation**: each milestone is built and verified here first, then taught as a series of lessons in which the learner builds the same milestone in their own repository.
 
@@ -8,26 +8,26 @@ This repository is the **reference implementation**: each milestone is built and
 
 ```mermaid
 flowchart LR
-  subgraph p1["Phase 1 · Deployable core"]
-    m1["M1 Foundations"] --> m2["M2 Identity"] --> m3["M3 Launch Control"] --> m4["M4 Delivery"]
+  subgraph p1["Phase 1 · Production-ready core"]
+    m1["M1 Foundations"] --> m2["M2 Identity"] --> m3["M3 Launch Control"] --> m4["M4 Production readiness"]
   end
   subgraph p2["Phase 2 · Golden flow"]
     m5["M5 Admission"] --> m6["M6 Live interaction"] --> m7["M7 Operations and record"]
   end
   subgraph p3["Phase 3 · Standout"]
-    m8["M8 AI triage"] --> m9["M9 Hardening"] --> m10["M10 Launch"]
+    m8["M8 AI triage"] --> m9["M9 Hardening"] --> m10["M10 Deployment and launch"]
   end
   m4 --> m5
   m7 --> m8
 ```
 
-| Phase               | Outcome                                                                                        | Indicative length at three sessions a week |
-| ------------------- | ---------------------------------------------------------------------------------------------- | ------------------------------------------ |
-| 1 · Deployable core | Staff can sign up, prepare an event and get a trustworthy readiness verdict, on AWS with CI/CD | 7–9 weeks                                  |
-| 2 · Golden flow     | Attendees register, watch, chat and ask; staff run the event and get a report                  | 5–7 weeks                                  |
-| 3 · Standout        | AI triage with evaluations, observability, load and accessibility evidence, launch materials   | 3–4 weeks                                  |
+| Phase                     | Outcome                                                                                                                | Indicative length at three sessions a week |
+| ------------------------- | ---------------------------------------------------------------------------------------------------------------------- | ------------------------------------------ |
+| 1 · Production-ready core | Staff can sign up, prepare an event and get a trustworthy readiness verdict; production images tested end to end in CI | 7–9 weeks                                  |
+| 2 · Golden flow           | Attendees register, watch, chat and ask; staff run the event and get a report                                          | 5–7 weeks                                  |
+| 3 · Standout              | AI triage with evaluations, observability, load and accessibility evidence, launch materials                           | 3–4 weeks                                  |
 
-## Phase 1 · Deployable core
+## Phase 1 · Production-ready core
 
 ### M1 · Foundations
 
@@ -45,11 +45,10 @@ flowchart LR
 - **Scope**: SeaweedFS in Docker Compose; FR-EV-1 to FR-EV-4, FR-LC-1 to FR-LC-4, FR-ST-1 to FR-ST-3; lifecycle and readiness as pure domain functions; outbox and worker skeleton; stream-check job and incidents; presigned upload of the holding slate; Launch Control and event list screens.
 - **Exit criteria**: unit tests cover every readiness rule and transition; a race test proves two concurrent "go live" requests cannot bypass a blocker; the stream check opens and resolves incidents against a controllable test stream.
 
-### M4 · Delivery
+### M4 · Production readiness
 
-- **Scope**: production Dockerfiles (multi-stage, non-root, arm64); Terraform for the AWS demo environment; GitHub OIDC; deploy pipeline with migrations, smoke test and rollback; Sentry and structured logs; demo mode with seed data, one-click sign-in and nightly reset (FR-AUTH-5).
-- **Exit criteria**: a merge to `main` reaches the demo environment with no manual step; a deliberately failing smoke test rolls back automatically; a visitor can sign in to the demo with one click.
-- **Career milestone**: the full-stack CV goes out with a live link from here.
+- **Scope**: production Dockerfiles (multi-stage, non-root, arm64) and image scanning; a production-like local stack (`docker-compose.prod.yml`) with Caddy serving HTTPS (`tls internal`), so secure cookies and encrypted WebSockets behave as in production; migrations run before the new version starts; Playwright smoke tests against that stack in CI; Sentry and structured logs; demo mode with seed data, one-click sign-in and nightly reset (FR-AUTH-5).
+- **Exit criteria**: CI builds the production images and passes the smoke tests against them over HTTPS; a visitor to the local production stack can sign in to the demo with one click.
 
 ## Phase 2 · Golden flow
 
@@ -80,10 +79,12 @@ flowchart LR
 - **Scope**: end-to-end OpenTelemetry tracing including jobs; dashboards and alerts; k6 load test for NFR-4; full accessibility audit with a keyboard walkthrough; security review against the checklist and OWASP ASVS areas in scope; runbooks; database restore rehearsal.
 - **Exit criteria**: load test results and Lighthouse scores recorded in the repository; every runbook exercised once.
 
-### M10 · Launch
+### M10 · Deployment and launch
 
-- **Scope**: README with architecture diagram, live link, demo instructions and trade-offs; final ADR review; a two-minute demo video; a real small online event run on OpsPilot, with its report.
-- **Exit criteria**: a reviewer who has never seen the project can understand, run and try it from the README alone.
+- **Scope**: Terraform for the AWS demo environment; GitHub OIDC; deploy pipeline with migrations, smoke test and automatic rollback; SES production access and DNS; README with architecture diagram, live link, demo instructions and trade-offs; final ADR review; a two-minute demo video; a real small online event run on OpsPilot, with its report.
+- **Exit criteria**: a merge to `main` reaches the demo environment with no manual step; a deliberately failing smoke test rolls back automatically; a reviewer who has never seen the project can understand, run and try it from the README alone.
+- **Career milestone**: the full-stack CV goes out with a live link from here.
+- **Start early**: open the AWS account, request SES production access and register the domain about a week before this milestone; approvals take days, deployment does not.
 
 ## Risks
 

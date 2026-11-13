@@ -73,11 +73,13 @@ flowchart LR
 - `main` requires every job to pass. A final **CI result** job depends on all the others and fails if any did not succeed, so branch protection requires that one check and never needs updating when jobs are added.
 - Actions are pinned to full commit SHAs, and Dependabot proposes weekly updates for npm packages and actions.
 
-**What runs today.** [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) runs quality, unit, integration, security and build (compiling every workspace). The other jobs in the diagram join with the milestones that introduce what they check: container images and Trivy in M4, Playwright, axe and Lighthouse CI in M5, AI evaluation in M8, OpenAPI drift with the first generated document.
+**What runs today.** [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) runs quality, unit, integration, security and build (compiling every workspace). The other jobs in the diagram join with the milestones that introduce what they check: Playwright in M2 (sign-up and invitation flow), container images, Trivy and smoke tests against the production images in M4, axe and Lighthouse CI in M5, AI evaluation in M8, OpenAPI drift with the first generated document.
 
 **Dependency audit.** CI fails on any known vulnerability of moderate severity or above in **production** dependencies. Development tools (linters, test runners, build tools) never reach users and run only on our own inputs, so their advisories are reviewed when Dependabot proposes an update rather than blocking every pull request.
 
 ## 4. Continuous delivery
+
+Built in milestone 10, once the product is complete ([delivery plan](07-delivery-plan.md)); until then CI proves the production images locally.
 
 ```mermaid
 sequenceDiagram
