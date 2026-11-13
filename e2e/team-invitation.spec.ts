@@ -143,23 +143,32 @@ test("a member of two workspaces sees each one's own team after switching", asyn
   expect(violations).toEqual([]);
 });
 
-test("a crafted next parameter cannot send the user to another site", async ({
-  page,
-  baseURL,
-}) => {
-  const email = `redirect-${unique()}@example.com`;
-  await signUp(page, "Ada Lovelace", email);
-  await page.context().clearCookies();
-  // Never let the browser actually leave, whatever happens.
-  await page.route("**://redirect.invalid/**", (route) => route.abort());
+// Each of these resolves to `//redirect.invalid` somewhere between the
+// address bar and the router: a backslash, a tab, and dot segments (plain
+// and percent-encoded) that collapse into a double slash.
+for (const next of [
+  "/\\redirect.invalid",
+  "/\t/redirect.invalid",
+  "/.//redirect.invalid",
+  "/%2e//redirect.invalid",
+]) {
+  test(`a crafted next parameter cannot send the user to another site: ${JSON.stringify(next)}`, async ({
+    page,
+    baseURL,
+  }) => {
+    const email = `redirect-${unique()}@example.com`;
+    await signUp(page, "Ada Lovelace", email);
+    await page.context().clearCookies();
+    // Never let the browser actually leave, whatever happens.
+    await page.route("**://redirect.invalid/**", (route) => route.abort());
 
-  // `/\redirect.invalid` is what browsers read as `//redirect.invalid`.
-  await page.goto("/sign-in?next=%2F%5Credirect.invalid");
-  await page.getByLabel("Email address").fill(email);
-  await page.getByLabel("Password").fill(PASSWORD);
-  await page.getByRole("button", { name: "Sign in" }).click();
+    await page.goto(`/sign-in?next=${encodeURIComponent(next)}`);
+    await page.getByLabel("Email address").fill(email);
+    await page.getByLabel("Password").fill(PASSWORD);
+    await page.getByRole("button", { name: "Sign in" }).click();
 
-  await expect(page.getByRole("heading", { name: "Team" })).toBeVisible();
-  expect(new URL(page.url()).origin).toBe(new URL(baseURL ?? "").origin);
-  expect(new URL(page.url()).pathname).toBe("/settings/team");
-});
+    await expect(page.getByRole("heading", { name: "Team" })).toBeVisible();
+    expect(new URL(page.url()).origin).toBe(new URL(baseURL ?? "").origin);
+    expect(new URL(page.url()).pathname).toBe("/settings/team");
+  });
+}

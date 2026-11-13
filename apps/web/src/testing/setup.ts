@@ -19,6 +19,21 @@ afterAll(() => {
   server.close();
 });
 
+// jsdom has no matchMedia; the toaster uses it to follow the colour scheme.
+// Only the current API is provided, not the deprecated addListener pair.
+Object.defineProperty(window, "matchMedia", {
+  configurable: true,
+  value: (query: string) =>
+    ({
+      matches: false,
+      media: query,
+      onchange: null,
+      addEventListener: () => undefined,
+      removeEventListener: () => undefined,
+      dispatchEvent: () => false,
+    }) as Partial<MediaQueryList> as MediaQueryList,
+});
+
 // The App Router's hooks need a running Next.js app; tests use a fake router.
 export const router = { replace: vi.fn(), push: vi.fn(), refresh: vi.fn() };
 vi.mock("next/navigation", () => ({

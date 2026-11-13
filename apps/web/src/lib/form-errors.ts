@@ -1,6 +1,6 @@
 import type { FieldValues, Path, UseFormSetError } from "react-hook-form";
 
-import { ApiError } from "./api";
+import { ApiError, WorkspaceChangedError } from "./api";
 
 /**
  * Shows an API error on the form: field errors next to their fields, anything
@@ -11,6 +11,11 @@ export function applyApiError<T extends FieldValues>(
   setError: UseFormSetError<T>,
   fields: readonly Path<T>[],
 ): string {
+  // Not the form's fault: the global handler reloads the page for the
+  // workspace that is now active, so there is nothing to show here.
+  if (error instanceof WorkspaceChangedError) {
+    return "";
+  }
   if (!(error instanceof ApiError)) {
     return "Something went wrong. Please try again.";
   }

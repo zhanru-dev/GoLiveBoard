@@ -1,9 +1,9 @@
 import type { Me } from "@opspilot/contracts";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render } from "@testing-library/react";
 import type { ReactElement } from "react";
 
 import { MeProvider } from "@/features/shell/me-context";
+import { Providers } from "@/lib/providers";
 
 export const OWNER: Me = {
   user: {
@@ -25,14 +25,14 @@ export const OWNER: Me = {
   ],
 };
 
-/** Renders a screen with a fresh query cache and, if given, a signed-in user. */
+/**
+ * Renders a screen inside the app's real providers (a fresh query cache with
+ * the global error handling, and toasts) and, if given, a signed-in user.
+ */
 export function renderScreen(ui: ReactElement, me?: Me) {
-  const queryClient = new QueryClient({
-    defaultOptions: { queries: { retry: false } },
-  });
   return render(
-    <QueryClientProvider client={queryClient}>
+    <Providers>
       {me === undefined ? ui : <MeProvider value={me}>{ui}</MeProvider>}
-    </QueryClientProvider>,
+    </Providers>,
   );
 }

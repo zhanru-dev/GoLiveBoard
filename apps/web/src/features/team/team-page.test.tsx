@@ -2,10 +2,11 @@ import type { Invitation, Member } from "@opspilot/contracts";
 import { screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { http, HttpResponse } from "msw";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { OWNER, renderScreen } from "@/testing/render";
 import { server } from "@/testing/server";
+import { router } from "@/testing/setup";
 
 import { TeamPage } from "./team-page";
 
@@ -78,6 +79,37 @@ describe("TeamPage", () => {
     await user.click(screen.getByRole("button", { name: "Send invitation" }));
 
     expect(sent).toEqual({ email: "linus@example.com", role: "ANALYST" });
+  });
+
+  it("reloads for the new workspace when it was switched in another tab", async () => {
+    serveTeam();
+    server.use(
+      http.post("*/api/v1/workspace/invitations", () =>
+        HttpResponse.json(
+          {
+            type: "about:blank",
+            title: "The session has switched to another workspace",
+            status: 409,
+            code: "WORKSPACE_CHANGED",
+            requestId: "req-1",
+          },
+          { status: 409 },
+        ),
+      ),
+    );
+    renderScreen(<TeamPage />, OWNER);
+    const user = userEvent.setup();
+
+    await user.type(
+      await screen.findByLabelText("Email address"),
+      "linus@example.com",
+    );
+    await user.click(screen.getByRole("button", { name: "Send invitation" }));
+
+    await vi.waitFor(() => {
+      expect(router.refresh).toHaveBeenCalled();
+    });
+    expect(screen.queryByText(/Something went wrong/)).not.toBeInTheDocument();
   });
 
   it("shows an empty state when nobody is invited", async () => {

@@ -52,15 +52,22 @@ export function InviteForm() {
     defaultValues: { email: "", role: "ANALYST" },
   });
 
-  const onSubmit = handleSubmit(async (values) => {
-    setFormError("");
-    try {
-      await api("/workspace/invitations", {
+  // A mutation, so its errors also reach the query client's global handler
+  // (a workspace switched in another tab reloads the page).
+  const send = useMutation({
+    mutationFn: (values: CreateInvitationRequest) =>
+      api("/workspace/invitations", {
         method: "POST",
         body: values,
         schema: Invitation,
         workspaceId,
-      });
+      }),
+  });
+
+  const onSubmit = handleSubmit(async (values) => {
+    setFormError("");
+    try {
+      await send.mutateAsync(values);
       toast.success(`Invitation sent to ${values.email}`);
       reset();
       await queryClient.invalidateQueries({

@@ -18,6 +18,11 @@ const UNSAFE_CHARACTERS = /[\\\u0000-\u001f\u007f]/;
  * becomes `//evil`. The value is therefore resolved the way a browser would
  * and must stay on the same origin; anything containing characters that
  * browsers rewrite is refused outright.
+ *
+ * The check applies to the string that is returned, not only to the input:
+ * resolving dot segments can itself produce `//`, as in `/.//evil.example`
+ * or `/%2e//evil.example`, whose path is `//evil.example`. Returned as is,
+ * that is a link to another site.
  */
 export function safeNext(next: string | null): string {
   if (
@@ -37,5 +42,9 @@ export function safeNext(next: string | null): string {
   if (url.origin !== BASE.origin) {
     return APP_HOME;
   }
-  return `${url.pathname}${url.search}${url.hash}`;
+  const target = `${url.pathname}${url.search}${url.hash}`;
+  if (target.startsWith("//") || new URL(target, BASE).origin !== BASE.origin) {
+    return APP_HOME;
+  }
+  return target;
 }
