@@ -25,7 +25,7 @@ export default {
       comment:
         "Contracts are shared by every app and run in the browser too, so they import only each other and Zod: no Node.js built-ins, frameworks or app code.",
       severity: "error",
-      from: { path: "^packages/contracts/src/", pathNot: "\\.test\\.ts$" },
+      from: { path: "^packages/contracts/src/", pathNot: "\\.test\\.tsx?$" },
       to: { pathNot: ["^packages/contracts/src/", "node_modules/zod/"] },
     },
     {
@@ -43,7 +43,7 @@ export default {
       severity: "error",
       from: {
         path: "^(apps|packages)/[^/]+/src/",
-        pathNot: "\\.test\\.ts$|/testing/",
+        pathNot: "\\.test\\.tsx?$|/testing/",
       },
       to: { dependencyTypes: ["npm-dev"], dependencyTypesNot: ["type-only"] },
     },
@@ -66,15 +66,15 @@ export default {
       comment:
         "Test helpers and test files are never imported by code that ships.",
       severity: "error",
-      from: { pathNot: "\\.test\\.ts$|/testing/" },
-      to: { path: "\\.test\\.ts$|/testing/" },
+      from: { pathNot: "\\.test\\.tsx?$|/testing/" },
+      to: { path: "\\.test\\.tsx?$|/testing/" },
     },
     {
       name: "domain-is-pure",
       comment:
         "Domain code holds business rules only: no framework, database or I/O, so it can be unit-tested exhaustively.",
       severity: "error",
-      from: { path: "/domain/", pathNot: "\\.test\\.ts$" },
+      from: { path: "/domain/", pathNot: "\\.test\\.tsx?$" },
       to: {
         pathNot: ["/domain/", "^packages/contracts/", "node_modules/zod/"],
       },
@@ -87,7 +87,8 @@ export default {
       path: "(^|/)(dist|coverage|\\.next|generated)/|next-env\\.d\\.ts$",
     },
     tsPreCompilationDeps: true,
-    tsConfig: { fileName: "tsconfig.base.json" },
+    // The web app's tsconfig adds the `@/` path alias; the rest is shared.
+    tsConfig: { fileName: "apps/web/tsconfig.json" },
     enhancedResolveOptions: {
       exportsFields: ["exports"],
       conditionNames: ["@opspilot/source", "import", "default"],

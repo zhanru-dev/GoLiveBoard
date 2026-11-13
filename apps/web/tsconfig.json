@@ -10,7 +10,9 @@
     "allowJs": false,
     "noEmit": true,
     "incremental": true,
-    "plugins": [{ "name": "next" }]
+    "plugins": [{ "name": "next" }],
+    // `@/components/...` instead of long relative paths (shadcn/ui expects it).
+    "paths": { "@/*": ["./src/*"] }
   },
   "include": [
     "next-env.d.ts",

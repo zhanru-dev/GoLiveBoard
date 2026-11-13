@@ -6,22 +6,39 @@
   "type": "module",
   "scripts": {
     "build": "next build",
-    "dev": "next dev --hostname 127.0.0.1 --port 3301",
-    "start": "next start --hostname 127.0.0.1 --port 3301",
+    "dev": "next dev --hostname ${WEB_HOST:-127.0.0.1} --port 3301",
+    "start": "next start --hostname ${WEB_HOST:-127.0.0.1} --port 3301",
     "typecheck": "next typegen && tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
+    "@hookform/resolvers": "^7.0.6",
+    "@opspilot/contracts": "0.0.0",
+    "@tanstack/react-query": "^5.107.1",
+    "class-variance-authority": "^0.7.1",
+    "cn": "^0.5.2",
+    "lucide-react": "^1.72.0",
     "next": "^16.4.6",
+    "next-themes": "^0.4.6",
+    "radix-ui": "^1.8.1",
     "react": "^19.3.1",
-    "react-dom": "^19.3.1"
+    "react-dom": "^19.3.1",
+    "react-hook-form": "^7.92.0",
+    "server-only": "^0.0.1",
+    "sonner": "^2.0.8",
+    "tw-animate-css": "^1.4.0",
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "@tailwindcss/turbopack": "^4.3.5",
+    "@testing-library/jest-dom": "^7.0.1",
     "@testing-library/react": "^16.3.3",
+    "@testing-library/user-event": "^14.6.10",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^6.3.0",
     "jsdom": "^31.0.0",
+    "msw": "^3.0.5",
+    "shadcn": "^4.23.0",
     "tailwindcss": "^4.3.5",
     "vitest": "^5.1.0"
   }

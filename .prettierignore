@@ -4,3 +4,5 @@ package-lock.json
 **/coverage/
 **/next-env.d.ts
 **/generated/
+playwright-report/
+test-results/

@@ -22,6 +22,7 @@
     "depcruise": "depcruise --config .dependency-cruiser.mjs packages apps",
     "test": "vitest run --project \"!*-int\"",
     "test:int": "vitest run --project \"*-int\"",
+    "test:e2e": "playwright test",
     "test:watch": "vitest --project \"!*-int\"",
     "test:coverage": "vitest run --coverage",
     "check": "npm run format:check && npm run lint && npm run typecheck && npm run depcruise"
@@ -32,6 +33,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@playwright/test": "^1.65.0",
     "@types/node": "^26.0.0",
     "@vitest/coverage-v8": "^5.1.0",
     "concurrently": "^10.0.7",
