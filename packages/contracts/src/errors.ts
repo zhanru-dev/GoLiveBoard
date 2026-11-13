@@ -19,6 +19,8 @@ export const ErrorCode = z.enum([
   "WORKSPACE_CHANGED",
   "NOT_FOUND",
   "EVENT_ARCHIVED",
+  "ILLEGAL_TRANSITION",
+  "EVENT_HAS_BLOCKERS",
   "VERSION_CONFLICT",
   "IDEMPOTENCY_KEY_REUSED",
   "PAYLOAD_TOO_LARGE",
@@ -76,6 +78,14 @@ export const ERROR_DEFINITIONS = {
   EVENT_ARCHIVED: {
     status: 409,
     title: "The event is archived and can no longer be changed",
+  },
+  ILLEGAL_TRANSITION: {
+    status: 409,
+    title: "The event cannot move to that status from its current one",
+  },
+  EVENT_HAS_BLOCKERS: {
+    status: 409,
+    title: "The event has unresolved hard blockers",
   },
   VERSION_CONFLICT: {
     status: 412,

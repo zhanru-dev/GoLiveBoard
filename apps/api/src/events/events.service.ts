@@ -16,6 +16,7 @@ import type { Prisma, PrismaClient } from "../generated/prisma/client.js";
 import { decodeCursor, encodeCursor } from "../http/cursor.js";
 import { Idempotency } from "../idempotency/idempotency.js";
 import { CLOCK, type Clock } from "../shared/clock.js";
+import { assertWorkspaceMember } from "../workspaces/membership-check.js";
 import { DomainError } from "../shared/domain/domain-error.js";
 import { isReadOnly } from "./domain/lifecycle.js";
 import { eventSlug } from "./domain/slug.js";
@@ -102,7 +103,16 @@ export class EventsService {
   }
 
   async get(actor: Actor, eventId: string): Promise<EventDetail> {
-    return toEventDetail(await this.findOrThrow(this.prisma, actor, eventId));
+    return this.getWith(this.prisma, actor, eventId);
+  }
+
+  /** Reads an event through the given client, e.g. inside a transaction. */
+  async getWith(
+    client: Prisma.TransactionClient,
+    actor: Actor,
+    eventId: string,
+  ): Promise<EventDetail> {
+    return toEventDetail(await this.findOrThrow(client, actor, eventId));
   }
 
   /**
@@ -115,7 +125,12 @@ export class EventsService {
     idempotencyKey: string | undefined,
   ): Promise<CreatedEvent> {
     if (input.ownerUserId !== null) {
-      await this.assertMember(this.prisma, actor, input.ownerUserId);
+      await assertWorkspaceMember(
+        this.prisma,
+        actor.workspaceId,
+        input.ownerUserId,
+        "ownerUserId",
+      );
     }
     return this.prisma.$transaction(async (tx) => {
       const work = async () => ({
@@ -161,7 +176,12 @@ export class EventsService {
       }
       assertEndsAfterStarts({ ...editableFields(current), ...changes });
       if (changes.ownerUserId !== undefined && changes.ownerUserId !== null) {
-        await this.assertMember(tx, actor, changes.ownerUserId);
+        await assertWorkspaceMember(
+          tx,
+          actor.workspaceId,
+          changes.ownerUserId,
+          "ownerUserId",
+        );
       }
 
       const { count } = await tx.event.updateMany({
@@ -239,31 +259,6 @@ export class EventsService {
       throw new DomainError("NOT_FOUND");
     }
     return row;
-  }
-
-  /** An event's owner must belong to the event's workspace. */
-  private async assertMember(
-    client: Prisma.TransactionClient,
-    actor: Actor,
-    userId: string,
-  ): Promise<void> {
-    const membership = await client.membership.findUnique({
-      where: {
-        workspaceId_userId: { workspaceId: actor.workspaceId, userId },
-      },
-      select: { id: true },
-    });
-    if (membership === null) {
-      throw new DomainError("VALIDATION_FAILED", {
-        errors: [
-          {
-            path: "ownerUserId",
-            code: "not_a_member",
-            message: "Choose a member of this workspace.",
-          },
-        ],
-      });
-    }
   }
 }
 

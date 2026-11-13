@@ -32,7 +32,26 @@ export {
   TimeZone,
   UpdateEventRequest,
 } from "./events.js";
+export {
+  AccessMode,
+  AccessPolicy,
+  Blocker,
+  CreateRunbookTaskRequest,
+  CriterionResult,
+  EmailDomain,
+  MoveRunbookTaskRequest,
+  NextAction,
+  PutAccessPolicyRequest,
+  Readiness,
+  ReadinessCriterion,
+  ReadinessSection,
+  RunbookTask,
+  TaskStatus,
+  TransitionRequest,
+  UpdateRunbookTaskRequest,
+} from "./launch-control.js";
 export { HealthCheckResult, HealthReport, LivenessReport } from "./health.js";
+export { EventTransitionedPayload, OutboxMessageType } from "./messages.js";
 export {
   PAGE_LIMIT_DEFAULT,
   PAGE_LIMIT_MAX,

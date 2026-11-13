@@ -104,23 +104,23 @@ A membership, invitation or workspace outside the session's active workspace is 
 
 ### 3.3 Events and Launch Control
 
-| Method and path                            | Role      | Notes                                                                                                   |
-| ------------------------------------------ | --------- | ------------------------------------------------------------------------------------------------------- |
-| `GET /events`                              | O M A     | `q` (title, case-insensitive), `status` (repeatable), `from` ≤ start < `to`, cursor; latest start first |
-| `POST /events`                             | M         | `Idempotency-Key`                                                                                       |
-| `GET /events/:id`                          | O M A     | `ETag`                                                                                                  |
-| `PATCH /events/:id`                        | M         | `If-Match`; `409 EVENT_ARCHIVED` once archived                                                          |
-| `POST /events/:id/transitions`             | M         | Body `{ "to": "READY" }`; `409 EVENT_HAS_BLOCKERS` or `409 ILLEGAL_TRANSITION`                          |
-| `GET /events/:id/readiness`                | O M A     | Score, criteria with evidence, blockers, next actions, rule version                                     |
-| `GET /events/:id/runbook-tasks` · `POST …` | O M A · M |                                                                                                         |
-| `PATCH /runbook-tasks/:id` · `DELETE …`    | M         | `If-Match`                                                                                              |
-| `POST /runbook-tasks/:id/move`             | M         | `{ "after": "<taskId>"                                                                                  | null }` |
-| `GET /events/:id/access-policy` · `PUT …`  | O M A · M | `If-Match` on update                                                                                    |
-| `PUT /events/:id/stream`                   | M         | `{ "url": "https://…/index.m3u8" }`; SSRF-checked                                                       |
-| `GET /events/:id/stream/checks`            | O M A     | Most recent first                                                                                       |
-| `GET /events/:id/incidents`                | O M A     |                                                                                                         |
-| `POST /events/:id/assets/holding-slate`    | M         | Returns a presigned upload URL and the asset ID                                                         |
-| `POST /assets/:id/complete`                | M         | Verifies type and size in storage, marks the asset `READY`                                              |
+| Method and path                            | Role      | Notes                                                                                                                                                 |
+| ------------------------------------------ | --------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /events`                              | O M A     | `q` (title, case-insensitive), `status` (repeatable), `from` ≤ start < `to`, cursor; latest start first                                               |
+| `POST /events`                             | M         | `Idempotency-Key`                                                                                                                                     |
+| `GET /events/:id`                          | O M A     | `ETag`                                                                                                                                                |
+| `PATCH /events/:id`                        | M         | `If-Match`; `409 EVENT_ARCHIVED` once archived                                                                                                        |
+| `POST /events/:id/transitions`             | M         | Body `{ "to": "READY" }`; `200` with the event; `409 EVENT_HAS_BLOCKERS` (with `blockers`) or `409 ILLEGAL_TRANSITION` (with `from`, `to`, `allowed`) |
+| `GET /events/:id/readiness`                | O M A     | Score, criteria with evidence, blockers, next actions, rule version                                                                                   |
+| `GET /events/:id/runbook-tasks` · `POST …` | O M A · M |                                                                                                                                                       |
+| `PATCH /runbook-tasks/:id` · `DELETE …`    | M         | `If-Match`; `status: "DONE"` completes (records who and when), `"TODO"` reopens                                                                       |
+| `POST /runbook-tasks/:id/move`             | M         | `{ "after": "<taskId>" or null }`; returns the whole runbook in its new order                                                                         |
+| `GET /events/:id/access-policy` · `PUT …`  | O M A · M | `404` until set. The first `PUT` creates it and must not send `If-Match`; later ones must                                                             |
+| `PUT /events/:id/stream`                   | M         | `{ "url": "https://…/index.m3u8" }`; SSRF-checked                                                                                                     |
+| `GET /events/:id/stream/checks`            | O M A     | Most recent first                                                                                                                                     |
+| `GET /events/:id/incidents`                | O M A     |                                                                                                                                                       |
+| `POST /events/:id/assets/holding-slate`    | M         | Returns a presigned upload URL and the asset ID                                                                                                       |
+| `POST /assets/:id/complete`                | M         | Verifies type and size in storage, marks the asset `READY`                                                                                            |
 
 ### 3.4 Audience (staff side)
 

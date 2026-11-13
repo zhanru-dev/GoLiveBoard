@@ -7,6 +7,7 @@ import { AuthModule } from "./auth/auth.module.js";
 import type { AppConfig } from "./config/app-config.js";
 import { ConfigModule } from "./config/config.module.js";
 import { EventsModule } from "./events/events.module.js";
+import { LaunchControlModule } from "./launch-control/launch-control.module.js";
 import { HealthModule } from "./health/health.module.js";
 import { ProblemDetailsFilter } from "./http/problem-details.filter.js";
 import { createValidationPipe } from "./http/request-validation.js";
@@ -43,6 +44,7 @@ export class AppModule {
         AuthModule,
         WorkspacesModule,
         EventsModule,
+        LaunchControlModule,
       ],
       providers: [
         { provide: APP_FILTER, useClass: ProblemDetailsFilter },

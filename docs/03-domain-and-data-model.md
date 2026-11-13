@@ -30,12 +30,14 @@ stateDiagram-v2
 
 The transition table lives in `apps/api/src/events/domain/lifecycle.ts` as data, not as scattered `if` statements. A transition is applied inside one transaction:
 
-1. lock the event row (`SELECT … FOR UPDATE`);
+1. lock the event row (`SELECT … FOR NO KEY UPDATE`, which unlike `FOR UPDATE` lets foreign-key checks from rows that merely point at the event proceed);
 2. check the transition is allowed from the **current** status;
 3. for `READY` and `LIVE`, evaluate readiness from the current data and reject if any hard blocker remains;
 4. update the status and version, write the audit entry (including the readiness result) and the outbox message.
 
 Because step 1 serialises concurrent requests for the same event, two simultaneous "go live" requests produce one success and one `409`.
+
+Every write to something that belongs to an event (runbook tasks, access policy, stream, assets) takes the same row lock first (`lockWritableEvent` in `apps/api/src/events/event-lock.queries.ts`). That gives three guarantees with one rule: a transition's readiness check sees no half-finished change and none can commit before it; an archived event cannot receive a write that started just before it was archived; and runbook positions stay `1, 2, 3…` under concurrent adds and moves.
 
 ## 3. Readiness rules
 
@@ -49,6 +51,8 @@ Readiness is a **pure function** of the event's current data: `assessReadiness(i
 | Holding slate uploaded                                     | 10         | missing                  |
 | All runbook tasks done                                     | 10         | —                        |
 | Owner assigned and description written                     | 10         | —                        |
+
+Scoring details in rule version 1: "All runbook tasks done" gives points in proportion to completed tasks, rounded down, and 0 for an empty runbook (an event with no plan is not ready); "Owner assigned and description written" gives 5 points for each; the other criteria are all or nothing, and a runbook without critical tasks passes "Critical runbook tasks done". Next actions list those that remove a hard blocker first, then by points gained, then in table order. A transition to `READY` or `LIVE` stores the rule version and score in its audit entry.
 
 Rule changes create a new rule version; tests pin each version's behaviour.
 
@@ -148,9 +152,11 @@ erDiagram
     text title
     boolean isCritical
     enum status "TODO | DONE"
-    text position
+    int position
     uuid ownerUserId FK
     timestamptz dueAt
+    timestamptz completedAt
+    uuid completedById FK
     int version
   }
   AccessPolicy {
@@ -166,6 +172,7 @@ erDiagram
     enum kind "HOLDING_SLATE"
     text storageKey UK
     enum status "PENDING | READY | REJECTED"
+    text contentType
     int sizeBytes
   }
   StreamCheck {
@@ -175,6 +182,7 @@ erDiagram
     boolean ok
     int httpStatus
     int latencyMs
+    text failure
   }
   Incident {
     uuid id PK
@@ -333,6 +341,9 @@ The rule of thumb: **if a rule must hold under concurrency, the database enforce
 | A retried create never creates twice                         | Primary key `(scope, key)` on `IdempotencyRecord`, written in the create's transaction under an advisory lock on the key                                                           |
 | An event cannot reach `READY` or `LIVE` with a hard blocker  | Event row locked, readiness re-evaluated inside the transaction                                                                                                                    |
 | Edits based on stale data are rejected                       | `version` compared in the `UPDATE … WHERE id = $1 AND version = $2`; zero rows updated → `412`                                                                                     |
+| Runbook positions are `1, 2, 3…` per event                   | Every runbook write locks the event row; positions are renumbered in one statement after a move or delete; check constraint `position > 0`                                         |
+| An `EMAIL_DOMAIN` policy lists domains, other modes none     | Check constraint on `access_policies`, and the request schema                                                                                                                      |
+| At most one open incident of a kind per event                | Partial unique index `(eventId, kind) WHERE resolvedAt IS NULL`                                                                                                                    |
 | At most 3 pinned questions per event                         | `pinSlot` in 1–3 (check constraint) + partial unique index `(eventId, pinSlot) WHERE pinSlot IS NOT NULL`                                                                          |
 | One vote per attendee per question                           | Primary key `(questionId, attendeeId)`                                                                                                                                             |
 | A retried chat send never duplicates                         | Unique `(eventId, authorKey, clientMessageId)`                                                                                                                                     |
