@@ -27,9 +27,13 @@ export const UPLOAD_URL_TTL_SECONDS = 5 * 60;
 export const DOWNLOAD_URL_TTL_SECONDS = 5 * 60;
 
 /**
- * Generous for copying and reading back 5 MB inside storage; the S3 client's
- * own timeouts end any single call sooner.
+ * All the storage work of one `complete` (stat, copy, stat, read) must end
+ * within this, and each call also has its own, shorter limit. It is well
+ * inside the transaction's timeout, so storage gives up first and the
+ * transaction rolls back normally, instead of the database timing out and
+ * releasing the locks while a storage call is still running.
  */
+export const COMPLETE_STORAGE_BUDGET_MS = 20_000;
 const COMPLETE_TRANSACTION_TIMEOUT_MS = 30_000;
 
 /**
@@ -137,12 +141,14 @@ export class AssetsService {
    * used again afterwards. Files are deleted only after this request has
    * itself committed the rejection.
    *
-   * The transaction waits on storage while it holds the locks; the S3
-   * client's timeouts bound that wait.
+   * The transaction waits on storage while it holds the locks; one storage
+   * budget (COMPLETE_STORAGE_BUDGET_MS) bounds that wait.
    *
    * @throws DomainError `UPLOAD_NOT_FOUND` (nothing uploaded yet; the asset
    * stays pending so the client can retry), `ASSET_REJECTED` (not the
-   * declared image, or the wrong size), `EVENT_ARCHIVED`
+   * declared image, or the wrong size), `EVENT_ARCHIVED`,
+   * `SERVICE_UNAVAILABLE` (storage did not answer in time; the asset stays
+   * pending)
    */
   async complete(actor: Actor, assetId: string): Promise<Asset> {
     const { asset, completion } = await this.prisma.$transaction(
@@ -158,7 +164,10 @@ export class AssetsService {
           throw new DomainError("ASSET_REJECTED");
         }
         await lockWritableEvent(tx, actor.workspaceId, locked.eventId);
-        const reason = await this.copyAndVerify(locked);
+        const reason = await this.copyAndVerify(
+          locked,
+          AbortSignal.timeout(COMPLETE_STORAGE_BUDGET_MS),
+        );
         const now = this.clock.now();
         if (reason !== undefined) {
           await tx.asset.update({
@@ -252,13 +261,16 @@ export class AssetsService {
    *
    * @returns why the file is not acceptable, or `undefined`
    */
-  private async copyAndVerify(asset: AssetRow): Promise<string | undefined> {
+  private async copyAndVerify(
+    asset: AssetRow,
+    signal: AbortSignal,
+  ): Promise<string | undefined> {
     const uploadKey = uploadKeyFor(asset.storageKey);
-    if ((await this.storage.stat(uploadKey)) === undefined) {
+    if ((await this.storage.stat(uploadKey, signal)) === undefined) {
       throw new DomainError("UPLOAD_NOT_FOUND");
     }
-    await this.storage.copy(uploadKey, asset.storageKey);
-    const stored = await this.storage.stat(asset.storageKey);
+    await this.storage.copy(uploadKey, asset.storageKey, signal);
+    const stored = await this.storage.stat(asset.storageKey, signal);
     if (
       stored === undefined ||
       stored.sizeBytes > HOLDING_SLATE_MAX_BYTES ||
@@ -267,7 +279,7 @@ export class AssetsService {
       return "The file size does not match the upload.";
     }
     const detected = detectImageType(
-      await this.storage.readStart(asset.storageKey, SIGNATURE_BYTES),
+      await this.storage.readStart(asset.storageKey, SIGNATURE_BYTES, signal),
     );
     if (detected !== asset.contentType) {
       return "The file is not the declared JPEG, PNG or WebP image.";

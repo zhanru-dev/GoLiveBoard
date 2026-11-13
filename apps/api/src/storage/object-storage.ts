@@ -12,15 +12,29 @@ import {
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
 import type { AppConfig } from "../config/app-config.js";
+import { DomainError } from "../shared/domain/domain-error.js";
 
 export interface StoredObject {
   readonly sizeBytes: number;
   readonly contentType: string | undefined;
 }
 
-/** No storage call may hold a request (or a database transaction) for long. */
-const STORAGE_CONNECT_TIMEOUT_MS = 3_000;
-const STORAGE_REQUEST_TIMEOUT_MS = 10_000;
+/**
+ * No storage call may hold a request (or a database transaction) for long.
+ * The request timeout ends one attempt; the operation timeout ends the whole
+ * call, retries included.
+ */
+export interface StorageTimeouts {
+  readonly connectMs: number;
+  readonly requestMs: number;
+  readonly operationMs: number;
+}
+
+export const DEFAULT_STORAGE_TIMEOUTS: StorageTimeouts = {
+  connectMs: 3_000,
+  requestMs: 5_000,
+  operationMs: 6_000,
+};
 
 /** How long a browser may cache the answer to a CORS preflight. */
 const CORS_MAX_AGE_SECONDS = 600;
@@ -28,6 +42,7 @@ const CORS_MAX_AGE_SECONDS = 600;
 function createClient(
   config: AppConfig,
   endpoint: string | undefined,
+  timeouts: StorageTimeouts,
 ): S3Client {
   return new S3Client({
     region: config.storage.region,
@@ -37,8 +52,11 @@ function createClient(
     }),
     forcePathStyle: config.storage.forcePathStyle,
     requestHandler: {
-      connectionTimeout: STORAGE_CONNECT_TIMEOUT_MS,
-      requestTimeout: STORAGE_REQUEST_TIMEOUT_MS,
+      connectionTimeout: timeouts.connectMs,
+      requestTimeout: timeouts.requestMs,
+      // Without this the SDK only logs a warning when the request timeout
+      // passes, and keeps waiting (the milestone 3 re-review).
+      throwOnRequestTimeout: true,
     },
     // By default the SDK adds a checksum of the (still empty) body to
     // presigned URLs, so every real upload would be refused as corrupt, and
@@ -57,11 +75,43 @@ export class ObjectStorage {
   private readonly client: S3Client;
   private readonly signer: S3Client;
   private readonly bucket: string;
+  private readonly timeouts: StorageTimeouts;
 
-  constructor(config: AppConfig) {
-    this.client = createClient(config, config.storage.endpoint);
-    this.signer = createClient(config, config.storage.publicEndpoint);
+  constructor(
+    config: AppConfig,
+    timeouts: StorageTimeouts = DEFAULT_STORAGE_TIMEOUTS,
+  ) {
+    this.client = createClient(config, config.storage.endpoint, timeouts);
+    this.signer = createClient(config, config.storage.publicEndpoint, timeouts);
     this.bucket = config.storage.bucket;
+    this.timeouts = timeouts;
+  }
+
+  /**
+   * Runs one storage call, abandoned when the operation timeout passes or
+   * the caller's signal aborts, whichever comes first.
+   *
+   * @throws DomainError `SERVICE_UNAVAILABLE` when storage did not answer in
+   * time
+   */
+  private async bounded<Output>(
+    signal: AbortSignal | undefined,
+    call: (options: { abortSignal: AbortSignal }) => Promise<Output>,
+  ): Promise<Output> {
+    const deadline = AbortSignal.timeout(this.timeouts.operationMs);
+    const abortSignal =
+      signal === undefined ? deadline : AbortSignal.any([deadline, signal]);
+    try {
+      return await call({ abortSignal });
+    } catch (error) {
+      if (abortSignal.aborted || isTimeout(error)) {
+        throw new DomainError("SERVICE_UNAVAILABLE", {
+          detail: "File storage did not answer in time. Try again shortly.",
+          cause: error,
+        });
+      }
+      throw error;
+    }
   }
 
   /**
@@ -98,10 +148,16 @@ export class ObjectStorage {
   }
 
   /** The object's size and type, or `undefined` when it does not exist. */
-  async stat(key: string): Promise<StoredObject | undefined> {
+  async stat(
+    key: string,
+    signal?: AbortSignal,
+  ): Promise<StoredObject | undefined> {
     try {
-      const head = await this.client.send(
-        new HeadObjectCommand({ Bucket: this.bucket, Key: key }),
+      const head = await this.bounded(signal, (options) =>
+        this.client.send(
+          new HeadObjectCommand({ Bucket: this.bucket, Key: key }),
+          options,
+        ),
       );
       return {
         sizeBytes: head.ContentLength ?? 0,
@@ -115,32 +171,52 @@ export class ObjectStorage {
     }
   }
 
-  /** The first `byteCount` bytes, without downloading the rest. */
-  async readStart(key: string, byteCount: number): Promise<Uint8Array> {
-    const object = await this.client.send(
-      new GetObjectCommand({
-        Bucket: this.bucket,
-        Key: key,
-        Range: `bytes=0-${String(byteCount - 1)}`,
-      }),
-    );
-    return (await object.Body?.transformToByteArray()) ?? new Uint8Array();
+  /**
+   * The first `byteCount` bytes, without downloading the rest. Reading the
+   * body is inside the time limit too: storage can send headers and stall.
+   */
+  readStart(
+    key: string,
+    byteCount: number,
+    signal?: AbortSignal,
+  ): Promise<Uint8Array> {
+    return this.bounded(signal, async (options) => {
+      const object = await this.client.send(
+        new GetObjectCommand({
+          Bucket: this.bucket,
+          Key: key,
+          Range: `bytes=0-${String(byteCount - 1)}`,
+        }),
+        options,
+      );
+      return (await object.Body?.transformToByteArray()) ?? new Uint8Array();
+    });
   }
 
   /** Copies an object inside the bucket, on the storage side. */
-  async copy(fromKey: string, toKey: string): Promise<void> {
-    await this.client.send(
-      new CopyObjectCommand({
-        Bucket: this.bucket,
-        CopySource: `${this.bucket}/${encodeURIComponent(fromKey).replaceAll("%2F", "/")}`,
-        Key: toKey,
-      }),
+  async copy(
+    fromKey: string,
+    toKey: string,
+    signal?: AbortSignal,
+  ): Promise<void> {
+    await this.bounded(signal, (options) =>
+      this.client.send(
+        new CopyObjectCommand({
+          Bucket: this.bucket,
+          CopySource: `${this.bucket}/${encodeURIComponent(fromKey).replaceAll("%2F", "/")}`,
+          Key: toKey,
+        }),
+        options,
+      ),
     );
   }
 
-  async remove(key: string): Promise<void> {
-    await this.client.send(
-      new DeleteObjectCommand({ Bucket: this.bucket, Key: key }),
+  async remove(key: string, signal?: AbortSignal): Promise<void> {
+    await this.bounded(signal, (options) =>
+      this.client.send(
+        new DeleteObjectCommand({ Bucket: this.bucket, Key: key }),
+        options,
+      ),
     );
   }
 
@@ -188,6 +264,14 @@ export class ObjectStorage {
     this.client.destroy();
     this.signer.destroy();
   }
+}
+
+/** The SDK's own timeouts (connection or request), as opposed to an S3 error. */
+function isTimeout(error: unknown): boolean {
+  return (
+    error instanceof Error &&
+    ["TimeoutError", "AbortError", "RequestTimeout"].includes(error.name)
+  );
 }
 
 function isNotFound(error: unknown): boolean {

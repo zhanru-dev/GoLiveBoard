@@ -15,6 +15,10 @@ import { TEST_S3_BUCKET, TEST_S3_CREDENTIALS } from "../testing/containers.js";
 import { createTestDatabase, type TestDatabase } from "../testing/database.js";
 import { createEvent, memberOf } from "../testing/events.js";
 import { CapturingMailer } from "../testing/fakes.js";
+import {
+  type SilentServer,
+  startSilentServer,
+} from "../testing/silent-server.js";
 import { createTestApp } from "../testing/test-app.js";
 
 const problemOf = (body: unknown) => ProblemDetails.parse(body);
@@ -292,5 +296,67 @@ describe("holding slate upload (FR-ST-3)", () => {
       (await api.get(stranger, `/events/${event.id}/assets/holding-slate`))
         .status,
     ).toBe(404);
+  });
+});
+
+describe("completing an upload while storage hangs", () => {
+  let database: TestDatabase;
+  let silent: SilentServer;
+  let app: NestExpressApplication;
+  let api: ApiClient;
+
+  beforeAll(async () => {
+    [database, silent] = await Promise.all([
+      createTestDatabase(),
+      startSilentServer(),
+    ]);
+    app = await createTestApp({
+      env: {
+        DATABASE_URL: database.url,
+        S3_ENDPOINT: silent.url,
+        S3_BUCKET: TEST_S3_BUCKET,
+        S3_ACCESS_KEY_ID: TEST_S3_CREDENTIALS.accessKeyId,
+        S3_SECRET_ACCESS_KEY: TEST_S3_CREDENTIALS.secretAccessKey,
+        S3_FORCE_PATH_STYLE: "true",
+      },
+      storageTimeouts: { connectMs: 1_000, requestMs: 200, operationMs: 500 },
+    });
+    api = new ApiClient(app);
+  });
+
+  afterAll(async () => {
+    await app.close();
+    await silent.close();
+    await database.drop();
+  });
+
+  it("answers 503 at once, keeps the asset pending and releases the event", async () => {
+    const owner = await api.newOwner();
+    const event = await createEvent(api, owner);
+    const started = await api.send(
+      owner,
+      "post",
+      `/events/${event.id}/assets/holding-slate`,
+      { contentType: "image/png", sizeBytes: 2_048 },
+    );
+    const { assetId } = AssetUpload.parse(started.body);
+
+    const before = performance.now();
+    const done = await api.send(owner, "post", `/assets/${assetId}/complete`);
+
+    expect(done.status, done.text).toBe(503);
+    expect(problemOf(done.body).code).toBe("SERVICE_UNAVAILABLE");
+    expect(performance.now() - before).toBeLessThan(5_000);
+    expect(silent.connections()).toBeGreaterThan(0);
+    const [asset] = await database.query<{ status: string }>(
+      "SELECT status FROM assets WHERE id = $1",
+      [assetId],
+    );
+    expect(asset?.status).toBe("PENDING");
+    // The transaction rolled back, so the event can be edited straight away.
+    const edit = await api
+      .send(owner, "patch", `/events/${event.id}`, { title: "Still editable" })
+      .set("If-Match", `"${String(event.version)}"`);
+    expect(edit.status, edit.text).toBe(200);
   });
 });

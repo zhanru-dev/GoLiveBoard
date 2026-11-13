@@ -12,7 +12,12 @@ import {
   HEALTH_INDICATORS,
   type HealthIndicator,
 } from "../health/health-indicator.js";
+import { APP_CONFIG, type AppConfig } from "../config/app-config.js";
 import { Mailer } from "../mail/mailer.js";
+import {
+  ObjectStorage,
+  type StorageTimeouts,
+} from "../storage/object-storage.js";
 import { WorkerModule } from "../worker/worker.module.js";
 import { loadTestConfig } from "./config.js";
 import type { SafeHttpOptions } from "../net/safe-http.js";
@@ -34,6 +39,8 @@ export interface TestAppOptions {
   readonly passwordHasher?: PasswordHasher;
   /** DNS and address rules for outbound requests (see TestStream). */
   readonly safeHttp?: SafeHttpOptions;
+  /** Shorter storage limits, to test what happens when storage hangs. */
+  readonly storageTimeouts?: StorageTimeouts;
 }
 
 class DiscardingMailer extends Mailer {
@@ -73,6 +80,14 @@ export async function createTestApp(
     builder
       .overrideProvider(HEALTH_INDICATORS)
       .useValue(options.healthIndicators);
+  }
+  const { storageTimeouts } = options;
+  if (storageTimeouts !== undefined) {
+    builder.overrideProvider(ObjectStorage).useFactory({
+      inject: [APP_CONFIG],
+      factory: (appConfig: AppConfig) =>
+        new ObjectStorage(appConfig, storageTimeouts),
+    });
   }
   const moduleRef = await builder.compile();
   const app =

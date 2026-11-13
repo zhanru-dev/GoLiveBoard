@@ -26,6 +26,12 @@ export const SHUTDOWN_GRACE_MS = 3_000;
  * its round would never end and the worker could never shut down (the
  * milestone 3 review). A command that times out fails the relay's round,
  * which rolls back, so its messages stay in the outbox and are retried.
+ *
+ * A command timeout alone only fails the caller: the command stays queued
+ * for a reply that a frozen server never sends, so every retry adds one
+ * more (the milestone 3 re-review). The socket timeout drops a connection
+ * that has gone silent with commands outstanding, which fails them all and
+ * reconnects, so what is queued stays bounded while Valkey is frozen.
  */
 export function producerConnection(config: AppConfig): ConnectionOptions {
   return {
@@ -33,6 +39,7 @@ export function producerConnection(config: AppConfig): ConnectionOptions {
     connectionName: "opspilot-producer",
     maxRetriesPerRequest: 1,
     commandTimeout: QUEUE_COMMAND_TIMEOUT_MS,
+    socketTimeout: QUEUE_COMMAND_TIMEOUT_MS,
   };
 }
 

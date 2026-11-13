@@ -236,6 +236,12 @@ flowchart LR
 
 Every job is **idempotent**: it checks whether its effect already happened (e.g. a reminder's `sentAt`) before acting. Failed jobs retry with exponential backoff; jobs that exhaust their retries are kept and visible to operators.
 
+No wait on a dependency is unbounded, because a frozen dependency (one that accepts connections but never answers) would otherwise hold a request, a database lock or the process forever:
+
+- **Valkey, adding jobs**: each command times out after 2 s, and a connection that stays silent for 2 s with commands outstanding is dropped, which fails them and reconnects, so unanswered commands cannot pile up. A failed publish rolls the relay's round back, leaving the messages in the outbox.
+- **Valkey, shutdown**: each queue and worker gets 3 s to close cleanly and is then disconnected by force.
+- **Object storage**: each attempt times out after 5 s and each call, retries included, after 6 s. Completing an upload has 20 s for all its storage calls, inside its 30 s transaction, so storage gives up before the database does and the locks are released by a normal rollback. A storage timeout answers `503 SERVICE_UNAVAILABLE`.
+
 ### 7.6 Real-time
 
 - **Chat and Q&A** use Socket.IO on `/realtime`. The browser's cookies authenticate the connection. Each event has rooms per channel. Every change gets a per-event sequence number and a journal row in the same transaction; after a reconnect the client sends its last sequence and receives what it missed before live updates resume.
