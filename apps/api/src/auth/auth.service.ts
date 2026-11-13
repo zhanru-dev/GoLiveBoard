@@ -6,6 +6,7 @@ import { APP_CONFIG, type AppConfig } from "../config/app-config.js";
 import { PRISMA } from "../database/prisma.js";
 import { Prisma, type PrismaClient } from "../generated/prisma/client.js";
 import { Mailer, type MailMessage } from "../mail/mailer.js";
+import { RATE_LIMITS, RateLimiter } from "../rate-limit/rate-limiter.js";
 import { CLOCK, type Clock } from "../shared/clock.js";
 import { DomainError } from "../shared/domain/domain-error.js";
 import { type AccessTokenKeys, signAccessToken } from "./access-token.js";
@@ -38,6 +39,7 @@ export class AuthService {
     @Inject(CLOCK) private readonly clock: Clock,
     @Inject(APP_CONFIG) private readonly config: AppConfig,
     private readonly mailer: Mailer,
+    private readonly rateLimiter: RateLimiter,
     @InjectPinoLogger(AuthService.name) private readonly logger: PinoLogger,
   ) {
     this.tokenKeys = {
@@ -51,7 +53,8 @@ export class AuthService {
    * identically, including timing, when the email is already registered: that
    * case only sends the owner of the address an email.
    */
-  async signUp(input: SignUpRequest): Promise<void> {
+  async signUp(input: SignUpRequest, ip: string): Promise<void> {
+    await this.rateLimiter.consumeOrThrow(RATE_LIMITS.signUpPerIp, ip);
     // Hash first and always, so both outcomes take the same time.
     const passwordHash = await hashPassword(input.password);
     const origin = this.config.app.origin;
@@ -83,7 +86,17 @@ export class AuthService {
    * Starts a session in the user's first workspace. A wrong password, an
    * unknown email and a disabled account all fail the same way (FR-AUTH-1).
    */
-  async signIn(input: SignInRequest): Promise<SessionTokens> {
+  async signIn(input: SignInRequest, ip: string): Promise<SessionTokens> {
+    // Brute-force protection: failures are counted per account and per
+    // address, and either limit blocks further attempts for 15 minutes.
+    await this.rateLimiter.assertWithinLimit(
+      RATE_LIMITS.signInFailuresPerAccount,
+      input.email,
+    );
+    await this.rateLimiter.assertWithinLimit(
+      RATE_LIMITS.signInFailuresPerIp,
+      ip,
+    );
     const user = await this.prisma.user.findUnique({
       where: { email: input.email },
       include: { memberships: { orderBy: { createdAt: "asc" }, take: 1 } },
@@ -93,8 +106,17 @@ export class AuthService {
         ? await verifyAgainstDummy(input.password)
         : await verifyPassword(user.passwordHash, input.password);
     if (user === null || !passwordMatches || user.disabledAt !== null) {
+      await this.rateLimiter.consume(
+        RATE_LIMITS.signInFailuresPerAccount,
+        input.email,
+      );
+      await this.rateLimiter.consume(RATE_LIMITS.signInFailuresPerIp, ip);
       throw new DomainError("CREDENTIALS_INVALID");
     }
+    await this.rateLimiter.reset(
+      RATE_LIMITS.signInFailuresPerAccount,
+      input.email,
+    );
     const [membership] = user.memberships;
     if (membership === undefined) {
       throw new DomainError("FORBIDDEN", {

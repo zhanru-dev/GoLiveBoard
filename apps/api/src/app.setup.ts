@@ -6,6 +6,7 @@ import helmet from "helmet";
 import { Logger } from "nestjs-pino";
 import type { HttpLogger } from "pino-http";
 
+import { APP_CONFIG, type AppConfig } from "./config/app-config.js";
 import { API_PREFIX } from "./http/api-prefix.js";
 import { HTTP_LOGGER } from "./observability/logger.js";
 
@@ -41,6 +42,7 @@ export function configureApp(app: NestExpressApplication): void {
   // First, so every request gets an ID and a log line, including one that
   // fails body parsing or routing (for example a malformed URL).
   app.use(app.get<HttpLogger>(HTTP_LOGGER));
+  app.set("trust proxy", app.get<AppConfig>(APP_CONFIG).api.trustProxyHops);
   app.useLogger(app.get(Logger));
   app.setGlobalPrefix(API_PREFIX);
   // Security headers such as `X-Content-Type-Options: nosniff`; also removes

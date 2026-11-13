@@ -79,23 +79,27 @@ Error codes are defined once in `packages/contracts/src/errors.ts`; clients swit
 | `POST /auth/sign-in`                | Pub                  | `204`; sets the session cookies. Wrong password, unknown email and disabled account fail identically (`CREDENTIALS_INVALID`). 10 failures / 15 min per account and per IP.    |
 | `POST /auth/refresh`                | Pub (refresh cookie) | `204`; rotates the refresh token. A token reused more than 10 s after rotation revokes the session.                                                                           |
 | `POST /auth/sign-out`               | Pub (refresh cookie) | `204`; revokes the session named by the refresh cookie (works with an expired access token) and clears the cookies                                                            |
-| `POST /auth/password-reset/request` | Pub                  | Always `202`                                                                                                                                                                  |
-| `POST /auth/password-reset/confirm` | Pub                  | Token + new password; revokes other sessions                                                                                                                                  |
+| `POST /auth/password-reset/request` | Pub                  | Always `202` with the same body; at most 3 emails per account and 10 requests per address an hour                                                                             |
+| `POST /auth/password-reset/confirm` | Pub                  | Token + new password; the link works once within 30 minutes; signs the user out everywhere                                                                                    |
 | `POST /auth/demo`                   | Pub                  | Demo mode only                                                                                                                                                                |
 | `GET /me`                           | O M A                | User, memberships, active workspace and role                                                                                                                                  |
-| `PUT /me/active-workspace`          | O M A                | Switches the session's workspace                                                                                                                                              |
+| `PUT /me/active-workspace`          | O M A                | Switches the session's workspace; one the user does not belong to is `404`                                                                                                    |
 
 ### 3.2 Workspace and team
 
-| Method and path                                              | Role            | Notes                                           |
-| ------------------------------------------------------------ | --------------- | ----------------------------------------------- |
-| `GET /workspace` · `PATCH /workspace`                        | O (read: O M A) | Name, retention period                          |
-| `GET /workspace/members`                                     | O M A           |                                                 |
-| `PATCH /workspace/members/:membershipId`                     | O               | Role change; last Owner protected               |
-| `DELETE /workspace/members/:membershipId`                    | O               | Revokes the member's sessions                   |
-| `GET /workspace/invitations` · `POST /workspace/invitations` | O               | Invite by email and role                        |
-| `DELETE /workspace/invitations/:id`                          | O               | Revoke                                          |
-| `POST /team-invitations/accept`                              | Pub             | Token from the email; creates or links the user |
+A membership, invitation or workspace outside the session's active workspace is always `404`, never `403`, so other workspaces' data cannot even be confirmed to exist. Links in emails carry their token in the URL fragment (`#token=…`), which browsers never send to a server, and the web app posts it in a request body.
+
+| Method and path                                              | Role            | Notes                                                                                                          |
+| ------------------------------------------------------------ | --------------- | -------------------------------------------------------------------------------------------------------------- |
+| `GET /workspace` · `PATCH /workspace`                        | O (read: O M A) | Name, retention period                                                                                         |
+| `GET /workspace/members`                                     | O M A           |                                                                                                                |
+| `PATCH /workspace/members/:membershipId`                     | O               | Role change; last Owner protected                                                                              |
+| `DELETE /workspace/members/:membershipId`                    | O               | Revokes the member's sessions in this workspace; last Owner protected                                          |
+| `POST /workspace/members/:membershipId/sign-out`             | O               | Signs the member out everywhere (FR-AUTH-3)                                                                    |
+| `GET /workspace/invitations` · `POST /workspace/invitations` | O               | Invite by email and role                                                                                       |
+| `DELETE /workspace/invitations/:id`                          | O               | Revoke                                                                                                         |
+| `POST /team-invitations/preview`                             | Pub             | Token in the body; workspace, email, role and whether an account exists                                        |
+| `POST /team-invitations/accept`                              | Pub             | Token in the body; creates the user (name and password required) or links an existing one, then the membership |
 
 ### 3.3 Events and Launch Control
 

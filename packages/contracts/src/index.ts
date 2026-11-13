@@ -22,3 +22,19 @@ export {
   PROBLEM_JSON_CONTENT_TYPE,
   ProblemDetails,
 } from "./problem-details.js";
+export {
+  AcceptInvitationRequest,
+  CreateInvitationRequest,
+  Invitation,
+  InvitationPreview,
+  InvitationTokenRequest,
+  Member,
+  PasswordResetConfirmRequest,
+  PasswordResetRequest,
+  RETENTION_DAYS_MAX,
+  RETENTION_DAYS_MIN,
+  SwitchWorkspaceRequest,
+  UpdateMemberRequest,
+  UpdateWorkspaceRequest,
+  Workspace,
+} from "./workspace.js";

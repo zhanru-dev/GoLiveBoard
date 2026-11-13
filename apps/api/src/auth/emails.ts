@@ -37,3 +37,48 @@ export function accountExistsEmail(to: string, appOrigin: string): MailMessage {
     ].join("\n"),
   };
 }
+
+/**
+ * Links carry their token in the URL fragment (after `#`), which browsers
+ * never send to a server, so it cannot end up in proxy or server logs.
+ */
+function linkWithToken(appOrigin: string, path: string, token: string): string {
+  return `${appOrigin}${path}#token=${token}`;
+}
+
+export function passwordResetEmail(
+  to: string,
+  token: string,
+  appOrigin: string,
+): MailMessage {
+  return {
+    to,
+    subject: "Reset your OpsPilot password",
+    text: [
+      "Use this link to choose a new password. It works once, within 30 minutes:",
+      linkWithToken(appOrigin, "/reset-password", token),
+      "",
+      "Resetting your password signs you out everywhere else.",
+      "If you did not ask for this, you can ignore this email; your password stays the same.",
+    ].join("\n"),
+  };
+}
+
+export function invitationEmail(input: {
+  readonly to: string;
+  readonly workspaceName: string;
+  readonly inviterName: string;
+  readonly role: string;
+  readonly token: string;
+  readonly appOrigin: string;
+}): MailMessage {
+  return {
+    to: input.to,
+    subject: `${input.inviterName} invited you to ${input.workspaceName} on OpsPilot`,
+    text: [
+      `${input.inviterName} invited you to join ${input.workspaceName} as ${input.role.toLowerCase()}.`,
+      "Accept within 7 days:",
+      linkWithToken(input.appOrigin, "/invitations/accept", input.token),
+    ].join("\n"),
+  };
+}

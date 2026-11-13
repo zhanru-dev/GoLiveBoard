@@ -11,6 +11,7 @@ import { ProblemDetailsFilter } from "./http/problem-details.filter.js";
 import { createValidationPipe } from "./http/request-validation.js";
 import { createLogger } from "./observability/logger.js";
 import { type Clock, ClockModule } from "./shared/clock.js";
+import { WorkspacesModule } from "./workspaces/workspaces.module.js";
 import { ObservabilityModule } from "./observability/observability.module.js";
 
 export interface AppModuleOptions {
@@ -39,6 +40,7 @@ export class AppModule {
         LoggerModule.forRoot({ pinoHttp: { logger }, useExisting: true }),
         HealthModule,
         AuthModule,
+        WorkspacesModule,
       ],
       providers: [
         { provide: APP_FILTER, useClass: ProblemDetailsFilter },

@@ -31,6 +31,11 @@ const AppConfigSchema = z
     API_HOST: z.string().min(1).default("127.0.0.1"),
     API_PORT: z.coerce.number().int().min(1).max(MAX_TCP_PORT).default(4301),
     LOG_LEVEL: z.enum(LOG_LEVELS).default("info"),
+    /**
+     * Proxies in front of the API (Caddy: 1). Express then takes the client
+     * address from X-Forwarded-For, which rate limits depend on; 0 trusts none.
+     */
+    TRUST_PROXY_HOPS: z.coerce.number().int().min(0).max(5).default(0),
     LOG_FORMAT: z.enum(["json", "pretty"]).default("json"),
     DATABASE_URL: z.url({
       protocol: /^postgres(ql)?$/,
@@ -62,7 +67,11 @@ const AppConfigSchema = z
   )
   .transform((env) => ({
     environment: env.NODE_ENV,
-    api: { host: env.API_HOST, port: env.API_PORT },
+    api: {
+      host: env.API_HOST,
+      port: env.API_PORT,
+      trustProxyHops: env.TRUST_PROXY_HOPS,
+    },
     log: { level: env.LOG_LEVEL, format: env.LOG_FORMAT },
     database: { url: env.DATABASE_URL },
     valkey: { url: env.VALKEY_URL },

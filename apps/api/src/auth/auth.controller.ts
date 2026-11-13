@@ -4,14 +4,18 @@ import {
   Get,
   HttpCode,
   Post,
+  Put,
   Req,
   Res,
 } from "@nestjs/common";
 import {
   type Accepted,
   type Me,
+  PasswordResetConfirmRequest,
+  PasswordResetRequest,
   SignInRequest,
   SignUpRequest,
+  SwitchWorkspaceRequest,
 } from "@opspilot/contracts";
 import type { Request, Response } from "express";
 
@@ -23,11 +27,15 @@ import {
   setSessionCookies,
 } from "./cookies.js";
 import { MeService } from "./me.service.js";
+import { PasswordResetService } from "./password-reset.service.js";
 import { DomainError } from "../shared/domain/domain-error.js";
 
 @Controller("auth")
 export class AuthController {
-  constructor(private readonly auth: AuthService) {}
+  constructor(
+    private readonly auth: AuthService,
+    private readonly passwordReset: PasswordResetService,
+  ) {}
 
   /** Always `202` with the same body: nothing reveals whether the email was new. */
   @Public()
@@ -35,8 +43,9 @@ export class AuthController {
   @HttpCode(202)
   async signUp(
     @Body({ schema: SignUpRequest }) body: SignUpRequest,
+    @Req() request: Request,
   ): Promise<Accepted> {
-    await this.auth.signUp(body);
+    await this.auth.signUp(body, clientIp(request));
     return { status: "accepted" };
   }
 
@@ -45,9 +54,13 @@ export class AuthController {
   @HttpCode(204)
   async signIn(
     @Body({ schema: SignInRequest }) body: SignInRequest,
+    @Req() request: Request,
     @Res({ passthrough: true }) response: Response,
   ): Promise<void> {
-    setSessionCookies(response, await this.auth.signIn(body));
+    setSessionCookies(
+      response,
+      await this.auth.signIn(body, clientIp(request)),
+    );
   }
 
   @Public()
@@ -83,6 +96,28 @@ export class AuthController {
     }
     clearSessionCookies(response);
   }
+
+  /** Always `202` with the same body: nothing reveals whether the account exists. */
+  @Public()
+  @Post("password-reset/request")
+  @HttpCode(202)
+  async requestPasswordReset(
+    @Body({ schema: PasswordResetRequest }) body: PasswordResetRequest,
+    @Req() request: Request,
+  ): Promise<Accepted> {
+    await this.passwordReset.request(body, clientIp(request));
+    return { status: "accepted" };
+  }
+
+  @Public()
+  @Post("password-reset/confirm")
+  @HttpCode(204)
+  async confirmPasswordReset(
+    @Body({ schema: PasswordResetConfirmRequest })
+    body: PasswordResetConfirmRequest,
+  ): Promise<void> {
+    await this.passwordReset.confirm(body);
+  }
 }
 
 @Controller("me")
@@ -93,4 +128,21 @@ export class MeController {
   describe(@CurrentActor() actor: Actor): Promise<Me> {
     return this.me.describe(actor);
   }
+
+  /** FR-WS-4: the next request is scoped to the chosen workspace. */
+  @Put("active-workspace")
+  switchWorkspace(
+    @CurrentActor() actor: Actor,
+    @Body({ schema: SwitchWorkspaceRequest }) body: SwitchWorkspaceRequest,
+  ): Promise<Me> {
+    return this.me.switchWorkspace(actor, body.workspaceId);
+  }
+}
+
+/**
+ * The client's address. Behind Caddy, Express derives it from X-Forwarded-For
+ * because `trust proxy` is set to the number of proxies in front of the API.
+ */
+function clientIp(request: Request): string {
+  return request.ip ?? "unknown";
 }

@@ -16,7 +16,7 @@ describe("loadConfig", () => {
   it("uses local development defaults for everything but connection strings and secrets", () => {
     expect(loadConfig(REQUIRED)).toEqual({
       environment: "development",
-      api: { host: "127.0.0.1", port: 4301 },
+      api: { host: "127.0.0.1", port: 4301, trustProxyHops: 0 },
       log: { level: "info", format: "json" },
       database: { url: REQUIRED.DATABASE_URL },
       valkey: { url: REQUIRED.VALKEY_URL },
