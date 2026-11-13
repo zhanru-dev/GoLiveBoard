@@ -35,14 +35,23 @@ export default defineConfig({
     ],
     coverage: {
       provider: "v8",
-      include: ["packages/*/src/**", "apps/*/src/**"],
+      // Patterns are matched per project (relative to each project's root),
+      // so they must not name the workspace folder: "packages/*/src/**"
+      // would match nothing.
+      include: ["**/src/**/*.{ts,tsx}"],
       exclude: [
         "**/*.test.{ts,tsx}",
+        "**/*.d.ts",
         "**/index.ts",
         "**/testing/**",
         "**/generated/**",
       ],
       reporter: ["text-summary", "html"],
+      // docs/05 section 6: domain rules keep at least 90% line and branch
+      // coverage; elsewhere coverage is reported, not gated.
+      thresholds: {
+        "**/domain/**": { lines: 90, branches: 90 },
+      },
     },
   },
 });

@@ -52,7 +52,8 @@ jobs:
           node-version-file: .nvmrc
           cache: npm
       - run: npm ci
-      - run: npm test
+      # Also fails if domain/ folders drop below 90% line or branch coverage.
+      - run: npm run test:coverage
 
   integration:
     name: Integration tests
