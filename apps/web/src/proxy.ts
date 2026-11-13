@@ -9,6 +9,7 @@ import { type NextRequest, NextResponse } from "next/server";
 export function proxy(request: NextRequest) {
   const nonce = btoa(crypto.randomUUID());
   const development = process.env.NODE_ENV === "development";
+  const storage = storageOrigin();
   const policy = [
     "default-src 'self'",
     // 'strict-dynamic' lets the trusted scripts load the chunks they need.
@@ -16,10 +17,12 @@ export function proxy(request: NextRequest) {
     `script-src 'self' 'nonce-${nonce}' 'strict-dynamic'${development ? " 'unsafe-eval'" : ""}`,
     // React and Radix set inline styles (positions of menus, for example).
     "style-src 'self' 'unsafe-inline'",
-    "img-src 'self' data: blob:",
+    // Holding slates are shown from object storage with presigned links…
+    `img-src 'self' data: blob:${storage}`,
     "font-src 'self'",
-    // Development adds the WebSocket used for hot reloading.
-    `connect-src 'self'${development ? " ws:" : ""}`,
+    // …and uploaded straight to it. Development adds the WebSocket used for
+    // hot reloading.
+    `connect-src 'self'${storage}${development ? " ws:" : ""}`,
     "frame-ancestors 'none'",
     "base-uri 'self'",
     "form-action 'self'",
@@ -32,6 +35,16 @@ export function proxy(request: NextRequest) {
   const response = NextResponse.next({ request: { headers: requestHeaders } });
   response.headers.set("Content-Security-Policy", policy);
   return response;
+}
+
+/**
+ * The object store browsers upload to and download from (the API's
+ * S3_PUBLIC_ENDPOINT), as " <origin>" for the policy, or "" if unset.
+ */
+function storageOrigin(): string {
+  const endpoint = process.env.S3_PUBLIC_ENDPOINT;
+  const origin = endpoint === undefined ? null : URL.parse(endpoint)?.origin;
+  return origin === undefined || origin === null ? "" : ` ${origin}`;
 }
 
 export const config = {

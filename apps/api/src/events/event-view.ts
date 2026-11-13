@@ -1,6 +1,7 @@
 import type { EventDetail, EventSummary } from "@opspilot/contracts";
 
 import type { Prisma } from "../generated/prisma/client.js";
+import { allowedTransitions } from "./domain/lifecycle.js";
 
 /** The columns every event response is built from. */
 export const EVENT_SELECT = {
@@ -44,6 +45,7 @@ export function toEventDetail(row: EventRow): EventDetail {
     ...toEventSummary(row),
     description: row.description,
     streamUrl: row.streamUrl,
+    allowedTransitions: allowedTransitions(row.status),
     expectedAttendance: row.expectedAttendance,
     version: row.version,
     createdAt: row.createdAt.toISOString(),

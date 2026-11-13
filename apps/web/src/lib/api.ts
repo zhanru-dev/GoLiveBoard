@@ -80,6 +80,16 @@ interface RequestOptions<T> {
   readonly workspaceId?: string;
   /** Cancels the request (TanStack Query passes one to every query). */
   readonly signal?: AbortSignal;
+  /**
+   * The version the change is based on, sent as `If-Match`. The API refuses
+   * the change with `412` if someone else changed the resource meanwhile.
+   */
+  readonly ifMatch?: number;
+  /**
+   * Sent as `Idempotency-Key`: a retry of the same create with the same key
+   * returns the first response instead of creating a duplicate.
+   */
+  readonly idempotencyKey?: string;
 }
 
 /** Absolute URL on the page's own origin (also works in tests). */
@@ -98,6 +108,12 @@ async function send(
   }
   if (options.workspaceId !== undefined) {
     headers["X-Workspace-Id"] = options.workspaceId;
+  }
+  if (options.ifMatch !== undefined) {
+    headers["If-Match"] = `"${String(options.ifMatch)}"`;
+  }
+  if (options.idempotencyKey !== undefined) {
+    headers["Idempotency-Key"] = options.idempotencyKey;
   }
   return fetch(apiUrl(path), {
     method,

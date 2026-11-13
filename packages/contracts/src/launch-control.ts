@@ -30,7 +30,11 @@ export const RunbookTask = z.object({
 });
 export type RunbookTask = z.infer<typeof RunbookTask>;
 
-const TaskTitle = z.string().trim().min(1).max(TASK_TITLE_MAX_LENGTH);
+const TaskTitle = z
+  .string()
+  .trim()
+  .min(1, { error: "Enter what needs doing" })
+  .max(TASK_TITLE_MAX_LENGTH);
 
 /** New tasks go to the end of the runbook. */
 export const CreateRunbookTaskRequest = z.object({

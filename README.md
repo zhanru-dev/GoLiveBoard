@@ -6,7 +6,7 @@ It answers the question operations teams struggle with most — **is this event 
 
 ## Status
 
-In development: milestone 1 (foundations). This repository is the reference implementation that the OpsPilot build-along course follows. Start with the development documentation:
+In development. Staff can sign up, build a team, create events and prepare them in Launch Control: a runbook, the access policy, the stream (checked automatically) and the holding slate add up to a readiness score, and an event cannot become ready or go live while a hard blocker remains. This repository is the reference implementation that the OpsPilot build-along course follows. Start with the development documentation:
 
 | Document                                                                  | What it covers                                                          |
 | ------------------------------------------------------------------------- | ----------------------------------------------------------------------- |

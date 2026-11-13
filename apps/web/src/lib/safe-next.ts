@@ -1,5 +1,5 @@
 /** Where to go after signing in when no `next` is given. */
-export const APP_HOME = "/settings/team";
+export const APP_HOME = "/events";
 
 /** Any origin works here: it only gives relative paths something to resolve against. */
 const BASE = new URL("https://opspilot.invalid");

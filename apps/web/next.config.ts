@@ -1,4 +1,14 @@
+import { existsSync } from "node:fs";
+
 import type { NextConfig } from "next";
+
+// The repository's .env holds settings shared with the API, such as the
+// storage endpoint the Content Security Policy must allow. Variables that
+// are already set (CI, production) win.
+const envFile = new URL("../../.env", import.meta.url);
+if (existsSync(envFile)) {
+  process.loadEnvFile(envFile);
+}
 
 /**
  * Sent with every page. The Content Security Policy is set per request in

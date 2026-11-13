@@ -43,7 +43,11 @@ export const TimeZone = z
 /** An instant in UTC, written with `Z` (docs/04, section 2). */
 const Instant = z.iso.datetime();
 
-export const EventTitle = z.string().trim().min(1).max(TITLE_MAX_LENGTH);
+export const EventTitle = z
+  .string()
+  .trim()
+  .min(1, { error: "Enter a title" })
+  .max(TITLE_MAX_LENGTH);
 export const EventDescription = z.string().trim().max(DESCRIPTION_MAX_LENGTH);
 export const ExpectedAttendance = z.int().min(1).max(EXPECTED_ATTENDANCE_MAX);
 
@@ -71,6 +75,11 @@ export const EventDetail = EventSummary.extend({
   description: z.string(),
   /** The HLS playback URL, set with `PUT /events/:id/stream`. */
   streamUrl: z.string().nullable(),
+  /**
+   * The statuses the lifecycle allows next (FR-EV-2), so clients need not
+   * copy the table. READY and LIVE are still refused while blockers remain.
+   */
+  allowedTransitions: z.array(EventStatus),
   expectedAttendance: z.int().nullable(),
   version: z.int().min(1),
   createdAt: Instant,

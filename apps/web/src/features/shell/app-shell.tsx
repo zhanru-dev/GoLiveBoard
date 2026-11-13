@@ -65,7 +65,7 @@ export function AppShell({
     <MeProvider value={me}>
       <header className="border-b">
         <div className="mx-auto flex max-w-5xl items-center gap-4 px-6 py-3">
-          <Link href="/settings/team" className="font-semibold">
+          <Link href="/events" className="font-semibold">
             OpsPilot
           </Link>
           <DropdownMenu>
@@ -91,6 +91,7 @@ export function AppShell({
             </DropdownMenuContent>
           </DropdownMenu>
           <nav aria-label="Main" className="flex gap-4 text-sm">
+            <Link href="/events">Events</Link>
             <Link href="/settings/team">Team</Link>
           </nav>
           <div className="ml-auto">

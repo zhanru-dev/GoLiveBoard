@@ -33,7 +33,7 @@ describe("SignInForm", () => {
       email: "ada@example.com",
       password: "correct horse battery",
     });
-    expect(router.replace).toHaveBeenCalledWith("/settings/team");
+    expect(router.replace).toHaveBeenCalledWith("/events");
   });
 
   it("shows the API's message when the credentials are wrong", async () => {

@@ -5,11 +5,15 @@ import { ApiError, WorkspaceChangedError } from "./api";
 /**
  * Shows an API error on the form: field errors next to their fields, anything
  * else as one message for the whole form. Returns that message, if any.
+ *
+ * @param rename - API field names that the form calls differently, e.g.
+ * `{ startsAt: "startsLocal" }`
  */
 export function applyApiError<T extends FieldValues>(
   error: unknown,
   setError: UseFormSetError<T>,
   fields: readonly Path<T>[],
+  rename: Readonly<Record<string, Path<T>>> = {},
 ): string {
   // Not the form's fault: the global handler reloads the page for the
   // workspace that is now active, so there is nothing to show here.
@@ -20,7 +24,8 @@ export function applyApiError<T extends FieldValues>(
     return "Something went wrong. Please try again.";
   }
   const unplaced = (error.problem.errors ?? []).filter((fieldError) => {
-    const field = fields.find((name) => name === fieldError.path);
+    const target = rename[fieldError.path] ?? fieldError.path;
+    const field = fields.find((name) => name === target);
     if (field === undefined) {
       return true;
     }

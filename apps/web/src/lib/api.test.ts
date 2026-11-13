@@ -26,6 +26,28 @@ describe("api", () => {
     Reflect.deleteProperty(navigator, "locks");
   });
 
+  it("sends the version a change is based on and the idempotency key", async () => {
+    let headers: Headers | undefined;
+    server.use(
+      http.patch("*/api/v1/events/e1", ({ request }) => {
+        headers = request.headers;
+        return new HttpResponse(null, { status: 204 });
+      }),
+    );
+
+    await api("/events/e1", {
+      method: "PATCH",
+      body: {},
+      ifMatch: 3,
+      idempotencyKey: "0195f0a0-0000-7000-8000-0000000000ff",
+    });
+
+    expect(headers?.get("if-match")).toBe('"3"');
+    expect(headers?.get("idempotency-key")).toBe(
+      "0195f0a0-0000-7000-8000-0000000000ff",
+    );
+  });
+
   it("names the workspace the page shows, so the API can refuse another", async () => {
     let header: string | null = null;
     server.use(
