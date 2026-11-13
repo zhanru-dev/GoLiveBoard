@@ -315,6 +315,12 @@ model AccessPolicy {
 model StreamCheck {
   id         String   @id @default(dbgenerated("uuidv7()")) @db.Uuid
   eventId    String   @map("event_id") @db.Uuid
+  /// The URL that was checked, so checks of an old URL never count for a new one.
+  url        String
+  /// The time the check was scheduled for: the 30-second slot, or the moment
+  /// a manager asked for it. Unique per event, so a job that runs twice
+  /// records one check.
+  slot       DateTime @db.Timestamptz(3)
   checkedAt  DateTime @map("checked_at") @db.Timestamptz(3)
   ok         Boolean
   /// Null when no response arrived (DNS failure, timeout, refused address).
@@ -325,6 +331,7 @@ model StreamCheck {
 
   event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
 
+  @@unique([eventId, slot])
   // The latest check per event, for readiness and the check history.
   @@index([eventId, checkedAt(sort: Desc)])
   @@map("stream_checks")

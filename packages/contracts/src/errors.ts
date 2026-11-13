@@ -21,6 +21,7 @@ export const ErrorCode = z.enum([
   "EVENT_ARCHIVED",
   "ILLEGAL_TRANSITION",
   "EVENT_HAS_BLOCKERS",
+  "STREAM_NOT_SET",
   "VERSION_CONFLICT",
   "IDEMPOTENCY_KEY_REUSED",
   "PAYLOAD_TOO_LARGE",
@@ -86,6 +87,10 @@ export const ERROR_DEFINITIONS = {
   EVENT_HAS_BLOCKERS: {
     status: 409,
     title: "The event has unresolved hard blockers",
+  },
+  STREAM_NOT_SET: {
+    status: 409,
+    title: "The event has no stream URL to check",
   },
   VERSION_CONFLICT: {
     status: 412,

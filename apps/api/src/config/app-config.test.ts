@@ -20,6 +20,7 @@ describe("loadConfig", () => {
       log: { level: "info", format: "json" },
       database: { url: REQUIRED.DATABASE_URL },
       valkey: { url: REQUIRED.VALKEY_URL },
+      queues: { prefix: "opspilot" },
       app: { origin: "http://localhost:3300" },
       auth: { jwtSecret: "a".repeat(32), jwtPreviousSecret: undefined },
       mail: {
@@ -28,6 +29,15 @@ describe("loadConfig", () => {
       },
     });
   });
+
+  it.each(["UPPER", "with space", "a:b", ""])(
+    "rejects the queue prefix %j",
+    (prefix) => {
+      expect(() => loadConfig({ ...REQUIRED, QUEUE_PREFIX: prefix })).toThrow(
+        ConfigError,
+      );
+    },
+  );
 
   it("requires the connection strings", () => {
     const load = () => loadConfig({});

@@ -41,6 +41,12 @@ export const RATE_LIMITS = {
     limit: 3,
     windowMs: HOUR_MS,
   },
+  /** "Check now" on one event's stream; checks already run every 30 s. */
+  streamCheckPerEvent: {
+    name: "stream-check:event",
+    limit: 6,
+    windowMs: MINUTE_MS,
+  },
 } satisfies Record<string, RateLimitRule>;
 
 const KEY_PREFIX = "opspilot:rate";

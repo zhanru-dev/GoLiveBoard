@@ -1,6 +1,6 @@
 import { Writable } from "node:stream";
 
-import type { Type } from "@nestjs/common";
+import type { INestApplicationContext, Type } from "@nestjs/common";
 import type { NestExpressApplication } from "@nestjs/platform-express";
 import { Test } from "@nestjs/testing";
 import { z } from "zod";
@@ -13,7 +13,9 @@ import {
   type HealthIndicator,
 } from "../health/health-indicator.js";
 import { Mailer } from "../mail/mailer.js";
+import { WorkerModule } from "../worker/worker.module.js";
 import { loadTestConfig } from "./config.js";
+import type { SafeHttpOptions } from "../net/safe-http.js";
 import type { Clock } from "../shared/clock.js";
 
 export { TEST_ORIGIN } from "./config.js";
@@ -30,6 +32,8 @@ export interface TestAppOptions {
   readonly mailer?: Mailer;
   /** Replaces the password hasher, e.g. to pause a sign-in mid-way. */
   readonly passwordHasher?: PasswordHasher;
+  /** DNS and address rules for outbound requests (see TestStream). */
+  readonly safeHttp?: SafeHttpOptions;
 }
 
 class DiscardingMailer extends Mailer {
@@ -54,6 +58,7 @@ export async function createTestApp(
       AppModule.forRoot(config, {
         logDestination: options.logs,
         clock: options.clock,
+        safeHttp: options.safeHttp,
       }),
     ],
     controllers: options.controllers ?? [],
@@ -111,4 +116,34 @@ export class LogCapture extends Writable {
   forRequest(requestId: string): LogEntry[] {
     return this.entries().filter((entry) => entry.req?.id === requestId);
   }
+}
+
+export interface TestWorkerOptions {
+  readonly env?: Readonly<Record<string, string>>;
+  readonly clock?: Clock;
+  readonly safeHttp?: SafeHttpOptions;
+  /** Run the relay loop and queue consumers; off by default. */
+  readonly consume?: boolean;
+}
+
+/**
+ * Starts the worker's modules in memory. With `consume` off (the default)
+ * nothing runs in the background: tests call relayOnce, process and
+ * scheduleDueChecks themselves and get deterministic results.
+ */
+export async function createTestWorker(
+  options: TestWorkerOptions = {},
+): Promise<INestApplicationContext> {
+  const config = loadTestConfig({ LOG_LEVEL: "silent", ...options.env });
+  const moduleRef = await Test.createTestingModule({
+    imports: [
+      WorkerModule.forRoot(config, {
+        clock: options.clock,
+        safeHttp: options.safeHttp,
+        worker: { consume: options.consume ?? false },
+      }),
+    ],
+  }).compile();
+  await moduleRef.init();
+  return moduleRef;
 }

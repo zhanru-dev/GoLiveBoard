@@ -9,7 +9,7 @@
     "apps/*"
   ],
   "scripts": {
-    "dev": "npm run build -w @opspilot/contracts && concurrently --names contracts,api,web --prefix-colors blue,magenta,green \"npm run dev -w @opspilot/contracts\" \"npm run dev -w @opspilot/api\" \"npm run dev -w @opspilot/web\"",
+    "dev": "npm run build -w @opspilot/contracts && concurrently --names contracts,api,worker,web --prefix-colors blue,magenta,yellow,green \"npm run dev -w @opspilot/contracts\" \"npm run dev -w @opspilot/api\" \"npm run dev:worker -w @opspilot/api\" \"npm run dev -w @opspilot/web\"",
     "services:up": "docker compose up --detach --wait --wait-timeout 120",
     "services:down": "docker compose down",
     "db:migrate": "npm run db:migrate -w @opspilot/api --",

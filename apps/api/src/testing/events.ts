@@ -84,14 +84,15 @@ export async function prepareForLaunch(
     mode: "PUBLIC",
     privacyNoticeVersion: "2026-11",
   });
+  const streamUrl = "https://stream.example.com/index.m3u8";
+  await database.query("UPDATE events SET stream_url = $2 WHERE id = $1", [
+    eventId,
+    streamUrl,
+  ]);
   await database.query(
-    "UPDATE events SET stream_url = 'https://stream.example.com/index.m3u8' WHERE id = $1",
-    [eventId],
-  );
-  await database.query(
-    `INSERT INTO stream_checks (event_id, checked_at, ok, http_status, latency_ms)
-     VALUES ($1, $2, true, 200, 120)`,
-    [eventId, checkedAt],
+    `INSERT INTO stream_checks (event_id, url, slot, checked_at, ok, http_status, latency_ms)
+     VALUES ($1, $2, $3, $3, true, 200, 120)`,
+    [eventId, streamUrl, checkedAt],
   );
   await database.query(
     `INSERT INTO assets (event_id, kind, storage_key, status)

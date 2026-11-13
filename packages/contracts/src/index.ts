@@ -51,13 +51,26 @@ export {
   UpdateRunbookTaskRequest,
 } from "./launch-control.js";
 export { HealthCheckResult, HealthReport, LivenessReport } from "./health.js";
-export { EventTransitionedPayload, OutboxMessageType } from "./messages.js";
+export {
+  CheckStreamJob,
+  EventTransitionedPayload,
+  OutboxMessageType,
+  StreamCheckRequestedPayload,
+} from "./messages.js";
 export {
   PAGE_LIMIT_DEFAULT,
   PAGE_LIMIT_MAX,
   PageQuery,
   pageOf,
 } from "./pagination.js";
+export {
+  Incident,
+  IncidentKind,
+  SetStreamRequest,
+  StreamCheck,
+  StreamCheckPage,
+  StreamUrl,
+} from "./streams.js";
 export {
   FieldError,
   PROBLEM_JSON_CONTENT_TYPE,

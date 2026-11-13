@@ -54,6 +54,8 @@ Readiness is a **pure function** of the event's current data: `assessReadiness(i
 
 Scoring details in rule version 1: "All runbook tasks done" gives points in proportion to completed tasks, rounded down, and 0 for an empty runbook (an event with no plan is not ready); "Owner assigned and description written" gives 5 points for each; the other criteria are all or nothing, and a runbook without critical tasks passes "Critical runbook tasks done". Next actions list those that remove a hard blocker first, then by points gained, then in table order. A transition to `READY` or `LIVE` stores the rule version and score in its audit entry.
 
+Stream checks count only for the URL they checked: changing the stream URL makes the stream "not checked yet" until the new URL is checked. Setting the URL queues a check at once, and Managers can ask for one at any time, because scheduled checks start only an hour before the event while readiness needs a check under 5 minutes old.
+
 Rule changes create a new rule version; tests pin each version's behaviour.
 
 ## 4. Entity relationship diagrams
@@ -178,6 +180,8 @@ erDiagram
   StreamCheck {
     uuid id PK
     uuid eventId FK
+    text url
+    timestamptz slot
     timestamptz checkedAt
     boolean ok
     int httpStatus
@@ -343,6 +347,7 @@ The rule of thumb: **if a rule must hold under concurrency, the database enforce
 | Edits based on stale data are rejected                       | `version` compared in the `UPDATE … WHERE id = $1 AND version = $2`; zero rows updated → `412`                                                                                     |
 | Runbook positions are `1, 2, 3…` per event                   | Every runbook write locks the event row; positions are renumbered in one statement after a move or delete; check constraint `position > 0`                                         |
 | An `EMAIL_DOMAIN` policy lists domains, other modes none     | Check constraint on `access_policies`, and the request schema                                                                                                                      |
+| A stream-check job that runs twice records one check         | Unique `(eventId, slot)` on `StreamCheck`; inserted with `ON CONFLICT DO NOTHING`, and the incident is judged only when a row was inserted                                         |
 | At most one open incident of a kind per event                | Partial unique index `(eventId, kind) WHERE resolvedAt IS NULL`                                                                                                                    |
 | At most 3 pinned questions per event                         | `pinSlot` in 1–3 (check constraint) + partial unique index `(eventId, pinSlot) WHERE pinSlot IS NOT NULL`                                                                          |
 | One vote per attendee per question                           | Primary key `(questionId, attendeeId)`                                                                                                                                             |

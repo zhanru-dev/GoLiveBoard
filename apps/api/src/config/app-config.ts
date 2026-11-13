@@ -54,6 +54,14 @@ const AppConfigSchema = z
      * until they expire, so rotating the key signs nobody out.
      */
     JWT_SECRET_PREVIOUS: Secret.optional(),
+    /**
+     * Prefix of every BullMQ key in Valkey. Tests give each file its own, so
+     * their queues never share jobs.
+     */
+    QUEUE_PREFIX: z
+      .string()
+      .regex(/^[a-z0-9-]{1,40}$/)
+      .default("opspilot"),
     SMTP_URL: z.url({ protocol: /^smtps?$/ }),
     MAIL_FROM: z.string().min(1),
   })
@@ -75,6 +83,7 @@ const AppConfigSchema = z
     log: { level: env.LOG_LEVEL, format: env.LOG_FORMAT },
     database: { url: env.DATABASE_URL },
     valkey: { url: env.VALKEY_URL },
+    queues: { prefix: env.QUEUE_PREFIX },
     // `new URL(…).origin` normalises the value (no trailing slash, lower case).
     app: { origin: new URL(env.APP_ORIGIN).origin },
     auth: {

@@ -14,6 +14,7 @@ export const EVENT_SELECT = {
   timeZone: true,
   ownerUserId: true,
   expectedAttendance: true,
+  streamUrl: true,
   version: true,
   createdAt: true,
   updatedAt: true,
@@ -42,6 +43,7 @@ export function toEventDetail(row: EventRow): EventDetail {
   return {
     ...toEventSummary(row),
     description: row.description,
+    streamUrl: row.streamUrl,
     expectedAttendance: row.expectedAttendance,
     version: row.version,
     createdAt: row.createdAt.toISOString(),

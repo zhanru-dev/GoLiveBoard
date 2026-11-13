@@ -29,7 +29,7 @@ cp .env.example .env     # local settings; adjust ports here if they clash
 npm ci
 npm run services:up      # PostgreSQL, Valkey, Mailpit and the Caddy proxy
 npm run db:deploy        # apply database migrations
-npm run dev              # web app, API and contracts in watch mode
+npm run dev              # web app, API, worker and contracts in watch mode
 ```
 
 Open <http://localhost:3300> and create a workspace. Emails the app sends (invitations, password resets) appear in Mailpit at <http://localhost:8036>. The API answers under the same origin, for example <http://localhost:3300/api/v1/health/ready>.
@@ -38,6 +38,6 @@ Open <http://localhost:3300> and create a workspace. Emails the app sends (invit
 | ----------------------- | ----------------------------------------------------------------------------------- |
 | `npm run check`         | Formatting, lint, types and architecture rules                                      |
 | `npm test`              | Unit and component tests                                                            |
-| `npm run test:int`      | API integration tests (starts its own containers)                                   |
+| `npm run test:int`      | API integration tests (starts its own containers; needs `openssl` on the PATH)      |
 | `npm run test:e2e`      | Playwright against production builds (needs `services:up`, `db:deploy` and `build`) |
 | `npm run services:down` | Stop the local services                                                             |

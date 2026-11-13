@@ -116,9 +116,9 @@ A membership, invitation or workspace outside the session's active workspace is 
 | `PATCH /runbook-tasks/:id` · `DELETE …`    | M         | `If-Match`; `status: "DONE"` completes (records who and when), `"TODO"` reopens                                                                       |
 | `POST /runbook-tasks/:id/move`             | M         | `{ "after": "<taskId>" or null }`; returns the whole runbook in its new order                                                                         |
 | `GET /events/:id/access-policy` · `PUT …`  | O M A · M | `404` until set. The first `PUT` creates it and must not send `If-Match`; later ones must                                                             |
-| `PUT /events/:id/stream`                   | M         | `{ "url": "https://…/index.m3u8" }`; SSRF-checked                                                                                                     |
-| `GET /events/:id/stream/checks`            | O M A     | Most recent first                                                                                                                                     |
-| `GET /events/:id/incidents`                | O M A     |                                                                                                                                                       |
+| `PUT /events/:id/stream`                   | M         | `{ "url": "https://…/index.m3u8" }`; the host must resolve only to public addresses (SSRF); returns the event and queues a check at once              |
+| `GET /events/:id/stream/checks` · `POST …` | O M A · M | Most recent first, cursor; `POST` asks for a check now: `202`, at most 6 a minute per event, `409 STREAM_NOT_SET` without a URL                       |
+| `GET /events/:id/incidents`                | O M A     | Every incident, most recently opened first (not paginated: at most a handful per event)                                                               |
 | `POST /events/:id/assets/holding-slate`    | M         | Returns a presigned upload URL and the asset ID                                                                                                       |
 | `POST /assets/:id/complete`                | M         | Verifies type and size in storage, marks the asset `READY`                                                                                            |
 

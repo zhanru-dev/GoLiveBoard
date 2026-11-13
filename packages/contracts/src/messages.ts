@@ -6,7 +6,10 @@ import { EventStatus } from "./events.js";
  * Outbox message types (ADR-0007): what happened, written in the same
  * transaction as the change, then turned into jobs by the worker's relay.
  */
-export const OutboxMessageType = z.enum(["event.transitioned"]);
+export const OutboxMessageType = z.enum([
+  "event.transitioned",
+  "stream.check_requested",
+]);
 export type OutboxMessageType = z.infer<typeof OutboxMessageType>;
 
 /** An event moved between lifecycle statuses (FR-EV-2). */
@@ -17,3 +20,22 @@ export const EventTransitionedPayload = z.object({
   occurredAt: z.iso.datetime(),
 });
 export type EventTransitionedPayload = z.infer<typeof EventTransitionedPayload>;
+
+/** A manager set the stream URL or asked for a check now. */
+export const StreamCheckRequestedPayload = z.object({
+  eventId: z.uuid(),
+  requestedAt: z.iso.datetime(),
+});
+export type StreamCheckRequestedPayload = z.infer<
+  typeof StreamCheckRequestedPayload
+>;
+
+/**
+ * Data of a `check` job on the stream-checks queue. `slot` is the time the
+ * check was scheduled for; one check is recorded per event and slot.
+ */
+export const CheckStreamJob = z.object({
+  eventId: z.uuid(),
+  slot: z.iso.datetime(),
+});
+export type CheckStreamJob = z.infer<typeof CheckStreamJob>;

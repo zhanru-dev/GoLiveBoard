@@ -8,6 +8,9 @@ import type { AppConfig } from "./config/app-config.js";
 import { ConfigModule } from "./config/config.module.js";
 import { EventsModule } from "./events/events.module.js";
 import { LaunchControlModule } from "./launch-control/launch-control.module.js";
+import { NetModule } from "./net/net.module.js";
+import type { SafeHttpOptions } from "./net/safe-http.js";
+import { StreamsModule } from "./streams/streams.module.js";
 import { HealthModule } from "./health/health.module.js";
 import { ProblemDetailsFilter } from "./http/problem-details.filter.js";
 import { createValidationPipe } from "./http/request-validation.js";
@@ -21,6 +24,8 @@ export interface AppModuleOptions {
   readonly logDestination?: DestinationStream;
   /** The current time; tests pass a clock they control. */
   readonly clock?: Clock;
+  /** DNS and address rules for outbound requests; tests map test hosts. */
+  readonly safeHttp?: SafeHttpOptions;
 }
 
 @Module({})
@@ -36,6 +41,7 @@ export class AppModule {
         ConfigModule.forRoot(config),
         ObservabilityModule.forRoot(logger),
         ClockModule.forRoot(options.clock),
+        NetModule.forRoot(options.safeHttp),
         // `useExisting`: the request-logging middleware is mounted by
         // configureApp, ahead of routing; nestjs-pino only makes each request's
         // logger available to `PinoLogger` and uses ours for everything else.
@@ -45,6 +51,7 @@ export class AppModule {
         WorkspacesModule,
         EventsModule,
         LaunchControlModule,
+        StreamsModule,
       ],
       providers: [
         { provide: APP_FILTER, useClass: ProblemDetailsFilter },

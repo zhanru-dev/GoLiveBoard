@@ -69,6 +69,8 @@ export type EventSummary = z.infer<typeof EventSummary>;
 /** Body of `GET /events/:id`; its `version` is also sent as the `ETag`. */
 export const EventDetail = EventSummary.extend({
   description: z.string(),
+  /** The HLS playback URL, set with `PUT /events/:id/stream`. */
+  streamUrl: z.string().nullable(),
   expectedAttendance: z.int().nullable(),
   version: z.int().min(1),
   createdAt: Instant,

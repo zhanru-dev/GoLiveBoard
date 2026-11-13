@@ -12,12 +12,12 @@ export async function loadReadinessInput(
   eventId: string,
   now: Date,
 ): Promise<ReadinessInput> {
-  const [event, accessPolicy, tasks, latestStreamCheck, holdingSlate] =
+  const event = await client.event.findUniqueOrThrow({
+    where: { id: eventId },
+    select: { ownerUserId: true, description: true, streamUrl: true },
+  });
+  const [accessPolicy, tasks, latestStreamCheck, holdingSlate] =
     await Promise.all([
-      client.event.findUniqueOrThrow({
-        where: { id: eventId },
-        select: { ownerUserId: true, description: true, streamUrl: true },
-      }),
       client.accessPolicy.findUnique({
         where: { eventId },
         select: { mode: true },
@@ -26,17 +26,21 @@ export async function loadReadinessInput(
         where: { eventId },
         select: { isCritical: true, status: true },
       }),
-      client.streamCheck.findFirst({
-        where: { eventId },
-        orderBy: { checkedAt: "desc" },
-        select: {
-          ok: true,
-          checkedAt: true,
-          httpStatus: true,
-          latencyMs: true,
-          failure: true,
-        },
-      }),
+      // Only checks of the current URL: a check of the previous URL says
+      // nothing about whether the new one works.
+      event.streamUrl === null
+        ? null
+        : client.streamCheck.findFirst({
+            where: { eventId, url: event.streamUrl },
+            orderBy: { checkedAt: "desc" },
+            select: {
+              ok: true,
+              checkedAt: true,
+              httpStatus: true,
+              latencyMs: true,
+              failure: true,
+            },
+          }),
       client.asset.findFirst({
         where: { eventId, kind: "HOLDING_SLATE", status: "READY" },
         select: { id: true },
