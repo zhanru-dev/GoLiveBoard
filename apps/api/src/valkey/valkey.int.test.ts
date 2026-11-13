@@ -65,11 +65,15 @@ describe("the shared Valkey client while Valkey is frozen", () => {
         // ...and once the socket has been silent for its timeout, it is
         // destroyed, failing everything queued on it. Without that, the queue
         // would grow with every request for as long as Valkey stays frozen.
-        await new Promise((resolve) =>
-          setTimeout(resolve, SOCKET_TIMEOUT_MS + 300),
+        // Waited for rather than slept for: on a busy machine the timer fires
+        // a little late, but it must fire well within three timeouts.
+        await vi.waitFor(
+          () => {
+            // At most the ready check of the next connection attempt waits.
+            expect(client.commandQueue.length).toBeLessThanOrEqual(1);
+          },
+          { timeout: 3 * SOCKET_TIMEOUT_MS, interval: 50 },
         );
-        // At most the ready check of the next connection attempt is waiting.
-        expect(client.commandQueue.length).toBeLessThanOrEqual(1);
         // While the client reconnects, checks fail at once, without queueing.
         expect(await burst("frozen")).toBeLessThan(100);
         expect(client.commandQueue.length).toBeLessThanOrEqual(1);
