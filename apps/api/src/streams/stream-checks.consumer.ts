@@ -11,8 +11,9 @@ import { InjectPinoLogger, PinoLogger } from "nestjs-pino";
 import { APP_CONFIG, type AppConfig } from "../config/app-config.js";
 import { QUEUES } from "../queues/queues.module.js";
 import {
+  closeWithin,
+  consumerConnection,
   type QueueName,
-  queueConnection,
   STREAM_CHECK_JOBS,
   STREAM_CHECKS_QUEUE,
 } from "../queues/queues.js";
@@ -60,7 +61,7 @@ export class StreamChecksConsumer
         { name: STREAM_CHECK_JOBS.schedule },
       );
     this.worker = new Worker(STREAM_CHECKS_QUEUE, (job) => this.process(job), {
-      connection: queueConnection(this.config),
+      connection: consumerConnection(this.config),
       prefix: this.config.queues.prefix,
       concurrency: CONCURRENCY,
     });
@@ -72,9 +73,27 @@ export class StreamChecksConsumer
     });
   }
 
-  /** Lets running checks finish before the process exits (NFR-5). */
+  /**
+   * Lets running checks finish before the process exits (NFR-5), but only
+   * for the grace period: a frozen Valkey would otherwise keep it alive.
+   */
   async onApplicationShutdown(): Promise<void> {
-    await this.worker?.close();
+    const worker = this.worker;
+    if (worker === undefined) {
+      return;
+    }
+    const clean = await closeWithin(
+      () => worker.close(),
+      async () => {
+        void worker.close(true);
+        await worker.disconnect();
+      },
+    );
+    if (!clean) {
+      this.logger.warn(
+        "Stream-check worker did not close in time; disconnected",
+      );
+    }
   }
 
   /** Exposed for tests, which run jobs without a BullMQ worker. */

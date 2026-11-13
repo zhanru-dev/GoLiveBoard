@@ -16,17 +16,68 @@ export const STREAM_CHECK_JOBS = {
 export const QUEUE_NAMES = [STREAM_CHECKS_QUEUE] as const;
 export type QueueName = (typeof QUEUE_NAMES)[number];
 
+/** A queue command that has not answered by then fails (relay, scheduler). */
+export const QUEUE_COMMAND_TIMEOUT_MS = 2_000;
+/** How long shutdown waits for a queue or worker to close cleanly. */
+export const SHUTDOWN_GRACE_MS = 3_000;
+
 /**
- * BullMQ blocks on Valkey while it waits for jobs, so its connections must
- * retry commands forever (`maxRetriesPerRequest: null`) instead of failing
- * them like the request-path client does.
+ * For adding jobs. A frozen Valkey must not hold the outbox relay forever:
+ * its round would never end and the worker could never shut down (the
+ * milestone 3 review). A command that times out fails the relay's round,
+ * which rolls back, so its messages stay in the outbox and are retried.
  */
-export function queueConnection(config: AppConfig): ConnectionOptions {
+export function producerConnection(config: AppConfig): ConnectionOptions {
+  return {
+    url: config.valkey.url,
+    connectionName: "opspilot-producer",
+    maxRetriesPerRequest: 1,
+    commandTimeout: QUEUE_COMMAND_TIMEOUT_MS,
+  };
+}
+
+/**
+ * For consuming jobs. BullMQ blocks on Valkey while it waits for jobs, so
+ * this connection must retry forever (`maxRetriesPerRequest: null`) and has
+ * no command timeout; shutdown bounds it instead (closeWithin).
+ */
+export function consumerConnection(config: AppConfig): ConnectionOptions {
   return {
     url: config.valkey.url,
     maxRetriesPerRequest: null,
-    connectionName: "opspilot-worker",
+    connectionName: "opspilot-consumer",
   };
+}
+
+/**
+ * Closes cleanly if that finishes within the grace period, otherwise forces
+ * the connection shut, so a frozen Valkey cannot keep the process alive.
+ *
+ * @returns whether the clean close finished in time
+ */
+export async function closeWithin(
+  close: () => Promise<void>,
+  forceClose: () => Promise<void>,
+  graceMs: number = SHUTDOWN_GRACE_MS,
+): Promise<boolean> {
+  const expired = (milliseconds: number) =>
+    new Promise<"expired">((resolve) =>
+      setTimeout(() => {
+        resolve("expired");
+      }, milliseconds).unref(),
+    );
+  const outcome = await Promise.race([
+    close().then(
+      () => "closed" as const,
+      () => "closed" as const,
+    ),
+    expired(graceMs),
+  ]);
+  if (outcome === "closed") {
+    return true;
+  }
+  await Promise.race([forceClose().catch(() => undefined), expired(graceMs)]);
+  return false;
 }
 
 const DAY_SECONDS = 24 * 60 * 60;

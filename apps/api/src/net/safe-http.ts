@@ -1,4 +1,4 @@
-import { lookup as dnsLookup } from "node:dns/promises";
+import { Resolver } from "node:dns/promises";
 import { request, type RequestOptions } from "node:https";
 import type { IncomingMessage } from "node:http";
 import { isIP, type LookupFunction } from "node:net";
@@ -41,8 +41,14 @@ export interface ResolvedAddress {
 
 /** What the client may depend on; tests replace DNS and the address rule. */
 export interface SafeHttpOptions {
-  /** Every address a host name resolves to. */
-  readonly resolve: (hostname: string) => Promise<ResolvedAddress[]>;
+  /**
+   * Every address a host name resolves to. Must stop when `signal` aborts:
+   * the fetch deadline covers DNS too.
+   */
+  readonly resolve: (
+    hostname: string,
+    signal: AbortSignal,
+  ) => Promise<ResolvedAddress[]>;
   /** Whether an outbound connection may go to this address. */
   readonly isAllowedAddress: (address: string) => boolean;
   /** Extra trusted certificate authorities (tests use a self-signed one). */
@@ -53,13 +59,80 @@ export interface SafeHttpOptions {
 
 export const SAFE_HTTP_OPTIONS = Symbol("SAFE_HTTP_OPTIONS");
 
+/**
+ * Asks DNS servers directly (c-ares) rather than `dns.lookup`, which runs on
+ * libuv's small thread pool and cannot be cancelled: a few slow names could
+ * then hold every thread, stalling file and crypto work too. These queries
+ * are asynchronous, time out on their own and are cancelled at the deadline.
+ */
+async function resolveWithDns(
+  hostname: string,
+  signal: AbortSignal,
+): Promise<ResolvedAddress[]> {
+  const resolver = new Resolver({ timeout: FETCH_TIMEOUT_MS, tries: 1 });
+  const cancel = () => {
+    resolver.cancel();
+  };
+  signal.addEventListener("abort", cancel, { once: true });
+  try {
+    const [ipv4, ipv6] = await Promise.allSettled([
+      resolver.resolve4(hostname),
+      resolver.resolve6(hostname),
+    ]);
+    const addresses: ResolvedAddress[] = [
+      ...(ipv4.status === "fulfilled" ? ipv4.value : []).map((address) => ({
+        address,
+        family: 4 as const,
+      })),
+      ...(ipv6.status === "fulfilled" ? ipv6.value : []).map((address) => ({
+        address,
+        family: 6 as const,
+      })),
+    ];
+    if (addresses.length === 0 && ipv4.status === "rejected") {
+      throw ipv4.reason;
+    }
+    return addresses;
+  } finally {
+    signal.removeEventListener("abort", cancel);
+  }
+}
+
 export const defaultSafeHttpOptions: SafeHttpOptions = {
-  resolve: async (hostname) =>
-    (await dnsLookup(hostname, { all: true, order: "verbatim" })).map(
-      ({ address, family }) => ({ address, family: family === 6 ? 6 : 4 }),
-    ),
+  resolve: resolveWithDns,
   isAllowedAddress: isPublicAddress,
 };
+
+/** Rejects with a TIMEOUT error once the deadline passes, aborting `work`. */
+async function beforeDeadline<T>(
+  deadline: number,
+  timeoutMs: number,
+  work: (signal: AbortSignal) => Promise<T>,
+): Promise<T> {
+  const controller = new AbortController();
+  let timer: NodeJS.Timeout | undefined;
+  const expired = new Promise<never>((_resolve, reject) => {
+    timer = setTimeout(
+      () => {
+        // Settle as a timeout first, then cancel: the cancelled work's own
+        // error must not win the race.
+        reject(
+          new SafeHttpError(
+            "TIMEOUT",
+            `Timed out after ${String(timeoutMs / 1000)} seconds`,
+          ),
+        );
+        controller.abort();
+      },
+      Math.max(0, deadline - Date.now()),
+    );
+  });
+  try {
+    return await Promise.race([work(controller.signal), expired]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
 
 export interface SafeResponse {
   readonly status: number;
@@ -91,7 +164,12 @@ export class SafeHttpClient {
    * @throws SafeHttpError when it could not
    */
   async assertFetchable(url: string): Promise<void> {
-    await this.resolveAllowed(parseHttpsUrl(url));
+    const timeoutMs = this.options.timeoutMs ?? FETCH_TIMEOUT_MS;
+    await this.resolveAllowed(
+      parseHttpsUrl(url),
+      Date.now() + timeoutMs,
+      timeoutMs,
+    );
   }
 
   /** Fetches a URL with GET. @throws SafeHttpError when no response arrived */
@@ -100,7 +178,7 @@ export class SafeHttpClient {
     const deadline = Date.now() + timeoutMs;
     let current = parseHttpsUrl(url);
     for (let redirects = 0; ; redirects += 1) {
-      const address = await this.resolveAllowed(current);
+      const address = await this.resolveAllowed(current, deadline, timeoutMs);
       const response = await this.fetchOnce(
         current,
         address,
@@ -125,15 +203,25 @@ export class SafeHttpClient {
     }
   }
 
-  private async resolveAllowed(url: URL): Promise<ResolvedAddress> {
+  /** Resolves the host before the deadline and checks every address. */
+  private async resolveAllowed(
+    url: URL,
+    deadline: number,
+    timeoutMs: number,
+  ): Promise<ResolvedAddress> {
     // URL keeps IPv6 literals in brackets: "[::1]".
     const host = url.hostname.replace(/^\[(.*)\]$/, "$1");
     const literal = isIP(host);
     let addresses: ResolvedAddress[];
     if (literal === 0) {
       try {
-        addresses = await this.options.resolve(host);
+        addresses = await beforeDeadline(deadline, timeoutMs, (signal) =>
+          this.options.resolve(host, signal),
+        );
       } catch (error) {
+        if (error instanceof SafeHttpError) {
+          throw error;
+        }
         throw new SafeHttpError("DNS_FAILED", `Could not resolve ${host}`, {
           cause: error,
         });

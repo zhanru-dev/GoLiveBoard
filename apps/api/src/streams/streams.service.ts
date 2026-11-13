@@ -76,9 +76,12 @@ export class StreamsService {
    * ask for one whenever they want to move the event to READY.
    */
   async requestCheck(actor: Actor, eventId: string): Promise<void> {
+    // Only after the event is known to be the actor's: otherwise anyone who
+    // learned an event ID could use up its allowance from another workspace.
+    await this.assertEventVisible(actor, eventId);
     await this.rateLimiter.consumeOrThrow(
       RATE_LIMITS.streamCheckPerEvent,
-      eventId,
+      `${actor.workspaceId}:${eventId}`,
     );
     await this.prisma.$transaction(async (tx) => {
       await lockWritableEvent(tx, actor.workspaceId, eventId);

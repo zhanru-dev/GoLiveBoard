@@ -9,6 +9,7 @@ import {
 import { afterAll, beforeAll, describe, expect, inject, it } from "vitest";
 
 import { ObjectStorage } from "../storage/object-storage.js";
+import { uploadKeyFor } from "./assets.service.js";
 import { ApiClient, type TestSession } from "../testing/api-client.js";
 import { TEST_S3_BUCKET, TEST_S3_CREDENTIALS } from "../testing/containers.js";
 import { createTestDatabase, type TestDatabase } from "../testing/database.js";
@@ -160,6 +161,51 @@ describe("holding slate upload (FR-ST-3)", () => {
     expect(
       (await api.get(owner, `/events/${event.id}/assets/holding-slate`)).status,
     ).toBe(404);
+  });
+
+  it("keeps serving the verified image when the upload URL is used again", async () => {
+    const owner = await api.newOwner();
+    const event = await createEvent(api, owner);
+    const target = await startUpload(owner, event.id);
+    await upload(target, png());
+    expect((await complete(owner, target.assetId)).status).toBe(200);
+    const garbage = Buffer.alloc(png().length, 0x00);
+
+    // The presigned URL still works for a few minutes…
+    expect((await upload(target, garbage)).status).toBe(200);
+    const again = await complete(owner, target.assetId);
+
+    // …but only reaches the upload key, never the verified slate.
+    expect(again.status).toBe(200);
+    const slate = HoldingSlate.parse(
+      (await api.get(owner, `/events/${event.id}/assets/holding-slate`)).body,
+    );
+    const download = await fetch(slate.downloadUrl);
+    expect(Buffer.from(await download.arrayBuffer())).toEqual(png());
+  });
+
+  it("refuses to complete, or reject, an upload once the event is archived", async () => {
+    const owner = await api.newOwner();
+    const event = await createEvent(api, owner);
+    const target = await startUpload(owner, event.id);
+    await upload(target, Buffer.alloc(png().length, 0x41));
+    await database.query(
+      "UPDATE events SET status = 'ARCHIVED' WHERE id = $1",
+      [event.id],
+    );
+
+    const response = await complete(owner, target.assetId);
+
+    expect(response.status).toBe(409);
+    expect(problemOf(response.body).code).toBe("EVENT_ARCHIVED");
+    const [row] = await database.query<{ status: string }>(
+      "SELECT status FROM assets WHERE id = $1",
+      [target.assetId],
+    );
+    expect(row?.status).toBe("PENDING");
+    expect(
+      await storage.stat(uploadKeyFor(await storageKeyOf(target.assetId))),
+    ).toBeDefined();
   });
 
   it("keeps the asset pending until the file has been uploaded", async () => {

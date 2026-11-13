@@ -5,6 +5,7 @@ import { InjectPinoLogger, PinoLogger } from "nestjs-pino";
 
 import { PRISMA } from "../database/prisma.js";
 import type { Prisma, PrismaClient } from "../generated/prisma/client.js";
+import { lockEventForStreamCheck } from "../events/event-lock.queries.js";
 import { SafeHttpClient } from "../net/safe-http.js";
 import { CLOCK, type Clock } from "../shared/clock.js";
 import {
@@ -56,10 +57,18 @@ export class StreamMonitor {
     const checkedAt = this.clock.now();
 
     const outcome = await this.prisma.$transaction(async (tx) => {
-      // Checks of one event are judged one at a time, so two checks that
+      // The event's row lock, the one transitions take (lockEvent). A check
+      // is evidence for readiness, so like every other change readiness
+      // reads it must not commit while a transition that already judged
+      // readiness is still deciding; it waits, and lands after it. The same
+      // lock judges one event's checks one at a time, so two checks that
       // finish together cannot both miss the second failure in a row.
-      const lockKey = `stream-monitor:${eventId}`;
-      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${lockKey}, 0))`;
+      const locked = await lockEventForStreamCheck(tx, eventId);
+      // The URL may have changed while it was fetched: that result says
+      // nothing about the new URL.
+      if (locked?.streamUrl !== url) {
+        return SKIPPED;
+      }
       const { count } = await tx.streamCheck.createMany({
         data: [{ eventId, url, slot, checkedAt, latencyMs, ...result }],
         skipDuplicates: true,

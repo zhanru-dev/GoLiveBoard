@@ -16,8 +16,12 @@ import { z } from "zod";
 import { QUEUES } from "../queues/queues.module.js";
 import type { QueueName } from "../queues/queues.js";
 import { ApiClient, type TestSession } from "../testing/api-client.js";
-import { createTestDatabase, type TestDatabase } from "../testing/database.js";
-import { createEvent } from "../testing/events.js";
+import {
+  blockWrites,
+  createTestDatabase,
+  type TestDatabase,
+} from "../testing/database.js";
+import { createEvent, prepareForLaunch } from "../testing/events.js";
 import { TestClock } from "../testing/fakes.js";
 import { createTestApp, createTestWorker } from "../testing/test-app.js";
 import { TestStream } from "../testing/test-stream.js";
@@ -206,6 +210,71 @@ describe("stream checks and incidents (FR-ST-2)", () => {
       blocking: true,
       evidence: "The stream has not been checked yet.",
     });
+  });
+
+  it("cannot slip a failed check in between a go-live's readiness check and its commit", async () => {
+    const event = await createEvent(api, owner);
+    await api.send(owner, "post", `/events/${event.id}/transitions`, {
+      to: "CONFIGURING",
+    });
+    await prepareForLaunch(api, database, owner, event.id, clock.now());
+    await api.send(owner, "put", `/events/${event.id}/stream`, {
+      url: stream.url(),
+    });
+    stream.behaviour = "OK";
+    await checkNow(event.id);
+    const ready = await api.send(
+      owner,
+      "post",
+      `/events/${event.id}/transitions`,
+      {
+        to: "READY",
+      },
+    );
+    expect(ready.status, ready.text).toBe(200);
+    const block = await blockWrites(database.url, "events");
+
+    // Go-live locks the event, finds no blocker, and waits to write…
+    const goLive = Promise.resolve(
+      api.send(owner, "post", `/events/${event.id}/transitions`, {
+        to: "LIVE",
+      }),
+    );
+    await block.waitForWaiters(1);
+    // …so a failing check must wait for that lock rather than commit first.
+    stream.behaviour = "NOT_FOUND";
+    const failing = checkNow(event.id);
+    await block.waitForWaiters(2);
+    await block.release();
+
+    expect((await goLive).status).toBe(200);
+    expect((await failing).recorded).toBe(true);
+    const [order] = await database.query<{ checked_after_live: boolean }>(
+      `SELECT (
+         SELECT id FROM stream_checks WHERE event_id = $1::uuid ORDER BY id DESC LIMIT 1
+       ) > (
+         SELECT id FROM outbox_messages
+         WHERE payload->>'eventId' = $1::text AND payload->>'to' = 'LIVE'
+       ) AS checked_after_live`,
+      [event.id],
+    );
+    // UUID v7 IDs are ordered by creation: the check was written after LIVE.
+    expect(order?.checked_after_live).toBe(true);
+    stream.behaviour = "OK";
+  });
+
+  it("drops a result for a URL that was replaced while it was being fetched", async () => {
+    const event = await monitoredEvent();
+    stream.behaviour = "HANG";
+
+    const pending = checkNow(event.id);
+    await api.send(owner, "put", `/events/${event.id}/stream`, {
+      url: stream.url(`/redirect?to=${encodeURIComponent(stream.url())}`),
+    });
+
+    expect(await pending).toEqual({ recorded: false, incident: "NONE" });
+    expect(await checks(event.id)).toEqual([]);
+    stream.behaviour = "OK";
   });
 
   it("skips an event without a stream URL", async () => {

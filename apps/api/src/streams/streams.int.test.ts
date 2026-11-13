@@ -1,8 +1,16 @@
-import { randomBytes, randomInt } from "node:crypto";
+import { randomBytes } from "node:crypto";
 
 import type { NestExpressApplication } from "@nestjs/platform-express";
 import { EventDetail, ProblemDetails } from "@opspilot/contracts";
-import { afterAll, beforeAll, describe, expect, inject, it } from "vitest";
+import {
+  afterAll,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  inject,
+  it,
+} from "vitest";
 
 import { ApiClient, type TestSession } from "../testing/api-client.js";
 import { createTestDatabase, type TestDatabase } from "../testing/database.js";
@@ -37,7 +45,14 @@ describe("stream settings (FR-ST-1)", () => {
       // The production address rule: loopback is not allowed here.
       safeHttp: stream.clientOptions({ isAllowedAddress: isPublicAddress }),
     });
-    api = new ApiClient(app, `198.51.100.${String(randomInt(1, 255))}`);
+  });
+
+  // A fresh client address per test: rate limits are real in this file, and
+  // the per-address sign-up limit (10 an hour) would otherwise run out.
+  let address = 0;
+  beforeEach(() => {
+    address += 1;
+    api = new ApiClient(app, `198.51.100.${String(address)}`);
   });
 
   afterAll(async () => {
@@ -147,6 +162,25 @@ describe("stream settings (FR-ST-1)", () => {
 
     expect(statuses).toEqual([202, 202, 202, 202, 202, 202, 429]);
     expect(await outboxTypes(event.id)).toHaveLength(7);
+  });
+
+  it("does not let another workspace use up an event's check allowance", async () => {
+    const owner = await api.newOwner();
+    const stranger = await api.newOwner("stranger");
+    const event = await createEvent(api, owner);
+    await setStream(owner, event.id, "https://public.test/index.m3u8");
+
+    for (let attempt = 0; attempt < 7; attempt += 1) {
+      expect(
+        (await api.send(stranger, "post", `/events/${event.id}/stream/checks`))
+          .status,
+      ).toBe(404);
+    }
+
+    expect(
+      (await api.send(owner, "post", `/events/${event.id}/stream/checks`))
+        .status,
+    ).toBe(202);
   });
 
   it("refuses a check before a URL is set", async () => {

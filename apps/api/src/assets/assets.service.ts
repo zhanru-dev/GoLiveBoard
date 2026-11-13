@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 
 import { Inject, Injectable } from "@nestjs/common";
+import { InjectPinoLogger, PinoLogger } from "nestjs-pino";
 import {
   type Asset,
   type AssetUpload,
@@ -24,6 +25,26 @@ import { detectImageType, SIGNATURE_BYTES } from "./domain/image-signature.js";
 export const UPLOAD_URL_TTL_SECONDS = 5 * 60;
 /** How long a link to view the slate in Launch Control works. */
 export const DOWNLOAD_URL_TTL_SECONDS = 5 * 60;
+
+/**
+ * Generous for copying and reading back 5 MB inside storage; the S3 client's
+ * own timeouts end any single call sooner.
+ */
+const COMPLETE_TRANSACTION_TIMEOUT_MS = 30_000;
+
+/**
+ * Where the browser uploads: a separate key from the one the slate is served
+ * from. The presigned URL stays usable for a few minutes, so whatever is at
+ * this key can change at any time; only a copy that the API made and then
+ * verified ever becomes the slate.
+ */
+export function uploadKeyFor(storageKey: string): string {
+  return `uploads/${storageKey}`;
+}
+
+type Completion =
+  | { readonly kind: "READY"; readonly changed: boolean }
+  | { readonly kind: "REJECTED"; readonly reason: string };
 
 const ASSET_SELECT = {
   id: true,
@@ -62,6 +83,7 @@ export class AssetsService {
     @Inject(PRISMA) private readonly prisma: PrismaClient,
     @Inject(CLOCK) private readonly clock: Clock,
     private readonly storage: ObjectStorage,
+    @InjectPinoLogger(AssetsService.name) private readonly logger: PinoLogger,
   ) {}
 
   async createHoldingSlateUpload(
@@ -87,7 +109,7 @@ export class AssetsService {
       });
     });
     const url = await this.storage.presignUpload(
-      asset.storageKey,
+      uploadKeyFor(asset.storageKey),
       input.contentType,
       input.sizeBytes,
       UPLOAD_URL_TTL_SECONDS,
@@ -107,50 +129,92 @@ export class AssetsService {
    * Verifies an upload and makes it the event's holding slate. Calling it
    * again for a slate that is already ready returns it unchanged.
    *
+   * In one transaction it locks the asset (so completions of one asset run
+   * one at a time), then the event (so an archived event refuses it, and a
+   * transition never sees a half-finished slate). It copies the upload to
+   * the final key, which no presigned URL can write, and checks that copy:
+   * what was verified is exactly what is served, even if the upload URL is
+   * used again afterwards. Files are deleted only after this request has
+   * itself committed the rejection.
+   *
+   * The transaction waits on storage while it holds the locks; the S3
+   * client's timeouts bound that wait.
+   *
    * @throws DomainError `UPLOAD_NOT_FOUND` (nothing uploaded yet; the asset
    * stays pending so the client can retry), `ASSET_REJECTED` (not the
-   * declared image, or too large; the file is deleted)
+   * declared image, or the wrong size), `EVENT_ARCHIVED`
    */
   async complete(actor: Actor, assetId: string): Promise<Asset> {
-    const asset = await this.findAsset(actor, assetId);
-    if (asset.status === "READY") {
-      return toAsset(asset);
-    }
-    if (asset.status === "REJECTED") {
-      throw new DomainError("ASSET_REJECTED");
-    }
-    // Storage is read before the transaction: no row lock is held while
-    // waiting on the network.
-    const problem = await this.verify(asset);
-    if (problem !== undefined) {
-      await this.reject(asset, problem);
-    }
-    return this.prisma.$transaction(async (tx) => {
-      await lockWritableEvent(tx, actor.workspaceId, asset.eventId);
-      const { count } = await tx.asset.updateMany({
-        where: { id: asset.id, status: "PENDING" },
-        data: { status: "READY", updatedAt: this.clock.now() },
-      });
-      if (count === 1) {
+    const { asset, completion } = await this.prisma.$transaction(
+      async (tx) => {
+        const locked = await this.lockAsset(tx, actor, assetId);
+        if (locked.status === "READY") {
+          return {
+            asset: locked,
+            completion: { kind: "READY", changed: false } as const,
+          };
+        }
+        if (locked.status === "REJECTED") {
+          throw new DomainError("ASSET_REJECTED");
+        }
+        await lockWritableEvent(tx, actor.workspaceId, locked.eventId);
+        const reason = await this.copyAndVerify(locked);
+        const now = this.clock.now();
+        if (reason !== undefined) {
+          await tx.asset.update({
+            where: { id: locked.id },
+            data: { status: "REJECTED", updatedAt: now },
+          });
+          return {
+            asset: locked,
+            completion: { kind: "REJECTED", reason } as const,
+          };
+        }
+        await tx.asset.update({
+          where: { id: locked.id },
+          data: { status: "READY", updatedAt: now },
+        });
         await recordAudit(tx, actor, {
           action: "asset.ready",
           targetType: "asset",
-          targetId: asset.id,
-          eventId: asset.eventId,
+          targetId: locked.id,
+          eventId: locked.eventId,
           after: {
-            kind: asset.kind,
-            contentType: asset.contentType,
-            sizeBytes: asset.sizeBytes,
+            kind: locked.kind,
+            contentType: locked.contentType,
+            sizeBytes: locked.sizeBytes,
           },
         });
-      }
-      return toAsset(
-        await tx.asset.findUniqueOrThrow({
-          where: { id: asset.id },
-          select: ASSET_SELECT,
-        }),
-      );
-    });
+        return {
+          asset: locked,
+          completion: { kind: "READY", changed: true } as const,
+        };
+      },
+      { timeout: COMPLETE_TRANSACTION_TIMEOUT_MS },
+    );
+    return this.finish(asset, completion);
+  }
+
+  /** Clean-up after the transaction committed, then the answer. */
+  private async finish(
+    asset: AssetRow,
+    completion: Completion,
+  ): Promise<Asset> {
+    if (completion.kind === "REJECTED") {
+      // Nothing may serve these files; the asset is already REJECTED.
+      await this.removeQuietly(asset.storageKey);
+      await this.removeQuietly(uploadKeyFor(asset.storageKey));
+      throw new DomainError("ASSET_REJECTED", { detail: completion.reason });
+    }
+    if (completion.changed) {
+      await this.removeQuietly(uploadKeyFor(asset.storageKey));
+    }
+    return toAsset(
+      await this.prisma.asset.findUniqueOrThrow({
+        where: { id: asset.id },
+        select: ASSET_SELECT,
+      }),
+    );
   }
 
   /** The most recently verified slate, with a short-lived link to view it. */
@@ -183,13 +247,20 @@ export class AssetsService {
     };
   }
 
-  /** @returns why the stored file is not acceptable, or `undefined` */
-  private async verify(asset: AssetRow): Promise<string | undefined> {
-    const stored = await this.storage.stat(asset.storageKey);
-    if (stored === undefined) {
+  /**
+   * Copies the upload to the final key and checks the copy.
+   *
+   * @returns why the file is not acceptable, or `undefined`
+   */
+  private async copyAndVerify(asset: AssetRow): Promise<string | undefined> {
+    const uploadKey = uploadKeyFor(asset.storageKey);
+    if ((await this.storage.stat(uploadKey)) === undefined) {
       throw new DomainError("UPLOAD_NOT_FOUND");
     }
+    await this.storage.copy(uploadKey, asset.storageKey);
+    const stored = await this.storage.stat(asset.storageKey);
     if (
+      stored === undefined ||
       stored.sizeBytes > HOLDING_SLATE_MAX_BYTES ||
       stored.sizeBytes !== asset.sizeBytes
     ) {
@@ -204,24 +275,36 @@ export class AssetsService {
     return undefined;
   }
 
-  /** Marks the asset rejected and deletes the file, which nothing may serve. */
-  private async reject(asset: AssetRow, reason: string): Promise<never> {
-    await this.prisma.asset.updateMany({
-      where: { id: asset.id, status: "PENDING" },
-      data: { status: "REJECTED", updatedAt: this.clock.now() },
-    });
-    await this.storage.remove(asset.storageKey);
-    throw new DomainError("ASSET_REJECTED", { detail: reason });
+  /**
+   * Deletes a file that must not be served. A failure is logged, not thrown:
+   * the asset's status already keeps the file from being used.
+   */
+  private async removeQuietly(key: string): Promise<void> {
+    try {
+      await this.storage.remove(key);
+    } catch (error) {
+      this.logger.warn({ err: error, key }, "Could not delete a stored file");
+    }
   }
 
-  private async findAsset(actor: Actor, assetId: string): Promise<AssetRow> {
-    const row = await this.prisma.asset.findFirst({
-      where: { id: assetId, event: { workspaceId: actor.workspaceId } },
-      select: ASSET_SELECT,
-    });
-    if (row === null) {
+  /** Locks an asset of the actor's workspace; another workspace's is `404`. */
+  private async lockAsset(
+    tx: Prisma.TransactionClient,
+    actor: Actor,
+    assetId: string,
+  ): Promise<AssetRow> {
+    const rows = await tx.$queryRaw<{ id: string }[]>`
+      SELECT asset.id
+      FROM assets AS asset
+      JOIN events AS event ON event.id = asset.event_id
+      WHERE asset.id = ${assetId}::uuid AND event.workspace_id = ${actor.workspaceId}::uuid
+      FOR UPDATE OF asset`;
+    if (rows.length === 0) {
       throw new DomainError("NOT_FOUND");
     }
-    return row;
+    return tx.asset.findUniqueOrThrow({
+      where: { id: assetId },
+      select: ASSET_SELECT,
+    });
   }
 }

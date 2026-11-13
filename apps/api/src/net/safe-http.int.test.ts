@@ -133,6 +133,31 @@ describe("SafeHttpClient (SSRF protection)", () => {
     stream.behaviour = "OK";
   });
 
+  it("counts a slow DNS answer against the deadline, and cancels it", async () => {
+    let aborted = false;
+    const hanging = new SafeHttpClient(
+      stream.clientOptions({
+        timeoutMs: 100,
+        resolve: (_hostname, signal) =>
+          new Promise((_resolve, reject) => {
+            signal.addEventListener("abort", () => {
+              aborted = true;
+              reject(new Error("cancelled"));
+            });
+          }),
+      }),
+    );
+
+    const started = performance.now();
+    expect(await failureOf(hanging.get(stream.url()))).toBe("TIMEOUT");
+    expect(await failureOf(hanging.assertFetchable(stream.url()))).toBe(
+      "TIMEOUT",
+    );
+    // Both gave up at their deadline, not when DNS finally answered.
+    expect(performance.now() - started).toBeLessThan(1_000);
+    expect(aborted).toBe(true);
+  });
+
   it("refuses to buffer more than 1 MB", async () => {
     stream.behaviour = "HUGE";
 

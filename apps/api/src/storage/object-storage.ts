@@ -1,4 +1,5 @@
 import {
+  CopyObjectCommand,
   CreateBucketCommand,
   DeleteObjectCommand,
   GetObjectCommand,
@@ -17,6 +18,10 @@ export interface StoredObject {
   readonly contentType: string | undefined;
 }
 
+/** No storage call may hold a request (or a database transaction) for long. */
+const STORAGE_CONNECT_TIMEOUT_MS = 3_000;
+const STORAGE_REQUEST_TIMEOUT_MS = 10_000;
+
 /** How long a browser may cache the answer to a CORS preflight. */
 const CORS_MAX_AGE_SECONDS = 600;
 
@@ -31,6 +36,10 @@ function createClient(
       credentials: config.storage.credentials,
     }),
     forcePathStyle: config.storage.forcePathStyle,
+    requestHandler: {
+      connectionTimeout: STORAGE_CONNECT_TIMEOUT_MS,
+      requestTimeout: STORAGE_REQUEST_TIMEOUT_MS,
+    },
     // By default the SDK adds a checksum of the (still empty) body to
     // presigned URLs, so every real upload would be refused as corrupt, and
     // asks for response checksums that presigned downloads cannot use.
@@ -116,6 +125,17 @@ export class ObjectStorage {
       }),
     );
     return (await object.Body?.transformToByteArray()) ?? new Uint8Array();
+  }
+
+  /** Copies an object inside the bucket, on the storage side. */
+  async copy(fromKey: string, toKey: string): Promise<void> {
+    await this.client.send(
+      new CopyObjectCommand({
+        Bucket: this.bucket,
+        CopySource: `${this.bucket}/${encodeURIComponent(fromKey).replaceAll("%2F", "/")}`,
+        Key: toKey,
+      }),
+    );
   }
 
   async remove(key: string): Promise<void> {
