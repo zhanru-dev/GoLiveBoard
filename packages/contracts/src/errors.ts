@@ -16,6 +16,7 @@ export const ErrorCode = z.enum([
   "ORIGIN_FORBIDDEN",
   "OWNER_REQUIRED",
   "MEMBERSHIP_EXISTS",
+  "WORKSPACE_CHANGED",
   "NOT_FOUND",
   "VERSION_CONFLICT",
   "IDEMPOTENCY_KEY_REUSED",
@@ -65,6 +66,10 @@ export const ERROR_DEFINITIONS = {
   MEMBERSHIP_EXISTS: {
     status: 409,
     title: "This person is already a member of the workspace",
+  },
+  WORKSPACE_CHANGED: {
+    status: 409,
+    title: "The session has switched to another workspace",
   },
   NOT_FOUND: { status: 404, title: "The resource was not found" },
   VERSION_CONFLICT: {

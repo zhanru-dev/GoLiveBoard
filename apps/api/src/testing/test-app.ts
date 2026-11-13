@@ -7,6 +7,7 @@ import { z } from "zod";
 
 import { AppModule } from "../app.module.js";
 import { APP_OPTIONS, configureApp } from "../app.setup.js";
+import { PasswordHasher } from "../auth/password-hasher.js";
 import {
   HEALTH_INDICATORS,
   type HealthIndicator,
@@ -27,6 +28,8 @@ export interface TestAppOptions {
   readonly clock?: Clock;
   /** Replaces SMTP; by default, email goes nowhere. */
   readonly mailer?: Mailer;
+  /** Replaces the password hasher, e.g. to pause a sign-in mid-way. */
+  readonly passwordHasher?: PasswordHasher;
 }
 
 class DiscardingMailer extends Mailer {
@@ -58,6 +61,9 @@ export async function createTestApp(
   builder
     .overrideProvider(Mailer)
     .useValue(options.mailer ?? new DiscardingMailer());
+  if (options.passwordHasher !== undefined) {
+    builder.overrideProvider(PasswordHasher).useValue(options.passwordHasher);
+  }
   if (options.healthIndicators !== undefined) {
     builder
       .overrideProvider(HEALTH_INDICATORS)

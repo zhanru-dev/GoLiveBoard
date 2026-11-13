@@ -1,5 +1,6 @@
 import { Module } from "@nestjs/common";
 
+import { PasswordHasherModule } from "../auth/password-hasher.js";
 import { DatabaseModule } from "../database/database.module.js";
 import { MailModule } from "../mail/mail.module.js";
 import { InvitationsService } from "./invitations.service.js";
@@ -11,7 +12,7 @@ import {
 import { WorkspaceService } from "./workspace.service.js";
 
 @Module({
-  imports: [DatabaseModule, MailModule],
+  imports: [DatabaseModule, MailModule, PasswordHasherModule],
   controllers: [WorkspaceController, TeamInvitationsController],
   providers: [WorkspaceService, MembersService, InvitationsService],
 })

@@ -23,6 +23,14 @@ import {
 import { readAccessCookie } from "./cookies.js";
 
 /**
+ * The workspace the client believes is active. The active workspace lives in
+ * the session, so a request sent just before a switch (or from a tab that has
+ * not noticed a switch made in another tab) would otherwise be answered with
+ * another workspace's data. With this header the API refuses instead.
+ */
+export const WORKSPACE_HEADER = "x-workspace-id";
+
+/**
  * Runs before every route that is not @Public(). The access token only names
  * a session; the session, the user and the membership are loaded fresh on
  * every request, so sign-out, removal and role changes apply at once
@@ -51,6 +59,13 @@ export class SessionGuard implements CanActivate {
       REQUIRED_ROLE,
       targets,
     );
+    const expectedWorkspace = request.get(WORKSPACE_HEADER);
+    if (
+      expectedWorkspace !== undefined &&
+      expectedWorkspace !== actor.workspaceId
+    ) {
+      throw new DomainError("WORKSPACE_CHANGED");
+    }
     if (requiredRole !== undefined && !hasRole(actor.role, requiredRole)) {
       throw new DomainError("FORBIDDEN");
     }

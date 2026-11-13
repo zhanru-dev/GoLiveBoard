@@ -7,12 +7,13 @@ import { RateLimitModule } from "../rate-limit/rate-limit.module.js";
 import { AuthController, MeController } from "./auth.controller.js";
 import { AuthService } from "./auth.service.js";
 import { MeService } from "./me.service.js";
+import { PasswordHasherModule } from "./password-hasher.js";
 import { PasswordResetService } from "./password-reset.service.js";
 import { OriginGuard } from "./origin.guard.js";
 import { SessionGuard } from "./session.guard.js";
 
 @Module({
-  imports: [DatabaseModule, MailModule, RateLimitModule],
+  imports: [DatabaseModule, MailModule, PasswordHasherModule, RateLimitModule],
   controllers: [AuthController, MeController],
   providers: [
     AuthService,

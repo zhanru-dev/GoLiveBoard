@@ -9,7 +9,16 @@ export const VALKEY_CLIENT = Symbol("VALKEY_CLIENT");
  * A command that has not answered by then fails, so a stalled Valkey cannot
  * hold a request; callers decide what failure means (rate limits fail open).
  */
-const COMMAND_TIMEOUT_MS = 500;
+export const COMMAND_TIMEOUT_MS = 500;
+/**
+ * A command that times out is only abandoned by the caller: it stays queued
+ * on the connection, and a frozen server would let the queue grow without
+ * bound, then run every stale command when it wakes up (the milestone 2
+ * review). If the socket receives nothing for this long while commands are
+ * waiting, it is destroyed instead: everything queued fails at once and the
+ * client reconnects, so at most this much traffic can pile up.
+ */
+export const SOCKET_TIMEOUT_MS = 1_000;
 /** Longest wait for a clean QUIT before the socket is simply closed. */
 const QUIT_TIMEOUT_MS = 1_000;
 
@@ -24,6 +33,7 @@ export function createValkeyClient(config: AppConfig): Redis {
     enableOfflineQueue: false,
     maxRetriesPerRequest: 1,
     commandTimeout: COMMAND_TIMEOUT_MS,
+    socketTimeout: SOCKET_TIMEOUT_MS,
   });
 }
 

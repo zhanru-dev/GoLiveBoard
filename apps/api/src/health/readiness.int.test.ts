@@ -5,21 +5,14 @@ import type { StartedValkeyContainer } from "@testcontainers/valkey";
 import { Redis } from "ioredis";
 import { Client } from "pg";
 import request from "supertest";
-import { getContainerRuntimeClient } from "testcontainers";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
-import { startPostgres, startValkey } from "../testing/containers.js";
+import {
+  pauseContainer,
+  startPostgres,
+  startValkey,
+} from "../testing/containers.js";
 import { createTestApp, LogCapture } from "../testing/test-app.js";
-
-/** Freezes a container's processes, as a hung server would be. */
-async function pauseContainer(id: string): Promise<() => Promise<void>> {
-  const runtime = await getContainerRuntimeClient();
-  const container = runtime.container.getById(id);
-  await container.pause();
-  return async () => {
-    await container.unpause();
-  };
-}
 
 /**
  * Readiness against real PostgreSQL and Valkey servers, including what happens

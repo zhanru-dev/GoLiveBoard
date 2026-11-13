@@ -9,6 +9,18 @@ export class ApiError extends Error {
   }
 }
 
+/**
+ * The session's active workspace is no longer the one this page shows (a
+ * switch in another tab, or a request that crossed a switch). The page must
+ * reload its data rather than show another workspace's under this one's name.
+ */
+export class WorkspaceChangedError extends Error {
+  constructor() {
+    super("The active workspace has changed");
+    this.name = "WorkspaceChangedError";
+  }
+}
+
 /** The session could not be restored; the user must sign in again. */
 export class SignedOutError extends Error {
   constructor() {
@@ -26,18 +38,29 @@ const NO_REFRESH = new Set([
   "/auth/sign-out",
 ]);
 
+/** Held by the tab that is refreshing, so other tabs wait for its cookies. */
+const REFRESH_LOCK = "opspilot:refresh-session";
+
 let refreshing: Promise<boolean> | undefined;
 
 /**
- * Exchanges the refresh cookie for a new session. Concurrent callers share one
- * request: several queries failing at once must not refresh several times.
+ * Exchanges the refresh cookie for a new session. Concurrent callers in this
+ * tab share one request, and tabs take turns through a Web Lock: a tab that
+ * waited then sends the cookie the first tab just received, instead of the
+ * one that tab used up. (The API also tolerates the overlap when locks are
+ * unavailable, by leaving the newer cookies alone.)
  */
 export function refreshSession(): Promise<boolean> {
-  refreshing ??= fetch(apiUrl("/auth/refresh"), {
-    method: "POST",
-    credentials: "same-origin",
-  })
-    .then((response) => response.ok)
+  const send = () =>
+    fetch(apiUrl("/auth/refresh"), {
+      method: "POST",
+      credentials: "same-origin",
+    }).then((response) => response.ok);
+  // Missing in some test environments and very old browsers.
+  const locks = navigator.locks as LockManager | undefined;
+  refreshing ??= (
+    locks === undefined ? send() : locks.request(REFRESH_LOCK, send)
+  )
     .catch(() => false)
     .finally(() => {
       refreshing = undefined;
@@ -50,6 +73,13 @@ interface RequestOptions<T> {
   readonly body?: unknown;
   /** Validates the response body; omit for `204` responses. */
   readonly schema?: z.ZodType<T>;
+  /**
+   * The workspace the page is showing. Sent as a precondition on every
+   * workspace route, so data from another workspace is never displayed.
+   */
+  readonly workspaceId?: string;
+  /** Cancels the request (TanStack Query passes one to every query). */
+  readonly signal?: AbortSignal;
 }
 
 /** Absolute URL on the page's own origin (also works in tests). */
@@ -57,12 +87,24 @@ function apiUrl(path: string): string {
   return new URL(`${API_BASE}${path}`, window.location.href).href;
 }
 
-async function send(path: string, method: string, body: unknown) {
+async function send(
+  path: string,
+  method: string,
+  options: RequestOptions<unknown>,
+) {
+  const headers: Record<string, string> = {};
+  if (options.body !== undefined) {
+    headers["Content-Type"] = "application/json";
+  }
+  if (options.workspaceId !== undefined) {
+    headers["X-Workspace-Id"] = options.workspaceId;
+  }
   return fetch(apiUrl(path), {
     method,
     credentials: "same-origin",
-    headers: body === undefined ? {} : { "Content-Type": "application/json" },
-    body: body === undefined ? undefined : JSON.stringify(body),
+    headers,
+    body: options.body === undefined ? undefined : JSON.stringify(options.body),
+    signal: options.signal,
   });
 }
 
@@ -92,18 +134,22 @@ export async function api<T = undefined>(
   options: RequestOptions<T> = {},
 ): Promise<T> {
   const method = options.method ?? "GET";
-  let response = await send(path, method, options.body);
+  let response = await send(path, method, options);
   if (response.status === 401 && !NO_REFRESH.has(path)) {
     if (!(await refreshSession())) {
       throw new SignedOutError();
     }
-    response = await send(path, method, options.body);
+    response = await send(path, method, options);
     if (response.status === 401) {
       throw new SignedOutError();
     }
   }
   if (!response.ok) {
-    throw await problemFrom(response);
+    const error = await problemFrom(response);
+    if (error.problem.code === "WORKSPACE_CHANGED") {
+      throw new WorkspaceChangedError();
+    }
+    throw error;
   }
   if (options.schema === undefined) {
     return undefined as T;

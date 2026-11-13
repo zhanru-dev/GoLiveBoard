@@ -8,7 +8,14 @@ export const ROLE_LABELS: Readonly<Record<Role, string>> = {
 
 export const ROLES: readonly Role[] = ["OWNER", "MANAGER", "ANALYST"];
 
+/**
+ * Query keys for the active workspace's data. They include the workspace, so
+ * one workspace's cached data can never be shown for another after a switch.
+ */
 export const teamKeys = {
-  members: ["workspace", "members"] as const,
-  invitations: ["workspace", "invitations"] as const,
+  all: ["workspace"] as const,
+  members: (workspaceId: string) =>
+    ["workspace", workspaceId, "members"] as const,
+  invitations: (workspaceId: string) =>
+    ["workspace", workspaceId, "invitations"] as const,
 };

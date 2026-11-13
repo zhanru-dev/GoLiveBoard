@@ -12,6 +12,7 @@ generator client {
   output              = "../src/generated/prisma"
   moduleFormat        = "esm"
   importFileExtension = "js"
+  previewFeatures     = ["partialIndexes"]
 }
 
 datasource db {
@@ -112,6 +113,9 @@ model TeamInvitation {
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   invitedBy User?     @relation(fields: [invitedById], references: [id], onDelete: SetNull)
 
+  /// At most one unanswered invitation per address and workspace, so only the
+  /// newest link can work (InvitationsService.create revokes the old one).
+  @@unique([workspaceId, email], map: "team_invitations_open_key", where: { acceptedAt: null, revokedAt: null })
   @@index([workspaceId])
   @@index([invitedById])
   @@map("team_invitations")

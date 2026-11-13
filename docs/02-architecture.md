@@ -280,7 +280,7 @@ apps/web/src/
 - **Server Components** load initial data on the server, forwarding the user's cookies to the API over the internal network. Pages render with data on first paint.
 - **Client Components** handle interaction: TanStack Query for data that changes, React Hook Form for forms, dedicated hooks for real-time connections.
 - **Every screen** has explicit loading, empty and error states, and is checked with axe.
-- **Session handling**: the `(app)` layout asks the API for `/me` on the server. The access token lasts 15 minutes and the refresh cookie is only sent to `/api/v1/auth`, so when the server finds no valid access token the browser renews the session itself and reloads; if that fails, the user signs in and returns to the same page.
+- **Session handling**: the `(app)` layout asks the API for `/me` on the server. The access token lasts 15 minutes and the refresh cookie is only sent to `/api/v1/auth`, so when the server finds no valid access token the browser renews the session itself and reloads; if that fails, the user signs in and returns to the same page. Renewals share one request per tab and take a Web Lock across tabs. Workspace data is cached under keys that include the workspace, every workspace request sends `X-Workspace-Id`, and a switch drops the whole client cache.
 - **Content Security Policy**: `src/proxy.ts` sets a policy with a fresh nonce per request (`script-src 'nonce-…' 'strict-dynamic'`), and Next.js adds the nonce to its own scripts. Pages are therefore rendered per request rather than prerendered.
 
 ## 9. Deployment topology

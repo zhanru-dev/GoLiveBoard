@@ -89,6 +89,34 @@ describe("database schema", () => {
     ).rejects.toSatisfy(isUniqueViolation);
   });
 
+  it("allows one unanswered invitation per address, and any number of answered ones", async () => {
+    const workspace = await prisma.workspace.create({ data: { name: "Acme" } });
+    const invitation = (tokenHash: string) => ({
+      workspaceId: workspace.id,
+      email: "grace@example.com",
+      role: "ANALYST" as const,
+      tokenHash,
+      expiresAt: new Date(Date.now() + 60_000),
+    });
+    const first = await prisma.teamInvitation.create({
+      data: invitation("first"),
+    });
+
+    await expect(
+      prisma.teamInvitation.create({
+        data: { ...invitation("second"), email: "GRACE@example.com" },
+      }),
+    ).rejects.toSatisfy(isUniqueViolation);
+
+    await prisma.teamInvitation.update({
+      where: { id: first.id },
+      data: { revokedAt: new Date() },
+    });
+    await expect(
+      prisma.teamInvitation.create({ data: invitation("third") }),
+    ).resolves.toBeDefined();
+  });
+
   it("removes memberships and sessions with their workspace", async () => {
     const user = await createUser();
     const workspace = await prisma.workspace.create({ data: { name: "Gone" } });

@@ -50,6 +50,41 @@ describe("rate limits", () => {
     });
   });
 
+  it("holds the limit against a burst of concurrent guesses", async () => {
+    const api = clientFromNewAddress();
+    const owner = await api.newOwner();
+
+    // Every attempt takes its slot before the password is checked, so the
+    // burst cannot all pass the check before any failure is counted.
+    const responses = await Promise.all(
+      Array.from({ length: 24 }, () =>
+        Promise.resolve(api.signIn(owner.email, "wrong password")),
+      ),
+    );
+
+    const statuses = responses.map((response) => response.status);
+    expect(statuses.filter((status) => status === 401)).toHaveLength(10);
+    expect(statuses.filter((status) => status === 429)).toHaveLength(14);
+    expect((await api.signIn(owner.email)).status).toBe(429);
+  });
+
+  it("does not count successful sign-ins against an address", async () => {
+    // Twelve colleagues, more than the limit, sign up elsewhere and then
+    // all sign in from the same office address.
+    const owners = [];
+    for (let index = 0; index < 12; index += 1) {
+      owners.push(await clientFromNewAddress().newOwner());
+    }
+    const office = clientFromNewAddress();
+
+    const statuses = [];
+    for (const owner of owners) {
+      statuses.push((await office.signIn(owner.email)).status);
+    }
+
+    expect(statuses.every((status) => status === 204)).toBe(true);
+  });
+
   it("clears an account's failures after a successful sign-in", async () => {
     const api = clientFromNewAddress();
     const owner = await api.newOwner();

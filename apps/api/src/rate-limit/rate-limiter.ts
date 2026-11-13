@@ -45,6 +45,13 @@ export const RATE_LIMITS = {
 
 const KEY_PREFIX = "opspilot:rate";
 
+/** Decrements a counter only if it still exists and is above zero. */
+const REFUND_SCRIPT = `
+if (tonumber(redis.call("GET", KEYS[1]) or "0") > 0) then
+  return redis.call("DECR", KEYS[1])
+end
+return 0`;
+
 /**
  * Fixed-window counters in Valkey, shared by every API process. If Valkey is
  * unreachable the limits are skipped (fail open) and the outage is logged:
@@ -71,17 +78,20 @@ export class RateLimiter {
     }
   }
 
-  /** Throws 429 if the key is already over its limit, without counting. */
-  async assertWithinLimit(rule: RateLimitRule, subject: string): Promise<void> {
-    const count = await this.read(rule, subject);
-    if (count !== undefined && count >= rule.limit) {
-      throw rateLimited(rule);
-    }
-  }
-
   /** Forgets the key, e.g. an account's failures after a successful sign-in. */
   async reset(rule: RateLimitRule, subject: string): Promise<void> {
     await this.run(() => this.valkey.del(keyFor(rule, subject)));
+  }
+
+  /**
+   * Gives back one event counted by consume, for an attempt that turned out
+   * not to count (a successful sign-in). A window that has already ended is
+   * left alone, so a refund never creates a key without an expiry.
+   */
+  async refund(rule: RateLimitRule, subject: string): Promise<void> {
+    await this.run(() =>
+      this.valkey.eval(REFUND_SCRIPT, 1, keyFor(rule, subject)),
+    );
   }
 
   private async increment(rule: RateLimitRule, subject: string) {
@@ -96,13 +106,6 @@ export class RateLimiter {
         .exec();
       const count = results?.[0]?.[1];
       return typeof count === "number" ? count : undefined;
-    });
-  }
-
-  private async read(rule: RateLimitRule, subject: string) {
-    return this.run(async () => {
-      const value = await this.valkey.get(keyFor(rule, subject));
-      return value === null ? 0 : Number(value);
     });
   }
 

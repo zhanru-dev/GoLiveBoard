@@ -239,7 +239,7 @@ describe("authentication", () => {
       expect((await me(next.access)).status).toBe(200);
     });
 
-    it("lets exactly one of two concurrent refreshes succeed, and keeps the session", async () => {
+    it("rotates once for two concurrent refreshes, and the loser leaves the winner's cookies alone", async () => {
       const session = await newSession();
 
       const responses = await Promise.all([
@@ -247,13 +247,34 @@ describe("authentication", () => {
         refresh(session.refresh),
       ]);
 
-      const statuses = responses.map((response) => response.status).sort();
-      expect(statuses).toEqual([204, 401]);
-      const winner = responses.find((response) => response.status === 204);
-      expect(winner).toBeDefined();
-      expect(
-        (await me(setCookieValues(winner as request.Response).access)).status,
-      ).toBe(200);
+      // Both succeed, but only one issues new cookies. The other sends no
+      // Set-Cookie at all: clearing the cookies would sign out the browser
+      // that just received new ones, whichever response arrives last.
+      expect(responses.map((response) => response.status)).toEqual([204, 204]);
+      const withCookies = responses.filter(
+        (response) => setCookies(response).size > 0,
+      );
+      const withoutCookies = responses.filter(
+        (response) => response.headers["set-cookie"] === undefined,
+      );
+      expect(withCookies).toHaveLength(1);
+      expect(withoutCookies).toHaveLength(1);
+      const next = setCookieValues(withCookies[0] as request.Response);
+      expect(next.access).not.toBe("");
+      expect((await me(next.access)).status).toBe(200);
+      expect((await refresh(next.refresh)).status).toBe(204);
+    });
+
+    it("leaves the cookies alone for a token rotated moments ago, but issues nothing", async () => {
+      const session = await newSession();
+      const rotated = setCookieValues(await refresh(session.refresh));
+      clock.advance(REFRESH_REUSE_GRACE_MS - 1);
+
+      const late = await refresh(session.refresh);
+
+      expect(late.status).toBe(204);
+      expect(late.headers["set-cookie"]).toBeUndefined();
+      expect((await me(rotated.access)).status).toBe(200);
     });
 
     it("revokes the whole session when an old refresh token comes back", async () => {

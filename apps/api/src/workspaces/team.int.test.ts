@@ -191,6 +191,46 @@ describe("workspace and team", () => {
       ).toBe("TOKEN_INVALID");
     });
 
+    it("leaves exactly one working link when an address is invited many times at once", async () => {
+      const owner = await api.newOwner();
+      const email = uniqueEmail();
+      const attempts = 8;
+
+      const responses = await Promise.all(
+        Array.from({ length: attempts }, (_, index) =>
+          Promise.resolve(
+            api.send(owner, "post", "/workspace/invitations", {
+              email,
+              role: index % 2 === 0 ? "OWNER" : "ANALYST",
+            }),
+          ),
+        ),
+      );
+
+      // Every request succeeds (they queue rather than fail), and only one
+      // of the links sent works.
+      expect(responses.map((response) => response.status)).toEqual(
+        Array.from({ length: attempts }, () => 201),
+      );
+      const tokens = mailer
+        .to(email)
+        .map((message) => tokenFromEmail(message.text));
+      expect(tokens).toHaveLength(attempts);
+      const previews = await Promise.all(
+        tokens.map((token) =>
+          Promise.resolve(api.post("/team-invitations/preview", { token })),
+        ),
+      );
+      expect(previews.filter((preview) => preview.status === 200)).toHaveLength(
+        1,
+      );
+      const open = z
+        .array(Invitation)
+        .parse((await api.get(owner, "/workspace/invitations")).body)
+        .filter((invitation) => invitation.email === email);
+      expect(open).toHaveLength(1);
+    });
+
     it("refuses to invite someone who is already a member", async () => {
       const owner = await api.newOwner();
 
@@ -430,6 +470,32 @@ describe("workspace and team", () => {
         workspaceId: target,
       });
       expect(refused.status).toBe(404);
+    });
+
+    it("refuses a request meant for the workspace the session has left", async () => {
+      const owner = await api.newOwner();
+      const existing = await api.newOwner("existing");
+      const { token } = await invite(owner, existing.email);
+      await api.post("/team-invitations/accept", { token });
+      const own = (await api.me(existing)).activeWorkspace.workspaceId;
+      const target = (await api.me(owner)).activeWorkspace.workspaceId;
+      await api.send(existing, "put", "/me/active-workspace", {
+        workspaceId: target,
+      });
+
+      // A page still showing the old workspace, or a request that crossed
+      // the switch, names the old workspace and gets nothing from the new one.
+      const stale = await api
+        .get(existing, "/workspace/members")
+        .set("X-Workspace-Id", own);
+      const current = await api
+        .get(existing, "/workspace/members")
+        .set("X-Workspace-Id", target);
+
+      expect(stale.status).toBe(409);
+      expect(problemCode(stale.body)).toBe("WORKSPACE_CHANGED");
+      expect(stale.body).not.toHaveProperty("0");
+      expect(current.status).toBe(200);
     });
   });
 

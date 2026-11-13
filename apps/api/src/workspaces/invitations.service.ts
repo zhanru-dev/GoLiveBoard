@@ -9,7 +9,7 @@ import { InjectPinoLogger, PinoLogger } from "nestjs-pino";
 
 import type { Actor } from "../auth/actor.js";
 import { invitationEmail } from "../auth/emails.js";
-import { hashPassword } from "../auth/password-hasher.js";
+import { PasswordHasher } from "../auth/password-hasher.js";
 import { generateToken, hashToken } from "../auth/tokens.js";
 import { APP_CONFIG, type AppConfig } from "../config/app-config.js";
 import { PRISMA } from "../database/prisma.js";
@@ -28,6 +28,7 @@ export class InvitationsService {
     @Inject(CLOCK) private readonly clock: Clock,
     @Inject(APP_CONFIG) private readonly config: AppConfig,
     private readonly mailer: Mailer,
+    private readonly passwords: PasswordHasher,
     @InjectPinoLogger(InvitationsService.name)
     private readonly logger: PinoLogger,
   ) {}
@@ -49,7 +50,10 @@ export class InvitationsService {
 
   /**
    * Sends a new link. A previous open invitation for the same address is
-   * revoked, so only the newest link works.
+   * revoked, so only the newest link works. Two of these for the same address
+   * at once are serialised by a transaction-scoped advisory lock on the
+   * workspace and address: the second waits, then revokes the first one's
+   * invitation. A partial unique index backs this up in the database.
    */
   async create(
     actor: Actor,
@@ -65,8 +69,16 @@ export class InvitationsService {
     const now = this.clock.now();
     const token = generateToken();
     const invitation = await this.prisma.$transaction(async (tx) => {
+      const lockKey = `team-invitation:${actor.workspaceId}:${input.email.toLowerCase()}`;
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${lockKey}, 0))`;
+      // Expired ones too: the unique index covers every unanswered invitation.
       await tx.teamInvitation.updateMany({
-        where: { ...this.openWhere(actor.workspaceId), email: input.email },
+        where: {
+          workspaceId: actor.workspaceId,
+          email: input.email,
+          acceptedAt: null,
+          revokedAt: null,
+        },
         data: { revokedAt: now },
       });
       return tx.teamInvitation.create({
@@ -143,7 +155,7 @@ export class InvitationsService {
       where: { email: invitation.email },
       select: { id: true },
     });
-    const account = existing ?? (await newAccountFrom(input));
+    const account = existing ?? (await this.newAccountFrom(input));
     const now = this.clock.now();
 
     await this.prisma.$transaction(async (tx) => {
@@ -182,6 +194,21 @@ export class InvitationsService {
     });
   }
 
+  /** A new invitee must choose a name and a password. */
+  private async newAccountFrom(
+    input: AcceptInvitationRequest,
+  ): Promise<{ name: string; passwordHash: string }> {
+    if (input.name === undefined || input.password === undefined) {
+      throw new DomainError("VALIDATION_FAILED", {
+        detail: "Choose a name and a password to create your account.",
+      });
+    }
+    return {
+      name: input.name,
+      passwordHash: await this.passwords.hash(input.password),
+    };
+  }
+
   private openWhere(workspaceId: string) {
     return {
       workspaceId,
@@ -208,16 +235,4 @@ export class InvitationsService {
     }
     return invitation;
   }
-}
-
-/** A new invitee must choose a name and a password. */
-async function newAccountFrom(
-  input: AcceptInvitationRequest,
-): Promise<{ name: string; passwordHash: string }> {
-  if (input.name === undefined || input.password === undefined) {
-    throw new DomainError("VALIDATION_FAILED", {
-      detail: "Choose a name and a password to create your account.",
-    });
-  }
-  return { name: input.name, passwordHash: await hashPassword(input.password) };
 }

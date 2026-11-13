@@ -30,11 +30,14 @@ import {
 import { api } from "@/lib/api";
 import { applyApiError } from "@/lib/form-errors";
 
+import { useMe } from "../shell/me-context";
+
 import { ROLE_LABELS, ROLES, teamKeys } from "./roles";
 
 const dateFormat = new Intl.DateTimeFormat("en-GB", { dateStyle: "medium" });
 
 export function InviteForm() {
+  const { workspaceId } = useMe().activeWorkspace;
   const queryClient = useQueryClient();
   const [formError, setFormError] = useState("");
   const {
@@ -56,10 +59,13 @@ export function InviteForm() {
         method: "POST",
         body: values,
         schema: Invitation,
+        workspaceId,
       });
       toast.success(`Invitation sent to ${values.email}`);
       reset();
-      await queryClient.invalidateQueries({ queryKey: teamKeys.invitations });
+      await queryClient.invalidateQueries({
+        queryKey: teamKeys.invitations(workspaceId),
+      });
     } catch (error) {
       setFormError(applyApiError(error, setError, ["email", "role"]));
     }
@@ -118,18 +124,25 @@ export function InviteForm() {
 }
 
 export function PendingInvitations() {
+  const { workspaceId } = useMe().activeWorkspace;
   const queryClient = useQueryClient();
   const invitations = useQuery({
-    queryKey: teamKeys.invitations,
-    queryFn: () =>
-      api("/workspace/invitations", { schema: z.array(Invitation) }),
+    queryKey: teamKeys.invitations(workspaceId),
+    queryFn: ({ signal }) =>
+      api("/workspace/invitations", {
+        schema: z.array(Invitation),
+        workspaceId,
+        signal,
+      }),
   });
   const revoke = useMutation({
     mutationFn: (id: string) =>
-      api(`/workspace/invitations/${id}`, { method: "DELETE" }),
+      api(`/workspace/invitations/${id}`, { method: "DELETE", workspaceId }),
     onSuccess: () => toast.success("Invitation revoked"),
     onSettled: () =>
-      queryClient.invalidateQueries({ queryKey: teamKeys.invitations }),
+      queryClient.invalidateQueries({
+        queryKey: teamKeys.invitations(workspaceId),
+      }),
   });
 
   if (invitations.isPending) {

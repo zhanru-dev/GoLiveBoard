@@ -20,7 +20,7 @@ import {
 import type { Request, Response } from "express";
 
 import { type Actor, CurrentActor, Public } from "./actor.js";
-import { AuthService } from "./auth.service.js";
+import { AuthService, type RefreshResult } from "./auth.service.js";
 import {
   clearSessionCookies,
   readRefreshCookie,
@@ -74,11 +74,18 @@ export class AuthController {
     if (refreshToken === undefined) {
       throw new DomainError("UNAUTHENTICATED");
     }
+    let result: RefreshResult;
     try {
-      setSessionCookies(response, await this.auth.refresh(refreshToken));
+      result = await this.auth.refresh(refreshToken);
     } catch (error) {
       clearSessionCookies(response);
       throw error;
+    }
+    // A concurrent request already rotated this token. Its response carries
+    // the new cookies; answering this one with no cookies at all leaves them
+    // in place, where clearing them here would sign the browser out.
+    if (result.kind === "rotated") {
+      setSessionCookies(response, result.tokens);
     }
   }
 

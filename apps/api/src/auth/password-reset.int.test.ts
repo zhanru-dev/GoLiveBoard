@@ -8,7 +8,11 @@ import {
   uniqueEmail,
 } from "../testing/api-client.js";
 import { createTestDatabase, type TestDatabase } from "../testing/database.js";
-import { CapturingMailer, TestClock } from "../testing/fakes.js";
+import {
+  CapturingMailer,
+  PausingPasswordHasher,
+  TestClock,
+} from "../testing/fakes.js";
 import { createTestApp } from "../testing/test-app.js";
 import { PASSWORD_RESET_TTL_MS } from "./password-reset.service.js";
 
@@ -20,6 +24,7 @@ describe("password reset (FR-AUTH-4)", () => {
   let api: ApiClient;
   const mailer = new CapturingMailer();
   const clock = new TestClock();
+  const passwords = new PausingPasswordHasher();
 
   beforeAll(async () => {
     database = await createTestDatabase();
@@ -27,6 +32,7 @@ describe("password reset (FR-AUTH-4)", () => {
       env: { DATABASE_URL: database.url },
       mailer,
       clock,
+      passwordHasher: passwords,
     });
     api = new ApiClient(app);
   });
@@ -68,6 +74,31 @@ describe("password reset (FR-AUTH-4)", () => {
     expect((await api.get(session, "/me")).status).toBe(401);
     expect((await api.signIn(session.email)).status).toBe(401);
     expect((await api.signIn(session.email, NEW_PASSWORD)).status).toBe(204);
+  });
+
+  it("ends a sign-in that checked the old password while the reset happened", async () => {
+    const session = await api.newOwner();
+    const token = await resetToken(session.email);
+
+    // The sign-in checks the old password, then stops before its session
+    // exists; the reset completes in that gap.
+    const pause = passwords.pauseNextVerify();
+    const signingIn = Promise.resolve(api.signIn(session.email));
+    await pause.reached;
+    expect((await confirm(token)).status).toBe(204);
+    pause.release();
+    const signIn = await signingIn;
+
+    expect(signIn.status).toBe(401);
+    expect(ProblemDetails.parse(signIn.body).code).toBe("CREDENTIALS_INVALID");
+    expect(signIn.headers["set-cookie"]).toBeUndefined();
+    const [sessions] = await database.query<{ active: number }>(
+      `SELECT count(*)::int AS active FROM sessions
+       JOIN users ON users.id = sessions.user_id
+       WHERE users.email = $1 AND sessions.revoked_at IS NULL`,
+      [session.email],
+    );
+    expect(sessions?.active).toBe(0);
   });
 
   it("works only once", async () => {

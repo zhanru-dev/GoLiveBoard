@@ -6,6 +6,7 @@ import {
   type StartedValkeyContainer,
   ValkeyContainer,
 } from "@testcontainers/valkey";
+import { getContainerRuntimeClient } from "testcontainers";
 
 /**
  * The images integration tests run against. They must match
@@ -23,4 +24,18 @@ export function startPostgres(): Promise<StartedPostgreSqlContainer> {
 /** Starts a throwaway Valkey server for one test file. */
 export function startValkey(): Promise<StartedValkeyContainer> {
   return new ValkeyContainer(VALKEY_IMAGE).start();
+}
+
+/**
+ * Freezes a container's processes, as a hung server would be: connections
+ * are still accepted by the kernel, but nothing ever answers. Returns the
+ * function that thaws it.
+ */
+export async function pauseContainer(id: string): Promise<() => Promise<void>> {
+  const runtime = await getContainerRuntimeClient();
+  const container = runtime.container.getById(id);
+  await container.pause();
+  return async () => {
+    await container.unpause();
+  };
 }

@@ -45,10 +45,12 @@ export async function diffDatabaseAgainstSchema(
 
 export interface TestDatabase {
   readonly url: string;
+  /** Runs one query, for tests that assert on what was stored. */
+  query<Row extends object>(text: string, values?: unknown[]): Promise<Row[]>;
   drop(): Promise<void>;
 }
 
-async function withAdminClient<T>(
+async function withClient<T>(
   serverUrl: string,
   work: (client: Client) => Promise<T>,
 ): Promise<T> {
@@ -72,15 +74,20 @@ export async function createTestDatabase(): Promise<TestDatabase> {
   const serverUrl = new URL(templateUrl);
   serverUrl.pathname = "/postgres";
 
-  await withAdminClient(serverUrl.href, (client) =>
+  await withClient(serverUrl.href, (client) =>
     client.query(`CREATE DATABASE "${name}" TEMPLATE "${templateName}"`),
   );
   const url = new URL(templateUrl);
   url.pathname = `/${name}`;
   return {
     url: url.href,
+    query: <Row extends object>(text: string, values?: unknown[]) =>
+      withClient(url.href, async (client) => {
+        const result = await client.query<Row>(text, values);
+        return result.rows;
+      }),
     drop: () =>
-      withAdminClient(serverUrl.href, async (client) => {
+      withClient(serverUrl.href, async (client) => {
         await client.query(`DROP DATABASE IF EXISTS "${name}" WITH (FORCE)`);
       }),
   };

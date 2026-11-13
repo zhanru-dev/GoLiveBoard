@@ -1,3 +1,4 @@
+import { Injectable, Module } from "@nestjs/common";
 import { hash, verify } from "@node-rs/argon2";
 
 /**
@@ -12,26 +13,35 @@ const ARGON2_OPTIONS = {
   parallelism: 1,
 } as const;
 
-export function hashPassword(password: string): Promise<string> {
-  return hash(password, ARGON2_OPTIONS);
-}
-
-export function verifyPassword(
-  passwordHash: string,
-  password: string,
-): Promise<boolean> {
-  return verify(passwordHash, password);
-}
-
 /**
- * Verified against when the email address is unknown, so a sign-in for an
- * account that does not exist takes as long as one with a wrong password and
- * response timing does not reveal which accounts exist.
+ * Hashes and checks passwords. A provider rather than plain functions, so a
+ * test can pause a sign-in between checking the password and starting the
+ * session, which is how the race with a password reset is proven closed.
  */
-let dummyHash: Promise<string> | undefined;
+@Injectable()
+export class PasswordHasher {
+  /**
+   * Verified against when the email address is unknown, so a sign-in for an
+   * account that does not exist takes as long as one with a wrong password
+   * and response timing does not reveal which accounts exist.
+   */
+  private dummyHash: Promise<string> | undefined;
 
-export async function verifyAgainstDummy(password: string): Promise<false> {
-  dummyHash ??= hashPassword("not-a-real-password-just-for-timing");
-  await verifyPassword(await dummyHash, password);
-  return false;
+  hash(password: string): Promise<string> {
+    return hash(password, ARGON2_OPTIONS);
+  }
+
+  verify(passwordHash: string, password: string): Promise<boolean> {
+    return verify(passwordHash, password);
+  }
+
+  async verifyAgainstDummy(password: string): Promise<false> {
+    this.dummyHash ??= this.hash("not-a-real-password-just-for-timing");
+    await this.verify(await this.dummyHash, password);
+    return false;
+  }
 }
+
+/** Shared by the auth and workspace modules, so both use one instance. */
+@Module({ providers: [PasswordHasher], exports: [PasswordHasher] })
+export class PasswordHasherModule {}

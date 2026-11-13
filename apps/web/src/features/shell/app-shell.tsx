@@ -1,10 +1,11 @@
 "use client";
 
 import type { Me } from "@opspilot/contracts";
+import { useQueryClient } from "@tanstack/react-query";
 import { ChevronsUpDown } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import type { ReactNode } from "react";
+import { type ReactNode, useState, useTransition } from "react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -25,16 +26,32 @@ export function AppShell({
   children,
 }: Readonly<{ me: Me; children: ReactNode }>) {
   const router = useRouter();
+  const queryClient = useQueryClient();
+  const [switching, setSwitching] = useState(false);
+  const [refreshing, startRefresh] = useTransition();
 
+  /**
+   * The page's content is hidden while switching, so nothing can fetch for
+   * the old workspace in the meantime; requests already in flight are
+   * cancelled, and every cached answer is dropped once the session has
+   * moved. The server then renders the page for the new workspace.
+   */
   async function switchTo(workspaceId: string) {
+    setSwitching(true);
     try {
+      await queryClient.cancelQueries();
       await api("/me/active-workspace", {
         method: "PUT",
         body: { workspaceId },
       });
-      router.refresh();
+      queryClient.clear();
+      startRefresh(() => {
+        router.refresh();
+      });
     } catch {
       toast.error("Could not switch workspace. Please try again.");
+    } finally {
+      setSwitching(false);
     }
   }
 
@@ -94,7 +111,17 @@ export function AppShell({
           </div>
         </div>
       </header>
-      <main className="mx-auto max-w-5xl px-6 py-8">{children}</main>
+      {/* Keyed by workspace: nothing from the previous one survives a switch. */}
+      <main
+        key={me.activeWorkspace.workspaceId}
+        className="mx-auto max-w-5xl px-6 py-8"
+      >
+        {switching || refreshing ? (
+          <p role="status">Switching workspace…</p>
+        ) : (
+          children
+        )}
+      </main>
     </MeProvider>
   );
 }

@@ -13,7 +13,7 @@ import { RATE_LIMITS, RateLimiter } from "../rate-limit/rate-limiter.js";
 import { CLOCK, type Clock } from "../shared/clock.js";
 import { DomainError } from "../shared/domain/domain-error.js";
 import { passwordResetEmail } from "./emails.js";
-import { hashPassword } from "./password-hasher.js";
+import { PasswordHasher } from "./password-hasher.js";
 import { generateToken, hashToken } from "./tokens.js";
 
 /** FR-AUTH-4: a reset link works once, within 30 minutes. */
@@ -27,6 +27,7 @@ export class PasswordResetService {
     @Inject(APP_CONFIG) private readonly config: AppConfig,
     private readonly mailer: Mailer,
     private readonly rateLimiter: RateLimiter,
+    private readonly passwords: PasswordHasher,
     @InjectPinoLogger(PasswordResetService.name)
     private readonly logger: PinoLogger,
   ) {}
@@ -74,11 +75,13 @@ export class PasswordResetService {
   /**
    * Sets the new password and signs the user out everywhere. Marking the token
    * used is the first, conditional step, so a link cannot be used twice even
-   * by two requests at the same moment.
+   * by two requests at the same moment. Updating the user row waits for any
+   * sign-in that is starting a session (AuthService.startSession), so the
+   * revocation below also catches that session.
    */
   async confirm(input: PasswordResetConfirmRequest): Promise<void> {
     const now = this.clock.now();
-    const passwordHash = await hashPassword(input.password);
+    const passwordHash = await this.passwords.hash(input.password);
     await this.prisma.$transaction(async (tx) => {
       const tokenHash = hashToken(input.token);
       const { count } = await tx.passwordResetToken.updateMany({

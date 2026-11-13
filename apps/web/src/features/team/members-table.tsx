@@ -45,13 +45,19 @@ const errorMessage = (error: unknown) =>
 export function MembersTable() {
   const me = useMe();
   const isOwner = me.activeWorkspace.role === "OWNER";
+  const { workspaceId } = me.activeWorkspace;
   const queryClient = useQueryClient();
   const members = useQuery({
-    queryKey: teamKeys.members,
-    queryFn: () => api("/workspace/members", { schema: z.array(Member) }),
+    queryKey: teamKeys.members(workspaceId),
+    queryFn: ({ signal }) =>
+      api("/workspace/members", {
+        schema: z.array(Member),
+        workspaceId,
+        signal,
+      }),
   });
   const refresh = () =>
-    queryClient.invalidateQueries({ queryKey: teamKeys.members });
+    queryClient.invalidateQueries({ queryKey: teamKeys.members(workspaceId) });
 
   const changeRole = useMutation({
     mutationFn: ({
@@ -64,6 +70,7 @@ export function MembersTable() {
       api(`/workspace/members/${membershipId}`, {
         method: "PATCH",
         body: { role },
+        workspaceId,
       }),
     onSuccess: () => toast.success("Role changed"),
     onError: (error) => toast.error(errorMessage(error)),
@@ -71,7 +78,10 @@ export function MembersTable() {
   });
   const remove = useMutation({
     mutationFn: (membershipId: string) =>
-      api(`/workspace/members/${membershipId}`, { method: "DELETE" }),
+      api(`/workspace/members/${membershipId}`, {
+        method: "DELETE",
+        workspaceId,
+      }),
     onSuccess: () => toast.success("Member removed"),
     onError: (error) => toast.error(errorMessage(error)),
     onSettled: refresh,
