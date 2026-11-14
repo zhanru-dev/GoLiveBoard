@@ -16,7 +16,11 @@ import {
   tokenFromEmail,
   uniqueEmail,
 } from "../testing/api-client.js";
-import { createTestDatabase, type TestDatabase } from "../testing/database.js";
+import {
+  blockWrites,
+  createTestDatabase,
+  type TestDatabase,
+} from "../testing/database.js";
 import { CapturingMailer, TestClock } from "../testing/fakes.js";
 import { createTestApp } from "../testing/test-app.js";
 import type { Actor } from "../auth/actor.js";
@@ -195,8 +199,9 @@ describe("workspace and team", () => {
       const owner = await api.newOwner();
       const email = uniqueEmail();
       const attempts = 8;
+      const block = await blockWrites(database.url, "team_invitations");
 
-      const responses = await Promise.all(
+      const pending = Promise.all(
         Array.from({ length: attempts }, (_, index) =>
           Promise.resolve(
             api.send(owner, "post", "/workspace/invitations", {
@@ -206,6 +211,10 @@ describe("workspace and team", () => {
           ),
         ),
       );
+      // One holds the address's lock at its write; the rest wait for it.
+      await block.waitForWaiters(attempts);
+      await block.release();
+      const responses = await pending;
 
       // Every request succeeds (they queue rather than fail), and only one
       // of the links sent works.
@@ -325,23 +334,30 @@ describe("workspace and team", () => {
       const firstId =
         members.find((m) => m.email === owner.email)?.membershipId ?? "";
 
-      const results = await Promise.all([
-        api.send(owner, "patch", `/workspace/members/${secondId}`, {
-          role: "MANAGER",
-        }),
-        api.send(secondOwner, "patch", `/workspace/members/${firstId}`, {
-          role: "MANAGER",
-        }),
-      ]);
+      const block = await blockWrites(database.url, "memberships");
 
-      // One wins. The other loses either at the role check (the winner's change
-      // committed before its request started: 403) or at the database lock
-      // (both started as Owners: 409). Either way one Owner remains.
-      const statuses = results.map((response) => response.status);
-      expect(statuses.filter((status) => status === 204)).toHaveLength(1);
-      expect(
-        statuses.filter((status) => status === 403 || status === 409),
-      ).toHaveLength(1);
+      const pending = Promise.all([
+        Promise.resolve(
+          api.send(owner, "patch", `/workspace/members/${secondId}`, {
+            role: "MANAGER",
+          }),
+        ),
+        Promise.resolve(
+          api.send(secondOwner, "patch", `/workspace/members/${firstId}`, {
+            role: "MANAGER",
+          }),
+        ),
+      ]);
+      // Both passed their role checks as Owners. One holds the Owner rows
+      // at its UPDATE; the other waits for those rows.
+      await block.waitForWaiters(2);
+      await block.release();
+      const results = await pending;
+
+      // The second sees it would remove the last Owner.
+      expect(results.map((response) => response.status).sort()).toEqual([
+        204, 409,
+      ]);
       const after = z
         .array(Member)
         .parse((await api.get(owner, "/workspace/members")).body);
@@ -369,9 +385,11 @@ describe("workspace and team", () => {
       });
       const service = app.get(MembersService);
 
-      // Both calls start as Owners at the same moment, as two requests that
-      // passed their role checks before either change committed.
-      const outcomes = await Promise.allSettled([
+      const block = await blockWrites(database.url, "memberships");
+
+      // Both calls start as Owners, as two requests that passed their role
+      // checks before either change committed, and overlap at the lock.
+      const pending = Promise.allSettled([
         service.changeRole(
           actorFor(owner, members[0]?.userId ?? ""),
           secondId,
@@ -383,6 +401,9 @@ describe("workspace and team", () => {
           "MANAGER",
         ),
       ]);
+      await block.waitForWaiters(2);
+      await block.release();
+      const outcomes = await pending;
 
       expect(
         outcomes.filter((outcome) => outcome.status === "fulfilled"),

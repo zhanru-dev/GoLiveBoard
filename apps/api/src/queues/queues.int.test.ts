@@ -8,11 +8,22 @@ import type { AppConfig } from "../config/app-config.js";
 import { pauseContainer, startValkey } from "../testing/containers.js";
 import { producerConnection } from "./queues.js";
 
+interface QueuedCommand {
+  readonly command: { readonly name: string };
+}
+
 /** What ioredis keeps for commands that have not been answered yet. */
 interface PendingCommands {
-  readonly commandQueue: { readonly length: number };
-  readonly offlineQueue: { readonly length: number };
+  readonly commandQueue: { toArray(): QueuedCommand[] };
+  readonly offlineQueue: { toArray(): QueuedCommand[] };
 }
+
+/**
+ * BullMQ adds a job with a Lua script. Reconnecting also queues handshake
+ * commands (`hello`, `client`), a few at a time however long Valkey stays
+ * frozen; only the scripts can pile up, so only they are counted.
+ */
+const PUBLISH_COMMANDS = new Set(["eval", "evalsha"]);
 
 const PUBLISH_ATTEMPTS = 12;
 
@@ -44,7 +55,9 @@ describe("producer connection while Valkey is frozen", () => {
       const client = (await queue.getBackend()
         .client) as unknown as PendingCommands;
       const pending = () =>
-        client.commandQueue.length + client.offlineQueue.length;
+        [...client.commandQueue.toArray(), ...client.offlineQueue.toArray()]
+          .map((queued) => queued.command.name)
+          .filter((name) => PUBLISH_COMMANDS.has(name)).length;
 
       const resume = await pauseContainer(valkey.getId());
       const seen: number[] = [];

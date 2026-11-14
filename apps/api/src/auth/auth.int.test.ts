@@ -5,7 +5,11 @@ import request from "supertest";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { cookieHeader, setCookies } from "../testing/cookies.js";
-import { createTestDatabase, type TestDatabase } from "../testing/database.js";
+import {
+  blockWrites,
+  createTestDatabase,
+  type TestDatabase,
+} from "../testing/database.js";
 import { CapturingMailer, TestClock } from "../testing/fakes.js";
 import { createTestApp, TEST_ORIGIN } from "../testing/test-app.js";
 import { ACCESS_TOKEN_TTL_SECONDS } from "./access-token.js";
@@ -241,11 +245,16 @@ describe("authentication", () => {
 
     it("rotates once for two concurrent refreshes, and the loser leaves the winner's cookies alone", async () => {
       const session = await newSession();
+      const block = await blockWrites(database.url, "sessions");
 
-      const responses = await Promise.all([
-        refresh(session.refresh),
-        refresh(session.refresh),
+      // Both hold at the rotating UPDATE, so they really overlap.
+      const pending = Promise.all([
+        Promise.resolve(refresh(session.refresh)),
+        Promise.resolve(refresh(session.refresh)),
       ]);
+      await block.waitForWaiters(2);
+      await block.release();
+      const responses = await pending;
 
       // Both succeed, but only one issues new cookies. The other sends no
       // Set-Cookie at all: clearing the cookies would sign out the browser
