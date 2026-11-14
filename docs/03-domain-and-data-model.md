@@ -203,9 +203,10 @@ erDiagram
 erDiagram
   Event ||--o{ Attendee : registers
   Event ||--o{ AttendeeInvitation : invites
-  Attendee ||--o{ VerificationToken : verifies_with
+  Attendee ||--o{ AttendeeVerificationToken : verifies_with
   Attendee ||--o{ AttendeeSession : watches_with
   Attendee ||--o{ ReminderDelivery : receives
+  Attendee ||--o{ DemoInboxMessage : receives_in_demo
   Attendee ||--o{ AttendanceMinute : attends
   Event ||--o{ ChatMessage : has
   Event ||--o{ Question : has
@@ -216,11 +217,46 @@ erDiagram
   Attendee {
     uuid id PK
     uuid eventId FK
-    citext email
+    citext email "unique per event"
     text name
     enum status "PENDING | VERIFIED | REVOKED | ERASED"
     text consentNoticeVersion
+    timestamptz consentedAt
     boolean remindersOptIn
+    timestamptz verifiedAt
+    timestamptz revokedAt
+    timestamptz erasedAt
+    text demoInboxKeyHash "demo workspace only"
+  }
+  AttendeeInvitation {
+    uuid id PK
+    uuid eventId FK
+    citext email "one live per event"
+    timestamptz revokedAt
+  }
+  AttendeeVerificationToken {
+    uuid id PK
+    uuid attendeeId FK
+    text tokenHash "SHA-256"
+    timestamptz expiresAt "15 minutes"
+    timestamptz usedAt
+  }
+  AttendeeSession {
+    uuid id PK
+    uuid attendeeId FK
+    text tokenHash "SHA-256"
+    timestamptz expiresAt
+  }
+  ReminderDelivery {
+    uuid attendeeId PK
+    enum kind PK "DAY_BEFORE | HOUR_BEFORE"
+  }
+  DemoInboxMessage {
+    uuid id PK
+    uuid attendeeId FK
+    text inboxKeyHash
+    text subject
+    text text
   }
   AttendanceMinute {
     uuid eventId PK

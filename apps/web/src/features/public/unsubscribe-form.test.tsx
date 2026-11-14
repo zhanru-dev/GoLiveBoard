@@ -26,6 +26,8 @@ describe("UnsubscribeForm (FR-AD-5)", () => {
       ),
     );
     renderScreen(<UnsubscribeForm />);
+    // Opening the link alone sends nothing, even after a while.
+    await new Promise((resolve) => setTimeout(resolve, 100));
     expect(bodies).toEqual([]);
 
     await userEvent

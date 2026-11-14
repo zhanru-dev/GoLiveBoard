@@ -33,6 +33,8 @@ describe("VerifyAttendee (FR-AD-3)", () => {
     await vi.waitFor(() => {
       expect(router.replace).toHaveBeenCalledWith(`/e/${SLUG}`);
     });
+    // Long enough for a second request to arrive, had one been sent.
+    await new Promise((resolve) => setTimeout(resolve, 100));
     expect(tokens).toEqual([{ token: "abc123" }]);
   });
 

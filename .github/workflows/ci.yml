@@ -167,6 +167,8 @@ jobs:
         with:
           name: lighthouse
           path: .lighthouseci
+          # A dot directory: upload-artifact skips those unless told.
+          include-hidden-files: true
           if-no-files-found: ignore
           retention-days: 30
       - name: Show the stack's logs after a failure
