@@ -1,0 +1,6 @@
+# Findings that are not secrets. Each line is a gitleaks fingerprint
+# (commit:file:rule:line); the history cannot be rewritten once pushed.
+#
+# A constant in a unit test (cb56b47), a made-up HMAC key for the test; the
+# test now generates its keys at run time.
+cb56b4707b0d7970a856c799422d167aaaf9f423:apps/api/src/attendees/unsubscribe-token.test.ts:generic-api-key:8

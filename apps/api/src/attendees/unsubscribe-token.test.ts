@@ -1,3 +1,5 @@
+import { randomBytes } from "node:crypto";
+
 import { describe, expect, it } from "vitest";
 
 import {
@@ -5,7 +7,9 @@ import {
   unsubscribeToken,
 } from "./unsubscribe-token.js";
 
-const SECRET = "a-test-secret-of-sufficient-length-1234";
+// Made at run time: a literal would look like a leaked key to secret scanning.
+const SECRET = randomBytes(32).toString("base64url");
+const OTHER_SECRET = randomBytes(32).toString("base64url");
 const ATTENDEE = "0193f2a4-0000-7b2a-9d1f-3e5c7a9b1d2f";
 const OTHER = "0193f2a4-0000-7b2a-9d1f-3e5c7a9b1d30";
 
@@ -22,7 +26,7 @@ describe("unsubscribe tokens", () => {
 
     for (const token of [
       `${OTHER}.${mac}`,
-      unsubscribeToken("another-secret-of-sufficient-length-99", ATTENDEE),
+      unsubscribeToken(OTHER_SECRET, ATTENDEE),
       ATTENDEE,
       `.${mac}`,
       `${ATTENDEE}.`,
