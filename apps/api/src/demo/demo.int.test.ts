@@ -268,6 +268,35 @@ describe("demo mode (FR-AUTH-5)", () => {
     expect(await eventTitles(api, owner)).toEqual([realEvent.title]);
   });
 
+  it("finishes a reset after a visitor's edit that holds the event, and leaves only the seed", async () => {
+    const visitor = await demoSession(app);
+    const launch = EventPage.parse(
+      (await api.get(visitor, "/events?q=Autumn")).body,
+    ).items[0];
+    const detail = await api.get(visitor, `/events/${launch?.id ?? ""}`);
+    const block = await blockWrites(database.url, "events");
+    // The edit locks the event row and waits at its UPDATE; the reset then
+    // waits for that row (or for the table) to delete it.
+    const edit = Promise.resolve(
+      api
+        .send(visitor, "patch", `/events/${launch?.id ?? ""}`, {
+          title: "Edited during the reset",
+        })
+        .set("If-Match", detail.headers.etag ?? ""),
+    );
+    await block.waitForWaiters(1);
+    const reset = app.get(DemoSeeder).reset();
+    try {
+      await block.waitForWaiters(2);
+    } finally {
+      await block.release();
+    }
+
+    expect((await edit).status).toBe(200);
+    await reset;
+    expect(await eventTitles(api, visitor)).toEqual(SEED_TITLES);
+  });
+
   it("restores the seed once when two resets run at the same moment", async () => {
     const block = await blockWrites(database.url, "events");
     const seeder = app.get(DemoSeeder);
