@@ -34,6 +34,12 @@ x-app-environment: &app-environment
   S3_SECRET_ACCESS_KEY: opspilot-local-only
   S3_FORCE_PATH_STYLE: "true"
   S3_CREATE_BUCKET: "true"
+  # Errors go to Sentry. Locally a reserved name that never resolves, so
+  # nothing leaves the machine; the browser tests intercept what the page
+  # sends there.
+  SENTRY_DSN: ${STACK_SENTRY_DSN:-https://public@sentry.invalid/1}
+  SENTRY_ENVIRONMENT: stack
+  SENTRY_RELEASE: ${STACK_RELEASE:-local}
 
 # Containers that run our code: no privileges, no writable image.
 x-hardened: &hardened
@@ -155,6 +161,9 @@ services:
       API_INTERNAL_URL: http://api:4301
       # The storage origin the Content Security Policy allows.
       S3_PUBLIC_ENDPOINT: https://${STACK_STORAGE_HOST:-storage.opspilot.localhost}:${STACK_HTTPS_PORT:-3443}
+      SENTRY_DSN: ${STACK_SENTRY_DSN:-https://public@sentry.invalid/1}
+      SENTRY_ENVIRONMENT: stack
+      SENTRY_RELEASE: ${STACK_RELEASE:-local}
     tmpfs:
       - /tmp
       # Next.js caches optimised images and fetches here.

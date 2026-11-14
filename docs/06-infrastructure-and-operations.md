@@ -194,6 +194,8 @@ The documented upgrade path when traffic grows: move web, api and worker to **EC
 | Errors  | Sentry (browser, web server, api, worker)                          | New and regressed errors per release                                                                                    |
 | Uptime  | External check on `/api/v1/health/ready` and the public event page | Availability                                                                                                            |
 
+**What runs today.** Structured logs (pino, JSON) and Sentry error reporting in every process ([architecture, section 7.9](02-architecture.md#79-observability)), configured by `SENTRY_DSN`, `SENTRY_ENVIRONMENT` (default: `NODE_ENV`) and `SENTRY_RELEASE` (the commit SHA the images are tagged with). Errors only: traces, metrics and the OpenTelemetry pipeline arrive in milestone 9. The production-like stack points the DSN at `sentry.invalid`, a name that never resolves, so nothing leaves the machine; its smoke test intercepts what the browser sends there.
+
 **Service level objectives** for the demo environment:
 
 | Objective                                     | Target             |

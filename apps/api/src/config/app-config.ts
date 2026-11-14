@@ -20,6 +20,17 @@ const Flag = z
   .default("false")
   .transform((value) => value === "true");
 
+/**
+ * An optional setting. Compose passes `${VAR:-}` as an empty string when the
+ * variable is unset, which means "not set" rather than "invalid".
+ */
+function optional<Schema extends z.ZodType>(schema: Schema) {
+  return z.preprocess(
+    (value) => (value === "" ? undefined : value),
+    schema.optional(),
+  );
+}
+
 const Secret = z
   .string()
   .min(MIN_SECRET_LENGTH, `Must be at least ${MIN_SECRET_LENGTH} characters`);
@@ -86,6 +97,12 @@ const AppConfigSchema = z
     S3_CREATE_BUCKET: Flag,
     SMTP_URL: z.url({ protocol: /^smtps?$/ }),
     MAIL_FROM: z.string().min(1),
+    /** Where errors are reported; reporting is off when unset. */
+    SENTRY_DSN: optional(z.url({ protocol: /^https?$/ })),
+    /** Defaults to NODE_ENV. */
+    SENTRY_ENVIRONMENT: optional(z.string().min(1).max(64)),
+    /** The build, e.g. the commit SHA the images are tagged with. */
+    SENTRY_RELEASE: optional(z.string().min(1).max(200)),
   })
   .refine(
     (env) => !(env.NODE_ENV === "production" && env.LOG_FORMAT === "pretty"),
@@ -122,6 +139,11 @@ const AppConfigSchema = z
       jwtPreviousSecret: env.JWT_SECRET_PREVIOUS,
     },
     mail: { smtpUrl: env.SMTP_URL, from: env.MAIL_FROM },
+    errorReporting: {
+      dsn: env.SENTRY_DSN,
+      environment: env.SENTRY_ENVIRONMENT ?? env.NODE_ENV,
+      release: env.SENTRY_RELEASE,
+    },
     storage: {
       endpoint: env.S3_ENDPOINT,
       publicEndpoint: env.S3_PUBLIC_ENDPOINT ?? env.S3_ENDPOINT,

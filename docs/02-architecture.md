@@ -260,7 +260,7 @@ Each process validates its environment with a Zod schema at startup and refuses 
 
 - **Logs**: pino, JSON, one line per event, with the request ID (`req.id`, also returned to the client as `X-Request-Id`), `traceId`, `workspaceId` and no personal data.
 - **Traces**: OpenTelemetry in web (server side), api and worker. Trace context travels through HTTP headers and job payloads, so one trace shows a request and the jobs it caused.
-- **Errors**: Sentry in the browser, web server, api and worker, tagged with the release.
+- **Errors**: Sentry in the browser, web server, api and worker, tagged with the release and the process. In the api and worker, every log line at `error` or above that carries an error (`{ err }`) is reported, through a hook in the one pino logger, so an error is reported where it is logged and nowhere else; each kind of error at most once a minute, so an outage does not flood the error budget. Nothing personal is sent: Sentry's data collection is switched off, breadcrumbs are off, and a `beforeSend` scrub keeps only a request's method and path (links carry one-time tokens in the query or the fragment). The browser receives its settings in the page from the web server's environment, so one image serves every environment, and the Content Security Policy allows the DSN's origin. Reporting is off when `SENTRY_DSN` is unset.
 - **Health**: `/api/v1/health/live` (process up) and `/api/v1/health/ready` (database and Valkey reachable).
 
 ### 7.10 Security controls summary

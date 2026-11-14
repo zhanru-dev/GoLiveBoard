@@ -8,6 +8,11 @@ import { type HttpLogger, pinoHttp } from "pino-http";
 
 import type { AppConfig } from "../config/app-config.js";
 import { API_PREFIX } from "../http/api-prefix.js";
+import {
+  type ErrorReporter,
+  sentryReporter,
+  throttleReports,
+} from "./error-reporting.js";
 import { REQUEST_ID_HEADER, resolveRequestId } from "./request-id.js";
 
 /**
@@ -50,17 +55,73 @@ function pathOf(url: string | undefined): string {
   return url?.split("?", 1)[0] ?? "";
 }
 
+/** pino's number for the `error` level; `fatal` is above it. */
+const ERROR_LEVEL = 50;
+
+/**
+ * The error a log call carries: `logger.error({ err }, "…")`, or an error
+ * logged on its own.
+ */
+function loggedError(args: readonly unknown[]): Error | undefined {
+  const [first] = args;
+  if (first instanceof Error) {
+    return first;
+  }
+  if (typeof first === "object" && first !== null && "err" in first) {
+    return first.err instanceof Error ? first.err : undefined;
+  }
+  return undefined;
+}
+
+function messageOf(args: readonly unknown[], error: Error): string {
+  const message = args.find((arg) => typeof arg === "string");
+  return typeof message === "string" ? message : error.message;
+}
+
+/** The request a request-scoped child logger is bound to (pino-http). */
+function requestIdOf(logger: Logger): string | undefined {
+  const { req } = logger.bindings() as { req?: { id?: unknown } };
+  return typeof req?.id === "string" ? req.id : undefined;
+}
+
 /**
  * The application's one pino logger. Every log line, inside a request or not,
- * comes from it, so level and redaction are configured in one place.
+ * comes from it, so level, redaction and error reporting are configured in
+ * one place.
+ *
+ * Every line at `error` or above that carries an error (`{ err }`) is also
+ * reported (Sentry in production). Lines without one, such as pino-http's
+ * summary of a 500 response, are not: the error behind them was logged, and
+ * reported, where it was caught. Reporting follows the log level, so a level
+ * above `error` silences both, and each kind of error is reported at most
+ * once a minute (`throttleReports`).
  */
 export function createLogger(
   config: AppConfig,
   destination?: DestinationStream,
+  reporter: ErrorReporter = throttleReports(sentryReporter),
 ): Logger {
   const options: LoggerOptions = {
     level: config.log.level,
     redact: { paths: REDACTED_PATHS, censor: REDACTION_CENSOR },
+    hooks: {
+      logMethod(args, method, level) {
+        if (level >= ERROR_LEVEL) {
+          const error = loggedError(args);
+          if (error !== undefined) {
+            try {
+              reporter(error, {
+                message: messageOf(args, error),
+                requestId: requestIdOf(this),
+              });
+            } catch {
+              // Reporting must never stop the line from being logged.
+            }
+          }
+        }
+        method.apply(this, args);
+      },
+    },
   };
   if (destination !== undefined) {
     return pino(options, destination);
@@ -100,6 +161,14 @@ export function createHttpLogger(logger: Logger): HttpLogger {
     },
     customLogLevel: (_request, response, error) =>
       error !== undefined || response.statusCode >= 500 ? "error" : "info",
+    // For a 5xx pino-http makes up an error ("failed with status code 500"),
+    // and for a client that went away it passes the socket's. Neither is a
+    // bug to report: the error behind a 500 was logged, and reported, where
+    // it was caught. The summary line keeps only the message.
+    customErrorObject: (_request, _response, error, value: object) => {
+      const { err: _omitted, ...rest } = value as { err?: unknown };
+      return { ...rest, responseError: error.message };
+    },
     // Probes call the health endpoints every few seconds; logging them would
     // bury every other request.
     autoLogging: {

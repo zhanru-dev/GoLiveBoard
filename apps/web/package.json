@@ -13,6 +13,7 @@
   "dependencies": {
     "@hookform/resolvers": "^7.0.6",
     "@opspilot/contracts": "0.0.0",
+    "@sentry/nextjs": "^11.12.0",
     "@tanstack/react-query": "^5.107.1",
     "class-variance-authority": "^0.7.1",
     "cn": "^0.5.2",

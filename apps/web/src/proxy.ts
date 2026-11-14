@@ -1,5 +1,10 @@
 import { type NextRequest, NextResponse } from "next/server";
 
+import {
+  errorReportingOrigin,
+  errorReportingSettings,
+} from "./lib/error-reporting";
+
 /**
  * A strict Content Security Policy (docs/02, section 7.1). Scripts run only if
  * they carry this request's random nonce, so a script injected through an XSS
@@ -10,6 +15,8 @@ export function proxy(request: NextRequest) {
   const nonce = btoa(crypto.randomUUID());
   const development = process.env.NODE_ENV === "development";
   const storage = storageOrigin();
+  const errors = errorReportingOrigin(errorReportingSettings());
+  const reporting = errors === null ? "" : ` ${errors}`;
   const policy = [
     "default-src 'self'",
     // 'strict-dynamic' lets the trusted scripts load the chunks they need.
@@ -20,9 +27,9 @@ export function proxy(request: NextRequest) {
     // Holding slates are shown from object storage with presigned links…
     `img-src 'self' data: blob:${storage}`,
     "font-src 'self'",
-    // …and uploaded straight to it. Development adds the WebSocket used for
-    // hot reloading.
-    `connect-src 'self'${storage}${development ? " ws:" : ""}`,
+    // …and uploaded straight to it. Errors are reported to Sentry when it is
+    // configured. Development adds the WebSocket used for hot reloading.
+    `connect-src 'self'${storage}${reporting}${development ? " ws:" : ""}`,
     "frame-ancestors 'none'",
     "base-uri 'self'",
     "form-action 'self'",

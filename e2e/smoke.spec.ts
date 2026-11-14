@@ -170,3 +170,41 @@ test("keeps a new session in secure, HTTP-only cookies", async ({
   await page.reload();
   await expect(page.getByRole("heading", { name: "Events" })).toBeVisible();
 });
+
+test("reports a browser error to Sentry, without the page's secrets", async ({
+  page,
+}) => {
+  // The stack's DSN names sentry.invalid, which never resolves; the test
+  // receives what the page sends there. The Content Security Policy must
+  // allow it first, so this also checks the policy.
+  const envelopes: string[] = [];
+  await page.route("https://sentry.invalid/**", async (route) => {
+    envelopes.push(route.request().postData() ?? "");
+    await route.fulfill({ status: 200, body: "{}" });
+  });
+  await page.goto("/sign-in?next=%2Fevents#token=one-time-secret");
+  await expect(page.getByRole("button", { name: "Sign in" })).toBeVisible();
+
+  await page.evaluate(() => {
+    setTimeout(() => {
+      throw new Error("Smoke test: an error in the browser");
+    });
+  });
+
+  await expect
+    .poll(() =>
+      envelopes.find((envelope) =>
+        envelope.includes("Smoke test: an error in the browser"),
+      ),
+    )
+    .toBeDefined();
+  const envelope =
+    envelopes.find((sent) =>
+      sent.includes("Smoke test: an error in the browser"),
+    ) ?? "";
+  expect(envelope).toContain('"process":"browser"');
+  expect(envelope).toContain('"environment":"stack"');
+  expect(envelope).toContain(new URL("/sign-in", site).href);
+  expect(envelope).not.toContain("one-time-secret");
+  expect(envelope).not.toContain("next=");
+});

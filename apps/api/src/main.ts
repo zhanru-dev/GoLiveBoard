@@ -8,6 +8,7 @@ import {
   ConfigError,
   loadConfig,
 } from "./config/app-config.js";
+import { initErrorReporting } from "./observability/error-reporting.js";
 
 function loadConfigOrExit(): AppConfig {
   try {
@@ -23,6 +24,8 @@ function loadConfigOrExit(): AppConfig {
 }
 
 const config = loadConfigOrExit();
+// Before the application starts, so errors during start-up are reported too.
+initErrorReporting(config, "api");
 const app = await NestFactory.create<NestExpressApplication>(
   AppModule.forRoot(config),
   APP_OPTIONS,

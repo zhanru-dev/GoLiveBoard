@@ -27,6 +27,11 @@ describe("loadConfig", () => {
         smtpUrl: REQUIRED.SMTP_URL,
         from: "OpsPilot <no-reply@opspilot.test>",
       },
+      errorReporting: {
+        dsn: undefined,
+        environment: "development",
+        release: undefined,
+      },
       storage: {
         endpoint: undefined,
         publicEndpoint: undefined,
@@ -38,6 +43,45 @@ describe("loadConfig", () => {
       },
     });
   });
+
+  it("reports errors to the configured Sentry project, tagged with the release", () => {
+    const config = loadConfig({
+      ...REQUIRED,
+      NODE_ENV: "production",
+      SENTRY_DSN: "https://public@o1.ingest.sentry.io/2",
+      SENTRY_RELEASE: "3f2a9c1",
+    });
+
+    expect(config.errorReporting).toEqual({
+      dsn: "https://public@o1.ingest.sentry.io/2",
+      environment: "production",
+      release: "3f2a9c1",
+    });
+  });
+
+  it("treats empty Sentry settings, as Compose passes unset ones, as not set", () => {
+    const config = loadConfig({
+      ...REQUIRED,
+      SENTRY_DSN: "",
+      SENTRY_ENVIRONMENT: "",
+      SENTRY_RELEASE: "",
+    });
+
+    expect(config.errorReporting).toEqual({
+      dsn: undefined,
+      environment: "development",
+      release: undefined,
+    });
+  });
+
+  it.each(["not a url", "ftp://public@sentry.example/1"])(
+    "rejects the Sentry DSN %j",
+    (dsn) => {
+      expect(() => loadConfig({ ...REQUIRED, SENTRY_DSN: dsn })).toThrow(
+        /SENTRY_DSN/,
+      );
+    },
+  );
 
   it.each(["UPPER", "with space", "a:b", ""])(
     "rejects the queue prefix %j",

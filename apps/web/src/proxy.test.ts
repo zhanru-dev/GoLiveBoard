@@ -42,6 +42,23 @@ describe("proxy (Content Security Policy)", () => {
     },
   );
 
+  it("lets the page report errors to Sentry when it is configured", () => {
+    vi.stubEnv("SENTRY_DSN", "https://public@o1.ingest.sentry.io/2");
+
+    expect(directives().get("connect-src")).toBe(
+      "'self' https://o1.ingest.sentry.io",
+    );
+  });
+
+  it.each(["", "not a dsn"])(
+    "allows no reporting origin when the DSN is %j",
+    (dsn) => {
+      vi.stubEnv("SENTRY_DSN", dsn);
+
+      expect(directives().get("connect-src")).toBe("'self'");
+    },
+  );
+
   it("gives every response a fresh script nonce", () => {
     const first = directives().get("script-src");
     const second = directives().get("script-src");

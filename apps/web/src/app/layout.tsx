@@ -3,6 +3,11 @@ import { Geist } from "next/font/google";
 import { connection } from "next/server";
 import type { ReactNode } from "react";
 
+import {
+  ERROR_REPORTING_META,
+  errorReportingSettings,
+} from "@/lib/error-reporting";
+
 import "./globals.css";
 
 // Self-hosted by Next.js at build time: no request to Google from the browser.
@@ -21,8 +26,18 @@ export default async function RootLayout({
   // (src/proxy.ts) is new each time, and a page prerendered at build time
   // could not carry it.
   await connection();
+  // Read at request time, so one image serves every environment.
+  const errorReporting = errorReportingSettings();
   return (
     <html lang="en-GB" className={geist.variable}>
+      <head>
+        {errorReporting === null ? null : (
+          <meta
+            name={ERROR_REPORTING_META}
+            content={JSON.stringify(errorReporting)}
+          />
+        )}
+      </head>
       <body className="min-h-dvh">{children}</body>
     </html>
   );

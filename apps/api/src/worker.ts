@@ -2,6 +2,7 @@ import { NestFactory } from "@nestjs/core";
 import { Logger } from "nestjs-pino";
 
 import { ConfigError, loadConfig } from "./config/app-config.js";
+import { initErrorReporting } from "./observability/error-reporting.js";
 import { WorkerModule } from "./worker/worker.module.js";
 
 function loadConfigOrExit() {
@@ -17,6 +18,8 @@ function loadConfigOrExit() {
 }
 
 const config = loadConfigOrExit();
+// Before the application starts, so errors during start-up are reported too.
+initErrorReporting(config, "worker");
 const worker = await NestFactory.createApplicationContext(
   WorkerModule.forRoot(config),
   { bufferLogs: true },
