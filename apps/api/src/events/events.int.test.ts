@@ -411,6 +411,36 @@ describe("events (FR-EV-1, FR-EV-4)", () => {
       expect(stored.version).toBe(2);
     });
 
+    it("keeps the end after the start when a new start and a new end race", async () => {
+      const owner = await api.newOwner();
+      // 18:00–19:30. Each change is valid on its own; together the event
+      // would start at 19:00 and end at 18:30.
+      const event = await createEvent(owner);
+      const block = await blockWrites(database.url, "events");
+
+      const pending = Promise.all([
+        Promise.resolve(
+          patch(owner, event.id, { startsAt: "2026-12-01T19:00:00Z" }, '"1"'),
+        ),
+        Promise.resolve(
+          patch(owner, event.id, { endsAt: "2026-12-01T18:30:00Z" }, '"1"'),
+        ),
+      ]);
+      // Both have checked their change against the stored times.
+      await block.waitForWaiters(2);
+      await block.release();
+      const responses = await pending;
+
+      expect(responses.map((response) => response.status).sort()).toEqual([
+        200, 412,
+      ]);
+      const [stored] = await database.query<{ ordered: boolean }>(
+        "SELECT ends_at > starts_at AS ordered FROM events WHERE id = $1",
+        [event.id],
+      );
+      expect(stored?.ordered).toBe(true);
+    });
+
     it("checks the end against the stored start", async () => {
       const owner = await api.newOwner();
       const event = await createEvent(owner);

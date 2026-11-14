@@ -357,17 +357,34 @@ describe("LaunchControlPage", () => {
   it("creates the access policy without a version, then saves with one", async () => {
     serveEvent();
     const ifMatches: (string | null)[] = [];
+    let stored: { privacyNoticeVersion: string; version: number } | null = null;
+    const policy = () => ({
+      mode: "PUBLIC",
+      allowedDomains: [],
+      privacyNoticeVersion: stored?.privacyNoticeVersion ?? "",
+      version: stored?.version ?? 0,
+      updatedAt: "2026-11-13T09:00:00.000Z",
+    });
     server.use(
-      http.put(`*/api/v1/events/${EVENT_ID}/access-policy`, ({ request }) => {
-        ifMatches.push(request.headers.get("if-match"));
-        return HttpResponse.json({
-          mode: "PUBLIC",
-          allowedDomains: [],
-          privacyNoticeVersion: "2026-11",
-          version: 1,
-          updatedAt: "2026-11-13T09:00:00.000Z",
-        });
-      }),
+      http.get(`*/api/v1/events/${EVENT_ID}/access-policy`, () =>
+        stored === null
+          ? HttpResponse.json(problem(404, "NOT_FOUND"), { status: 404 })
+          : HttpResponse.json(policy()),
+      ),
+      http.put(
+        `*/api/v1/events/${EVENT_ID}/access-policy`,
+        async ({ request }) => {
+          ifMatches.push(request.headers.get("if-match"));
+          const body = (await request.json()) as {
+            privacyNoticeVersion: string;
+          };
+          stored = {
+            privacyNoticeVersion: body.privacyNoticeVersion,
+            version: (stored?.version ?? 0) + 1,
+          };
+          return HttpResponse.json(policy());
+        },
+      ),
     );
     renderScreen(<LaunchControlPage eventId={EVENT_ID} />, OWNER);
     const user = userEvent.setup();
@@ -377,9 +394,18 @@ describe("LaunchControlPage", () => {
       "2026-11",
     );
     await user.click(screen.getByRole("button", { name: "Set access policy" }));
+    // After the refresh the form shows the stored policy, version 1.
+    await screen.findByRole("button", { name: "Save access policy" });
+    const notice = screen.getByLabelText("Privacy notice version");
+    expect(notice).toHaveValue("2026-11");
+    await user.clear(notice);
+    await user.type(notice, "2026-12");
+    await user.click(
+      screen.getByRole("button", { name: "Save access policy" }),
+    );
 
     await vi.waitFor(() => {
-      expect(ifMatches).toEqual([null]);
+      expect(ifMatches).toEqual([null, '"1"']);
     });
   });
 

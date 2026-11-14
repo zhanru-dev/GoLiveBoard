@@ -288,6 +288,23 @@ describe("runbook (FR-LC-1) and access policy (FR-AD-2)", () => {
       expect(
         (await api.get(stranger, `/events/${event.id}/runbook-tasks`)).status,
       ).toBe(404);
+      expect(
+        (
+          await api.send(
+            stranger,
+            "post",
+            `/events/${event.id}/runbook-tasks`,
+            {
+              title: "Planted",
+            },
+          )
+        ).status,
+      ).toBe(404);
+      const [planted] = await database.query<{ count: number }>(
+        "SELECT count(*)::int AS count FROM runbook_tasks WHERE event_id = $1",
+        [event.id],
+      );
+      expect(planted?.count).toBe(1);
       expect((await patchTask(stranger, task, { title: "B" })).status).toBe(
         404,
       );
@@ -373,19 +390,76 @@ describe("runbook (FR-LC-1) and access policy (FR-AD-2)", () => {
       expect((await put(owner, event.id, domainOnly, '"1"')).status).toBe(412);
     });
 
-    it("lets one of two simultaneous first PUTs create it", async () => {
+    const publicOnly = {
+      mode: "PUBLIC",
+      allowedDomains: [],
+      privacyNoticeVersion: "2026-12",
+    };
+    /** Alternating shapes, so a mixed row would show. */
+    const shapes = [domainOnly, publicOnly, domainOnly, publicOnly];
+
+    /** Whether the stored mode and domains agree (docs/03 §5). */
+    async function storedShapeIsConsistent(eventId: string) {
+      const [row] = await database.query<{ consistent: boolean }>(
+        `SELECT (mode = 'EMAIL_DOMAIN') = (cardinality(allowed_domains) > 0)
+           AS consistent
+         FROM access_policies WHERE event_id = $1`,
+        [eventId],
+      );
+      return row?.consistent;
+    }
+
+    it("lets one of several simultaneous first PUTs create it, whole", async () => {
       const owner = await api.newOwner();
       const event = await createEvent(api, owner);
+      const block = await blockWrites(database.url, "access_policies");
 
-      const responses = await Promise.all(
-        Array.from({ length: 4 }, () =>
-          Promise.resolve(put(owner, event.id, domainOnly)),
-        ),
+      const pending = Promise.all(
+        shapes.map((body) => Promise.resolve(put(owner, event.id, body))),
       );
+      // One holds the event lock at its insert; the rest wait for the lock.
+      await block.waitForWaiters(shapes.length);
+      await block.release();
+      const responses = await pending;
 
       expect(responses.map((r) => r.status).sort()).toEqual([
         200, 428, 428, 428,
       ]);
+      expect(await storedShapeIsConsistent(event.id)).toBe(true);
+    });
+
+    it("lets one of several simultaneous replacements win, whole", async () => {
+      const owner = await api.newOwner();
+      const event = await createEvent(api, owner);
+      expect((await put(owner, event.id, domainOnly)).status).toBe(200);
+      const block = await blockWrites(database.url, "access_policies");
+
+      const pending = Promise.all(
+        shapes.map((body) =>
+          Promise.resolve(put(owner, event.id, body, '"1"')),
+        ),
+      );
+      await block.waitForWaiters(shapes.length);
+      await block.release();
+      const responses = await pending;
+
+      expect(responses.map((r) => r.status).sort()).toEqual([
+        200, 412, 412, 412,
+      ]);
+      expect(await storedShapeIsConsistent(event.id)).toBe(true);
+    });
+
+    it("is refused by the database when mode and domains disagree", async () => {
+      const owner = await api.newOwner();
+      const event = await createEvent(api, owner);
+      await put(owner, event.id, domainOnly);
+
+      await expect(
+        database.query(
+          "UPDATE access_policies SET mode = 'PUBLIC' WHERE event_id = $1",
+          [event.id],
+        ),
+      ).rejects.toThrow(/access_policies_domains_match_mode/);
     });
 
     it("rejects domains for PUBLIC and refuses Analysts, archived events and other workspaces", async () => {

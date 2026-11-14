@@ -12,7 +12,11 @@ import { ObjectStorage } from "../storage/object-storage.js";
 import { uploadKeyFor } from "./assets.service.js";
 import { ApiClient, type TestSession } from "../testing/api-client.js";
 import { TEST_S3_BUCKET, TEST_S3_CREDENTIALS } from "../testing/containers.js";
-import { createTestDatabase, type TestDatabase } from "../testing/database.js";
+import {
+  blockWrites,
+  createTestDatabase,
+  type TestDatabase,
+} from "../testing/database.js";
 import { createEvent, memberOf } from "../testing/events.js";
 import { CapturingMailer } from "../testing/fakes.js";
 import {
@@ -225,23 +229,40 @@ describe("holding slate upload (FR-ST-3)", () => {
     expect((await complete(owner, target.assetId)).status).toBe(200);
   });
 
-  it("completes once when the browser calls complete twice at the same time", async () => {
+  it("verifies once, and serves what it verified, when completes and a re-upload overlap", async () => {
     const owner = await api.newOwner();
     const event = await createEvent(api, owner);
     const target = await startUpload(owner, event.id);
     await upload(target, png());
+    const block = await blockWrites(database.url, "assets");
 
-    const responses = await Promise.all([
-      Promise.resolve(complete(owner, target.assetId)),
-      Promise.resolve(complete(owner, target.assetId)),
-    ]);
+    // The first complete locks the asset, copies and verifies the PNG, and
+    // holds at its write.
+    const first = Promise.resolve(complete(owner, target.assetId));
+    await block.waitForWaiters(1);
+    // Meanwhile the upload URL is used again, with zeros of the same size,
+    // and a second complete arrives and must wait for the asset lock.
+    expect((await upload(target, Buffer.alloc(png().length))).status).toBe(200);
+    const second = Promise.resolve(complete(owner, target.assetId));
+    await block.waitForWaiters(2);
+    await block.release();
+    const responses = await Promise.all([first, second]);
 
     expect(responses.map((r) => r.status)).toEqual([200, 200]);
+    expect(responses.map((r) => Asset.parse(r.body).status)).toEqual([
+      "READY",
+      "READY",
+    ]);
     const audit = await database.query(
       "SELECT 1 FROM audit_entries WHERE target_id = $1 AND action = 'asset.ready'",
       [target.assetId],
     );
     expect(audit).toHaveLength(1);
+    const slate = HoldingSlate.parse(
+      (await api.get(owner, `/events/${event.id}/assets/holding-slate`)).body,
+    );
+    const served = await fetch(slate.downloadUrl);
+    expect(Buffer.from(await served.arrayBuffer())).toEqual(png());
   });
 
   it.each([

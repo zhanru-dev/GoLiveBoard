@@ -150,23 +150,31 @@ describe("resolveZonedTime", () => {
     },
   );
 
-  it("finds every instant around every clock change of 2026, in every zone", () => {
-    const misses: string[] = [];
-    for (const zone of timeZones()) {
-      for (const change of clockChanges(zone)) {
-        // Every quarter hour from three hours before to three hours after.
-        for (let step = -12; step <= 12; step += 1) {
-          const instant = new Date(change + step * 15 * MINUTE_MS);
-          const utc = instant.toISOString();
-          const local = utcToZoned(utc, zone);
-          if (!outcomes(local, zone).includes(utc)) {
-            misses.push(`${zone} ${local} → ${utc}`);
+  // A correctness check over about 400 zones, not a speed limit: it takes
+  // about 2 s alone and has taken over 5 s in a busy full run.
+  it(
+    "finds every instant around every clock change of 2026, in every zone",
+    {
+      timeout: 30_000,
+    },
+    () => {
+      const misses: string[] = [];
+      for (const zone of timeZones()) {
+        for (const change of clockChanges(zone)) {
+          // Every quarter hour from three hours before to three hours after.
+          for (let step = -12; step <= 12; step += 1) {
+            const instant = new Date(change + step * 15 * MINUTE_MS);
+            const utc = instant.toISOString();
+            const local = utcToZoned(utc, zone);
+            if (!outcomes(local, zone).includes(utc)) {
+              misses.push(`${zone} ${local} → ${utc}`);
+            }
           }
         }
       }
-    }
-    expect(misses).toEqual([]);
-  });
+      expect(misses).toEqual([]);
+    },
+  );
 });
 
 describe("utcToZoned", () => {
