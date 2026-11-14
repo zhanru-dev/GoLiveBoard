@@ -46,6 +46,11 @@ export function uploadKeyFor(storageKey: string): string {
   return `uploads/${storageKey}`;
 }
 
+/** Every file of one event's assets is stored under this prefix. */
+export function eventFilesPrefix(eventId: string): string {
+  return `events/${eventId}/`;
+}
+
 type Completion =
   | { readonly kind: "READY"; readonly changed: boolean }
   | { readonly kind: "REJECTED"; readonly reason: string };
@@ -103,7 +108,7 @@ export class AssetsService {
           eventId,
           kind: "HOLDING_SLATE",
           // A random key: never derived from anything the uploader chose.
-          storageKey: `events/${eventId}/holding-slates/${randomUUID()}`,
+          storageKey: `${eventFilesPrefix(eventId)}holding-slates/${randomUUID()}`,
           contentType: input.contentType,
           sizeBytes: input.sizeBytes,
           createdAt: now,

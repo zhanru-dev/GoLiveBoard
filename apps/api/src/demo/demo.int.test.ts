@@ -6,7 +6,7 @@ import request from "supertest";
 import { afterAll, beforeAll, describe, expect, inject, it } from "vitest";
 
 import { ACCESS_COOKIE, REFRESH_COOKIE } from "../auth/cookies.js";
-import { uploadKeyFor } from "../assets/assets.service.js";
+import { eventFilesPrefix, uploadKeyFor } from "../assets/assets.service.js";
 import { ObjectStorage } from "../storage/object-storage.js";
 import { ApiClient, type TestSession } from "../testing/api-client.js";
 import { TEST_S3_BUCKET, TEST_S3_CREDENTIALS } from "../testing/containers.js";
@@ -35,6 +35,18 @@ const png = (size = 2_048) =>
     Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
     Buffer.alloc(size - 8, 0x42),
   ]);
+
+/** Stores a small PNG at `key`, through a presigned URL. */
+async function put(storage: ObjectStorage, key: string): Promise<void> {
+  const body = png();
+  const url = await storage.presignUpload(key, "image/png", body.length, 60);
+  const response = await fetch(url, {
+    method: "PUT",
+    headers: { "Content-Type": "image/png" },
+    body,
+  });
+  expect(response.status).toBe(200);
+}
 
 let addressCounter = 0;
 /** Each test its own client address, so rate limits never meet. */
@@ -217,15 +229,27 @@ describe("demo mode (FR-AUTH-5)", () => {
     );
     const storage = app.get(ObjectStorage);
     expect(await storage.stat(asset?.storage_key ?? "")).toBeDefined();
+    // A file with no asset row, as one uploaded while the reset runs would
+    // be, and a file of another workspace's event.
+    const stray = `${eventFilesPrefix(launch?.id ?? "")}holding-slates/stray`;
+    const elsewhere = `${eventFilesPrefix(realEvent.id)}holding-slates/kept`;
+    for (const key of [stray, uploadKeyFor(stray), elsewhere]) {
+      await put(storage, key);
+    }
 
     const removed = await app.get(DemoSeeder).reset();
 
     expect(removed).toBe(SEED_TITLES.length + 1);
     expect(await eventTitles(api, visitor)).toEqual(SEED_TITLES);
-    expect(await storage.stat(asset?.storage_key ?? "")).toBeUndefined();
-    expect(
-      await storage.stat(uploadKeyFor(asset?.storage_key ?? "")),
-    ).toBeUndefined();
+    for (const key of [
+      asset?.storage_key ?? "",
+      uploadKeyFor(asset?.storage_key ?? ""),
+      stray,
+      uploadKeyFor(stray),
+    ]) {
+      expect(await storage.stat(key), key).toBeUndefined();
+    }
+    expect(await storage.stat(elsewhere)).toBeDefined();
     // The stored response is gone too: the key now creates a new event
     // rather than replaying one that no longer exists.
     const again = await api

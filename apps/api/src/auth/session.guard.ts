@@ -6,6 +6,7 @@ import {
 } from "@nestjs/common";
 import { Reflector } from "@nestjs/core";
 import type { Role } from "@opspilot/contracts";
+import { InjectPinoLogger, PinoLogger } from "nestjs-pino";
 
 import { APP_CONFIG, type AppConfig } from "../config/app-config.js";
 import { PRISMA } from "../database/prisma.js";
@@ -44,6 +45,7 @@ export class SessionGuard implements CanActivate {
     @Inject(PRISMA) private readonly prisma: PrismaClient,
     @Inject(CLOCK) private readonly clock: Clock,
     @Inject(APP_CONFIG) private readonly config: AppConfig,
+    @InjectPinoLogger(SessionGuard.name) private readonly logger: PinoLogger,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -74,6 +76,9 @@ export class SessionGuard implements CanActivate {
       throw new DomainError("FORBIDDEN");
     }
     request.actor = actor;
+    // Every line logged for the rest of this request names the workspace
+    // (docs/02, section 7.9); the request's summary line does too.
+    this.logger.assign({ workspaceId: actor.workspaceId });
     return true;
   }
 

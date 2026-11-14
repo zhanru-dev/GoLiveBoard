@@ -34,13 +34,14 @@ npm run dev              # web app, API, worker and contracts in watch mode
 
 Open <http://localhost:3300> and create a workspace. Emails the app sends (invitations, password resets) appear in Mailpit at <http://localhost:8036>. The API answers under the same origin, for example <http://localhost:3300/api/v1/health/ready>.
 
-| Command                 | What it does                                                                        |
-| ----------------------- | ----------------------------------------------------------------------------------- |
-| `npm run check`         | Formatting, lint, types and architecture rules                                      |
-| `npm test`              | Unit and component tests                                                            |
-| `npm run test:int`      | API integration tests (starts its own containers; needs `openssl` on the PATH)      |
-| `npm run test:e2e`      | Playwright against production builds (needs `services:up`, `db:deploy` and `build`) |
-| `npm run services:down` | Stop the local services                                                             |
+| Command                 | What it does                                                                                                                    |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| `npm run check`         | Formatting, lint, types and architecture rules                                                                                  |
+| `npm test`              | Unit and component tests                                                                                                        |
+| `npm run test:int`      | API integration tests (starts its own containers; needs `openssl` on the PATH)                                                  |
+| `npm run test:e2e`      | Playwright against production builds (needs `services:up`, `db:deploy` and `build`)                                             |
+| `npm run db:seed`       | Load the shared demo workspace, or put it back to its seed (with `DEMO_MODE=true`, "Try the demo" on the sign-in page opens it) |
+| `npm run services:down` | Stop the local services                                                                                                         |
 
 ### The production build
 

@@ -3,7 +3,7 @@ import { randomBytes } from "node:crypto";
 import { Inject, Injectable } from "@nestjs/common";
 import { InjectPinoLogger, PinoLogger } from "nestjs-pino";
 
-import { uploadKeyFor } from "../assets/assets.service.js";
+import { eventFilesPrefix, uploadKeyFor } from "../assets/assets.service.js";
 import { PasswordHasher } from "../auth/password-hasher.js";
 import { PRISMA } from "../database/prisma.js";
 import { eventSlug } from "../events/domain/slug.js";
@@ -41,6 +41,14 @@ export class DemoSeeder {
    * step; concurrent calls create it once.
    */
   async ensure(): Promise<void> {
+    // Nearly always it exists: no hashing, no lock.
+    const existing = await this.prisma.workspace.findUnique({
+      where: { id: DEMO_WORKSPACE.id },
+      select: { id: true },
+    });
+    if (existing !== null) {
+      return;
+    }
     // Hashing is slow, so it happens before the lock is taken.
     const passwordHash = await this.unusablePasswordHash();
     await this.prisma.$transaction(
@@ -63,25 +71,22 @@ export class DemoSeeder {
   /**
    * Puts the demo workspace back to its seed: everything visitors created or
    * changed is deleted and the seed events are written again, dated from now.
-   * Visitors stay signed in. Files of deleted holding slates are removed
-   * afterwards, once the deletion has committed.
+   * Visitors stay signed in. Once the deletion has committed, every stored
+   * file of the deleted events goes too: everything under their storage
+   * prefixes, so a slate uploaded while the reset ran is not left behind.
    *
-   * @returns how many events visitors had left behind
+   * @returns how many events were replaced
    */
   async reset(): Promise<number> {
     const passwordHash = await this.unusablePasswordHash();
-    const { removedEvents, storageKeys } = await this.prisma.$transaction(
+    const deletedEventIds = await this.prisma.$transaction(
       async (tx) => {
         await lockDemo(tx);
-        const assets = await tx.asset.findMany({
-          where: { event: { workspaceId: DEMO_WORKSPACE.id } },
-          select: { storageKey: true },
-        });
         // Runbooks, policies, checks, incidents and assets go with their
         // events (ON DELETE CASCADE).
-        const { count } = await tx.event.deleteMany({
-          where: { workspaceId: DEMO_WORKSPACE.id },
-        });
+        const deleted = await tx.$queryRaw<{ id: string }[]>`
+          DELETE FROM events WHERE workspace_id = ${DEMO_WORKSPACE.id}::uuid
+          RETURNING id`;
         await tx.teamInvitation.deleteMany({
           where: { workspaceId: DEMO_WORKSPACE.id },
         });
@@ -97,18 +102,16 @@ export class DemoSeeder {
         });
         await this.restoreAccounts(tx, passwordHash);
         await this.writeEvents(tx);
-        return {
-          removedEvents: count,
-          storageKeys: assets.map(({ storageKey }) => storageKey),
-        };
+        return deleted.map(({ id }) => id);
       },
       { timeout: TRANSACTION_TIMEOUT_MS },
     );
-    for (const key of storageKeys) {
-      await this.removeQuietly(key);
-      await this.removeQuietly(uploadKeyFor(key));
+    for (const eventId of deletedEventIds) {
+      const prefix = eventFilesPrefix(eventId);
+      await this.removeAllQuietly(prefix);
+      await this.removeAllQuietly(uploadKeyFor(prefix));
     }
-    return removedEvents;
+    return deletedEventIds.length;
   }
 
   /**
@@ -217,11 +220,20 @@ export class DemoSeeder {
     return this.passwords.hash(randomBytes(32).toString("base64url"));
   }
 
-  private async removeQuietly(key: string): Promise<void> {
+  /**
+   * Best effort: a file left behind costs a few kilobytes, while failing the
+   * reset would leave the demo as visitors left it.
+   */
+  private async removeAllQuietly(prefix: string): Promise<void> {
     try {
-      await this.storage.remove(key);
+      for (const key of await this.storage.listKeys(prefix)) {
+        await this.storage.remove(key);
+      }
     } catch (error) {
-      this.logger.warn({ err: error, key }, "Could not delete a demo file");
+      this.logger.warn(
+        { err: error, prefix },
+        "Could not delete the demo's files",
+      );
     }
   }
 }

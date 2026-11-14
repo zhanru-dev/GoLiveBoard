@@ -159,6 +159,14 @@ export function createHttpLogger(logger: Logger): HttpLogger {
         statusCode: response.statusCode,
       }),
     },
+    // The workspace the signed-in actor works in, once SessionGuard has
+    // resolved it (pino-http reads this again when the response finishes).
+    customProps: (request) => {
+      const { actor } = request as { actor?: { workspaceId?: unknown } };
+      return typeof actor?.workspaceId === "string"
+        ? { workspaceId: actor.workspaceId }
+        : {};
+    },
     customLogLevel: (_request, response, error) =>
       error !== undefined || response.statusCode >= 500 ? "error" : "info",
     // For a 5xx pino-http makes up an error ("failed with status code 500"),

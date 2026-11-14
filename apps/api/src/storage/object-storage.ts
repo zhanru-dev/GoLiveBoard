@@ -4,6 +4,7 @@ import {
   DeleteObjectCommand,
   GetObjectCommand,
   HeadObjectCommand,
+  ListObjectsV2Command,
   PutBucketCorsCommand,
   PutObjectCommand,
   S3Client,
@@ -209,6 +210,36 @@ export class ObjectStorage {
         options,
       ),
     );
+  }
+
+  /**
+   * Every key that starts with `prefix`, a page (up to 1,000 keys) per call,
+   * each call bounded like any other.
+   */
+  async listKeys(prefix: string, signal?: AbortSignal): Promise<string[]> {
+    const keys: string[] = [];
+    let continuationToken: string | undefined;
+    do {
+      const page = await this.bounded(signal, (options) =>
+        this.client.send(
+          new ListObjectsV2Command({
+            Bucket: this.bucket,
+            Prefix: prefix,
+            ContinuationToken: continuationToken,
+          }),
+          options,
+        ),
+      );
+      for (const object of page.Contents ?? []) {
+        if (object.Key !== undefined) {
+          keys.push(object.Key);
+        }
+      }
+      continuationToken = page.IsTruncated
+        ? page.NextContinuationToken
+        : undefined;
+    } while (continuationToken !== undefined);
+    return keys;
   }
 
   async remove(key: string, signal?: AbortSignal): Promise<void> {
