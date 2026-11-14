@@ -34,6 +34,16 @@ export const TEST_S3_CREDENTIALS = {
 } as const;
 const S3_PORT = 8333;
 
+/**
+ * How SeaweedFS sizes its storage, everywhere it runs (both compose files
+ * and these tests; a unit test checks this). Each bucket needs volumes of
+ * its own, and SeaweedFS allows as many volumes as the free disk holds at
+ * the volume size limit, 1 GB by default: on a CI runner's small disk the
+ * first bucket took every slot and the next write failed with 500 ("No
+ * writable volumes"). Volumes of 64 MB leave room for every bucket.
+ */
+export const SEAWEEDFS_STORAGE_FLAGS = ["-master.volumeSizeLimitMB=64"];
+
 /** Starts a throwaway PostgreSQL server for one test file. */
 export function startPostgres(): Promise<StartedPostgreSqlContainer> {
   return new PostgreSqlContainer(POSTGRES_IMAGE).start();
@@ -44,8 +54,14 @@ export function startValkey(): Promise<StartedValkeyContainer> {
   return new ValkeyContainer(VALKEY_IMAGE).start();
 }
 
-/** Starts a throwaway SeaweedFS with S3 enabled and the test credentials. */
-export function startSeaweedFs(): Promise<StartedTestContainer> {
+/**
+ * Starts a throwaway SeaweedFS with S3 enabled and the test credentials.
+ *
+ * @param dataSize limits its disk, as a size tmpfs understands ("1g")
+ */
+export function startSeaweedFs(
+  dataSize?: string,
+): Promise<StartedTestContainer> {
   const identities = {
     identities: [
       {
@@ -60,20 +76,25 @@ export function startSeaweedFs(): Promise<StartedTestContainer> {
       },
     ],
   };
-  return new GenericContainer(SEAWEEDFS_IMAGE)
+  const container = new GenericContainer(SEAWEEDFS_IMAGE)
     .withCommand([
       "server",
       "-s3",
       "-s3.config=/etc/seaweedfs/s3.json",
       "-dir=/data",
       "-ip.bind=0.0.0.0",
+      ...SEAWEEDFS_STORAGE_FLAGS,
     ])
     .withCopyContentToContainer([
       { content: JSON.stringify(identities), target: "/etc/seaweedfs/s3.json" },
     ])
     .withExposedPorts(S3_PORT)
-    .withWaitStrategy(Wait.forHttp("/healthz", S3_PORT))
-    .start();
+    .withWaitStrategy(Wait.forHttp("/healthz", S3_PORT));
+  return (
+    dataSize === undefined
+      ? container
+      : container.withTmpFs({ "/data": `size=${dataSize}` })
+  ).start();
 }
 
 /** The bucket every integration test file shares; object keys are random. */

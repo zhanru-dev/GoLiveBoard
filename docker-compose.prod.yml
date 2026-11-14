@@ -227,6 +227,9 @@ services:
       - -s3.config=/etc/seaweedfs/s3.json
       - -dir=/data
       - -ip.bind=0.0.0.0
+      # Small volumes, so every bucket gets some on a small disk too
+      # (SEAWEEDFS_STORAGE_FLAGS in apps/api/src/testing/containers.ts).
+      - -master.volumeSizeLimitMB=64
     volumes:
       - ./infra/docker/seaweedfs-s3.json:/etc/seaweedfs/s3.json:ro
       - s3-data:/data
