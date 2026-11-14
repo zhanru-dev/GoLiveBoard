@@ -134,14 +134,18 @@ A membership, invitation or workspace outside the session's active workspace is 
 
 ### 3.5 Public and attendee
 
-| Method and path                           | Role | Notes                                                                  |
-| ----------------------------------------- | ---- | ---------------------------------------------------------------------- |
-| `GET /public/events/:slug`                | Pub  | Data for the public page; no internal IDs                              |
-| `POST /public/events/:slug/registrations` | Pub  | Always `202` with the same body (no enumeration). Rate-limited per IP. |
-| `POST /public/attendee-verifications`     | Pub  | `{ "token": "…" }`; sets the attendee session cookie                   |
-| `GET /public/events/:slug/me`             | Att  | The attendee's own registration and access state                       |
-| `POST /public/events/:slug/heartbeat`     | Att  | Every 30 s while watching; records attendance                          |
-| `POST /public/reminders/unsubscribe`      | Pub  | Token from the reminder email                                          |
+`Att` routes need the attendee session cookie (`__Host-opspilot_attendee`, an opaque token stored only as a hash). Every such request reloads the session, the attendee, the event and its access policy and decides again (FR-AD-2): no session `401`; a session for another event `404`, as if the event did not exist; no longer admitted (revoked, erased, a stricter policy, a revoked invitation, the event archived or cancelled) `403`. A browser holds one attendee session at a time.
+
+| Method and path                           | Role | Notes                                                                                                                                                                                                                                             |
+| ----------------------------------------- | ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /public/events/:slug`                | Pub  | Data for the public page; no internal IDs. `404` for a draft, an archived event and an unknown slug alike                                                                                                                                         |
+| `POST /public/events/:slug/registrations` | Pub  | `{ name, email, privacyNoticeVersion, consent: true, remindersOptIn }`. Always `202` with the same body (no enumeration); only the mailbox learns anything. `400` if the privacy notice changed since the form was shown. 10 per hour per address |
+| `POST /public/attendee-verifications`     | Pub  | `{ "token": "…" }`, from the link: single-use, 15 minutes. `200 { slug }` and sets the attendee session cookie; `400 TOKEN_INVALID`; `403` if the event no longer admits them. 30 per hour per address                                            |
+| `GET /public/events/:slug/me`             | Att  | The attendee's own registration                                                                                                                                                                                                                   |
+| `POST /public/events/:slug/sign-out`      | Att  | `204`; ends this browser's attendee session                                                                                                                                                                                                       |
+| `POST /public/events/:slug/heartbeat`     | Att  | Every 30 s while watching; records attendance (milestone 6)                                                                                                                                                                                       |
+| `POST /public/reminders/unsubscribe`      | Pub  | `{ "token": "…" }` from the reminder email (an HMAC of the attendee ID; nothing stored). `204`, also when repeated; `400 TOKEN_INVALID`                                                                                                           |
+| `GET /public/demo-inbox`                  | Pub  | Demo mode only, otherwise `404`. The mail for the attendees this browser registered in the demo workspace (by its `__Host-opspilot_demo_inbox` cookie), newest first                                                                              |
 
 ### 3.6 Live interaction
 

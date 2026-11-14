@@ -38,6 +38,18 @@ export const RATE_LIMITS = {
   signUpPerIp: { name: "sign-up:ip", limit: 10, windowMs: HOUR_MS },
   /** Each demo sign-in starts a session; a person needs a handful at most. */
   demoSignInPerIp: { name: "demo-sign-in:ip", limit: 20, windowMs: HOUR_MS },
+  /** Registrations for events, from one address (FR-AD-3). */
+  registrationsPerIp: {
+    name: "registration:ip",
+    limit: 10,
+    windowMs: HOUR_MS,
+  },
+  /** Verification links used from one address; guessing is hopeless anyway. */
+  attendeeVerificationsPerIp: {
+    name: "attendee-verification:ip",
+    limit: 30,
+    windowMs: HOUR_MS,
+  },
   /** Changes to the demo workspace (DemoWriteBudgetGuard): from one address... */
   demoWritesPerIp: {
     name: "demo-writes:ip",

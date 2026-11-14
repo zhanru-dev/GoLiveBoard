@@ -16,6 +16,12 @@ export const DEMO_EVENT_LIMIT = 40;
 export const DEMO_ASSET_LIMIT = 50;
 
 /**
+ * And at most this many attendees across its events: anyone can register,
+ * from any address.
+ */
+export const DEMO_ATTENDEE_LIMIT = 200;
+
+/**
  * Every demo sign-in starts a session for the same person. The newest this
  * many are kept; the oldest visitor's session ends when one more arrives, so
  * the table stays bounded however many visitors come (a visitor signed out
@@ -94,6 +100,29 @@ export async function claimDemoAssetSlot(
       detail: `The demo holds at most ${String(DEMO_ASSET_LIMIT)} uploads. It is reset every night.`,
     });
   }
+}
+
+/**
+ * Before an attendee is added in `workspaceId`: in the demo workspace, takes
+ * the demo lock (so the reset waits for the registration, or the other way
+ * round) and says whether there is room for one more attendee. Other
+ * workspaces always have room.
+ *
+ * A full demo is not an error: the registration answers like any other, so
+ * the response still says nothing about the address (FR-AD-3).
+ */
+export async function demoHasRoomForAttendee(
+  tx: Prisma.TransactionClient,
+  workspaceId: string,
+): Promise<boolean> {
+  if (!isDemoWorkspace(workspaceId)) {
+    return true;
+  }
+  await lockDemoWorkspace(tx);
+  const attendees = await tx.attendee.count({
+    where: { event: { workspaceId } },
+  });
+  return attendees < DEMO_ATTENDEE_LIMIT;
 }
 
 /**

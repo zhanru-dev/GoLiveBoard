@@ -1,4 +1,14 @@
 export {
+  AttendeeMe,
+  AttendeeVerificationRequest,
+  AttendeeVerified,
+  DemoInbox,
+  PublicEvent,
+  PublicEventStatus,
+  RegistrationRequest,
+  UnsubscribeRequest,
+} from "./admission.js";
+export {
   Asset,
   AssetStatus,
   AssetUpload,
