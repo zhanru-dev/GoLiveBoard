@@ -127,6 +127,21 @@ describe("scrubEvent", () => {
     });
   });
 
+  it("drops a token in the fragment of a link that has no query", () => {
+    const event: ErrorEvent = {
+      type: undefined,
+      request: {
+        method: "GET",
+        url: "https://opspilot.example/accept-invitation#token=one-time",
+      },
+    };
+
+    expect(scrubEvent(event).request).toEqual({
+      method: "GET",
+      url: "https://opspilot.example/accept-invitation",
+    });
+  });
+
   it("drops user details and the values of local variables", () => {
     const event: ErrorEvent = {
       type: undefined,

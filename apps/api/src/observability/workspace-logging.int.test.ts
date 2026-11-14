@@ -69,6 +69,22 @@ describe("log lines name the workspace (docs/02, section 7.9)", () => {
     expect(summary?.workspaceId).toBe(activeWorkspace.workspaceId);
   });
 
+  it("names the workspace on a signed-in request that a session check refuses", async () => {
+    const session = await api.newOwner();
+    const { activeWorkspace } = await api.me(session);
+
+    // The tab still shows another workspace: 409 WORKSPACE_CHANGED.
+    const lines = await linesFor(
+      api
+        .get(session, "/test-only/work")
+        .set("X-Workspace-Id", "00000000-0000-7000-8000-000000000000"),
+    );
+
+    const summary = lines.find(({ msg }) => msg === "request completed");
+    expect(summary?.res).toMatchObject({ statusCode: 409 });
+    expect(summary?.workspaceId).toBe(activeWorkspace.workspaceId);
+  });
+
   it("names no workspace for a request without a session", async () => {
     const lines = await linesFor(
       api.post("/auth/sign-in", {

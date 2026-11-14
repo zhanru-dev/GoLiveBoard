@@ -61,6 +61,11 @@ export class SessionGuard implements CanActivate {
     if (actor === undefined) {
       throw new DomainError("UNAUTHENTICATED");
     }
+    // Every line logged for the rest of this request names the workspace
+    // (docs/02, section 7.9), and so does the request's summary line: also
+    // when the checks below refuse the request.
+    request.actor = actor;
+    this.logger.assign({ workspaceId: actor.workspaceId });
     const requiredRole = this.reflector.getAllAndOverride<Role | undefined>(
       REQUIRED_ROLE,
       targets,
@@ -75,10 +80,6 @@ export class SessionGuard implements CanActivate {
     if (requiredRole !== undefined && !hasRole(actor.role, requiredRole)) {
       throw new DomainError("FORBIDDEN");
     }
-    request.actor = actor;
-    // Every line logged for the rest of this request names the workspace
-    // (docs/02, section 7.9); the request's summary line does too.
-    this.logger.assign({ workspaceId: actor.workspaceId });
     return true;
   }
 
