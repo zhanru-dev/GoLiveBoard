@@ -21,6 +21,21 @@ describe("routeOutboxMessage", () => {
     });
   });
 
+  it("turns a message left by an earlier build into the job that records its purges", () => {
+    expect(
+      routeOutboxMessage({
+        id,
+        type: "demo.events_deleted",
+        payload: { eventIds: [eventId] },
+      }),
+    ).toEqual({
+      queue: "maintenance",
+      name: "demo-purge-files",
+      data: { eventIds: [eventId] },
+      jobId: `outbox-${id}`,
+    });
+  });
+
   it.each([
     ["a type nothing consumes yet", "event.transitioned"],
     ["an unknown type", "something.else"],

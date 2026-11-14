@@ -1,10 +1,16 @@
 import {
+  DemoEventsDeletedPayload,
   OutboxMessageType,
   StreamCheckRequestedPayload,
 } from "@opspilot/contracts";
 
 import type { JobRequest } from "../queues/job-publisher.js";
-import { STREAM_CHECK_JOBS, STREAM_CHECKS_QUEUE } from "../queues/queues.js";
+import {
+  MAINTENANCE_JOBS,
+  MAINTENANCE_QUEUE,
+  STREAM_CHECK_JOBS,
+  STREAM_CHECKS_QUEUE,
+} from "../queues/queues.js";
 
 export interface RelayedMessage {
   readonly id: string;
@@ -39,6 +45,14 @@ export function routeOutboxMessage(
         jobId: `outbox-${message.id}`,
       };
     }
+    case "demo.events_deleted":
+      // Legacy: left by an earlier build; its job records the prefixes.
+      return {
+        queue: MAINTENANCE_QUEUE,
+        name: MAINTENANCE_JOBS.legacyDemoPurgeFiles,
+        data: DemoEventsDeletedPayload.parse(message.payload),
+        jobId: `outbox-${message.id}`,
+      };
     case "event.transitioned":
       return undefined;
     default:

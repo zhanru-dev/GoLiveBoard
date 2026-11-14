@@ -9,6 +9,7 @@ import { EventStatus } from "./events.js";
 export const OutboxMessageType = z.enum([
   "event.transitioned",
   "stream.check_requested",
+  "demo.events_deleted",
 ]);
 export type OutboxMessageType = z.infer<typeof OutboxMessageType>;
 
@@ -29,6 +30,17 @@ export const StreamCheckRequestedPayload = z.object({
 export type StreamCheckRequestedPayload = z.infer<
   typeof StreamCheckRequestedPayload
 >;
+
+/**
+ * Legacy: an earlier build wrote this when the demo reset deleted events
+ * (FR-AUTH-5). Nothing writes it now; the reset records the events' storage
+ * prefixes in `pending_file_purges` instead. It is still read, so that
+ * messages and jobs left by that build are not lost in an upgrade.
+ */
+export const DemoEventsDeletedPayload = z.object({
+  eventIds: z.array(z.uuid()).max(10_000),
+});
+export type DemoEventsDeletedPayload = z.infer<typeof DemoEventsDeletedPayload>;
 
 /**
  * Data of a `check` job on the stream-checks queue. `slot` is the time the

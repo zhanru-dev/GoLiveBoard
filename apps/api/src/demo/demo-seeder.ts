@@ -121,13 +121,7 @@ export class DemoSeeder {
         await this.restoreAccounts(tx, passwordHash);
         await this.writeEvents(tx);
         const eventIds = deleted.map(({ id }) => id);
-        const notBefore = new Date(this.clock.now().getTime() + PURGE_DELAY_MS);
-        await tx.pendingFilePurge.createMany({
-          data: eventIds.flatMap((eventId) =>
-            filePrefixesOf(eventId).map((prefix) => ({ prefix, notBefore })),
-          ),
-          skipDuplicates: true,
-        });
+        await this.recordFilePurges(eventIds, tx);
         return eventIds;
       },
       { timeout: TRANSACTION_TIMEOUT_MS },
@@ -242,6 +236,24 @@ export class DemoSeeder {
    */
   private async unusablePasswordHash(): Promise<string> {
     return this.passwords.hash(randomBytes(32).toString("base64url"));
+  }
+
+  /**
+   * Records the storage prefixes of these events for the sweep, to be
+   * emptied once every upload link handed out for them has expired. A
+   * prefix already recorded keeps its record.
+   */
+  async recordFilePurges(
+    eventIds: readonly string[],
+    client: Prisma.TransactionClient = this.prisma,
+  ): Promise<void> {
+    const notBefore = new Date(this.clock.now().getTime() + PURGE_DELAY_MS);
+    await client.pendingFilePurge.createMany({
+      data: eventIds.flatMap((eventId) =>
+        filePrefixesOf(eventId).map((prefix) => ({ prefix, notBefore })),
+      ),
+      skipDuplicates: true,
+    });
   }
 
   /**

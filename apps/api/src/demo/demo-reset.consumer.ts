@@ -4,6 +4,7 @@ import {
   type OnApplicationBootstrap,
   type OnApplicationShutdown,
 } from "@nestjs/common";
+import { DemoEventsDeletedPayload } from "@opspilot/contracts";
 import { type Job, type Queue, Worker } from "bullmq";
 import { InjectPinoLogger, PinoLogger } from "nestjs-pino";
 
@@ -113,7 +114,9 @@ export class DemoResetConsumer
   }
 
   /** Exposed for tests, which run jobs without a BullMQ worker. */
-  async process(job: Pick<Job, "name">): Promise<void> {
+  async process(
+    job: Pick<Job, "name"> & Partial<Pick<Job, "data">>,
+  ): Promise<void> {
     switch (job.name) {
       case MAINTENANCE_JOBS.demoReset: {
         // A reset queued before demo mode was switched off must not run.
@@ -129,6 +132,13 @@ export class DemoResetConsumer
         if (purged > 0 || failed) {
           this.logger.info({ purged, failed }, "Swept recorded file purges");
         }
+        return;
+      }
+      case MAINTENANCE_JOBS.legacyDemoPurgeFiles: {
+        // Queued by an earlier build, which purged here and gave up after
+        // its last retry. Recorded instead, the sweep keeps trying.
+        const { eventIds } = DemoEventsDeletedPayload.parse(job.data);
+        await this.seeder.recordFilePurges(eventIds);
         return;
       }
       default:

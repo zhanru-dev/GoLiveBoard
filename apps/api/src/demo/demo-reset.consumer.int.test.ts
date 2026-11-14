@@ -1,4 +1,5 @@
-import { randomBytes } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
+import { readFile } from "node:fs/promises";
 
 import type { INestApplicationContext } from "@nestjs/common";
 import type { Queue } from "bullmq";
@@ -17,6 +18,7 @@ import {
   uploadKeyFor,
   UPLOAD_URL_TTL_SECONDS,
 } from "../assets/assets.service.js";
+import { OutboxRelay } from "../outbox/outbox-relay.js";
 import { QUEUES } from "../queues/queues.module.js";
 import {
   MAINTENANCE_JOBS,
@@ -26,7 +28,11 @@ import {
 import type { Clock } from "../shared/clock.js";
 import { ObjectStorage } from "../storage/object-storage.js";
 import { TEST_S3_BUCKET, TEST_S3_CREDENTIALS } from "../testing/containers.js";
-import { createTestDatabase, type TestDatabase } from "../testing/database.js";
+import {
+  createTestDatabase,
+  holdLock,
+  type TestDatabase,
+} from "../testing/database.js";
 import { createTestWorker } from "../testing/test-app.js";
 import { DEMO_WORKSPACE } from "./demo-accounts.js";
 import {
@@ -255,4 +261,137 @@ describe("the nightly demo reset (FR-AUTH-5)", () => {
       expect(await pending()).toHaveLength(0);
     },
   );
+
+  /** The prefixes recorded for these events, with when each is due. */
+  async function recordedFor(eventIds: readonly string[]) {
+    const prefixes = eventIds.flatMap((id) => [
+      eventFilesPrefix(id),
+      uploadKeyFor(eventFilesPrefix(id)),
+    ]);
+    return database.query<{ prefix: string; not_before: Date }>(
+      `SELECT prefix, not_before FROM pending_file_purges
+       WHERE prefix = ANY($1) ORDER BY prefix`,
+      [prefixes],
+    );
+  }
+
+  /** An outbox message as the round-2 build wrote it. */
+  async function legacyMessage(eventId: string, dispatched: boolean) {
+    const [row] = await database.query<{ id: string; created_at: Date }>(
+      `INSERT INTO outbox_messages (workspace_id, type, payload, dispatched_at)
+       VALUES ($1, 'demo.events_deleted', $2, $3)
+       RETURNING id, created_at`,
+      [
+        DEMO_WORKSPACE.id,
+        JSON.stringify({ eventIds: [eventId] }),
+        dispatched ? new Date() : null,
+      ],
+    );
+    return row;
+  }
+
+  describe("upgrading from the build that purged through the outbox", () => {
+    it("records the purges its messages describe when the migration runs, once", async () => {
+      await (await startWorker(true, false)).get(DemoSeeder).reset();
+      const relayed = randomUUID();
+      const waiting = randomUUID();
+      const relayedAt = (await legacyMessage(relayed, true))?.created_at;
+      await legacyMessage(waiting, false);
+      const migration = await readFile(
+        new URL(
+          "../../prisma/migrations/20261114140000_backfill_file_purges/migration.sql",
+          import.meta.url,
+        ),
+        "utf8",
+      );
+
+      await database.query(migration);
+      await database.query(migration);
+
+      const recorded = await recordedFor([relayed, waiting]);
+      expect(recorded.map(({ prefix }) => prefix)).toEqual(
+        [
+          eventFilesPrefix(relayed),
+          eventFilesPrefix(waiting),
+          uploadKeyFor(eventFilesPrefix(relayed)),
+          uploadKeyFor(eventFilesPrefix(waiting)),
+        ].sort(),
+      );
+      // Due once that reset's upload links had expired.
+      expect(
+        recorded.find(({ prefix }) => prefix === eventFilesPrefix(relayed))
+          ?.not_before,
+      ).toEqual(new Date((relayedAt?.getTime() ?? 0) + PURGE_DELAY_MS));
+    });
+
+    it("records the purge of a message it had not relayed yet, and of a job it had queued", async () => {
+      const worker = await startWorker(true, false);
+      await worker.get(DemoSeeder).reset();
+      const notRelayed = randomUUID();
+      const queued = randomUUID();
+      const message = await legacyMessage(notRelayed, false);
+      const queue = maintenanceQueue(worker);
+      // A job already in Valkey, whose message a later reset deleted.
+      await queue?.add(
+        MAINTENANCE_JOBS.legacyDemoPurgeFiles,
+        { eventIds: [queued] },
+        { jobId: `legacy-${queued}`, delay: 60_000 },
+      );
+
+      await worker.get(OutboxRelay).relayOnce();
+      const consumer = worker.get(DemoResetConsumer);
+      for (const id of [`outbox-${message?.id ?? ""}`, `legacy-${queued}`]) {
+        const job = await queue?.getJob(id);
+        expect(job?.name, id).toBe(MAINTENANCE_JOBS.legacyDemoPurgeFiles);
+        await consumer.process({
+          name: job?.name ?? "",
+          data: job?.data as unknown,
+        });
+      }
+
+      expect(await recordedFor([notRelayed, queued])).toHaveLength(4);
+    });
+  });
+
+  it("lets two sweeps empty the same prefix at the same moment", async () => {
+    const later: Clock = {
+      now: () => new Date(Date.now() + PURGE_DELAY_MS + 60_000),
+    };
+    const first = await startWorker(true, false, { clock: later });
+    const second = await startWorker(true, false, { clock: later });
+    const eventId = randomUUID();
+    // Recorded now, so due by the sweeps' clock.
+    const now = await startWorker(true, false);
+    await now.get(DemoSeeder).recordFilePurges([eventId]);
+    const storage = now.get(ObjectStorage);
+    const key = `${eventFilesPrefix(eventId)}holding-slates/twice`;
+    const body = png();
+    const url = await storage.presignUpload(key, "image/png", body.length, 60);
+    await fetch(url, {
+      method: "PUT",
+      headers: { "Content-Type": "image/png" },
+      body,
+    });
+    // Both sweeps pick the prefix and empty it; each then waits to forget
+    // it, which this holds.
+    const block = await holdLock(
+      database.url,
+      "SELECT prefix FROM pending_file_purges WHERE prefix = $1 FOR UPDATE",
+      [eventFilesPrefix(eventId)],
+    );
+    const sweeps = [first, second].map((worker) =>
+      worker.get(DemoSeeder).purgeDueFiles(),
+    );
+    try {
+      await block.waitForWaiters(2);
+    } finally {
+      await block.release();
+    }
+
+    for (const outcome of await Promise.all(sweeps)) {
+      expect(outcome.failed).toBe(false);
+    }
+    expect(await storage.stat(key)).toBeUndefined();
+    expect(await recordedFor([eventId])).toHaveLength(0);
+  });
 });

@@ -23,6 +23,11 @@ export const MAINTENANCE_JOBS = {
    * `pending_file_purges` whose upload links have expired.
    */
   filePurge: "file-purge",
+  /**
+   * Legacy (DemoEventsDeletedPayload): queued by an earlier build. Now it
+   * only records the events' prefixes for the sweep.
+   */
+  legacyDemoPurgeFiles: "demo-purge-files",
 } as const;
 
 /** Every queue the worker consumes. */
