@@ -2,11 +2,9 @@
 
 import { type SyntheticEvent, useId, useState } from "react";
 
-import { FormAlert } from "@/components/form-alert";
-import { FormField } from "@/components/form-field";
-import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Button } from "@/components/ui/button";
 import { postPublic } from "@/lib/public-api";
+
+import { PublicButton, PublicField, PublicNotice } from "./public-ui";
 
 type Fields = "name" | "email" | "consent";
 type Errors = Partial<Record<Fields, string>>;
@@ -89,23 +87,21 @@ export function RegistrationForm({
 
   if (sent) {
     return (
-      <Alert role="status">
-        <AlertDescription>
+      <PublicNotice role="status">
+        <p>
+          Check your inbox. If this address can register, we have sent it a link
+          to confirm and join. The link works once, within 15 minutes.
+        </p>
+        {demoMode ? (
           <p>
-            Check your inbox. If this address can register, we have sent it a
-            link to confirm and join. The link works once, within 15 minutes.
+            This is the demo: nothing is really sent.{" "}
+            <a className="underline" href="/demo-inbox">
+              Open the demo inbox
+            </a>
+            .
           </p>
-          {demoMode ? (
-            <p className="mt-2">
-              This is the demo: nothing is really sent.{" "}
-              <a className="underline" href="/demo-inbox">
-                Open the demo inbox
-              </a>
-              .
-            </p>
-          ) : null}
-        </AlertDescription>
-      </Alert>
+        ) : null}
+      </PublicNotice>
     );
   }
 
@@ -116,15 +112,17 @@ export function RegistrationForm({
       className="grid gap-4"
       aria-label="Register"
     >
-      <FormAlert message={formError} />
-      <FormField
+      {formError === "" ? null : (
+        <PublicNotice role="alert">{formError}</PublicNotice>
+      )}
+      <PublicField
         label="Name"
         name="name"
         autoComplete="name"
         maxLength={100}
         error={errors.name}
       />
-      <FormField
+      <PublicField
         label="Email address"
         name="email"
         type="email"
@@ -160,9 +158,9 @@ export function RegistrationForm({
         />
         Remind me a day and an hour before it starts.
       </label>
-      <Button type="submit" disabled={busy}>
+      <PublicButton type="submit" disabled={busy}>
         Register
-      </Button>
+      </PublicButton>
     </form>
   );
 }

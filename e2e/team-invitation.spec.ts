@@ -1,4 +1,6 @@
-import { expect, type Page, test } from "@playwright/test";
+import type { Page } from "@playwright/test";
+
+import { expect, test } from "./fixtures.js";
 
 import { latestEmailTo, linkIn } from "./mailpit.js";
 
@@ -150,29 +152,40 @@ test("a member of two workspaces sees each one's own team after switching", asyn
 // Each of these resolves to `//redirect.invalid` somewhere between the
 // address bar and the router: a backslash, a tab, and dot segments (plain
 // and percent-encoded) that collapse into a double slash.
-for (const next of [
-  "/\\redirect.invalid",
-  "/\t/redirect.invalid",
-  "/.//redirect.invalid",
-  "/%2e//redirect.invalid",
-]) {
-  test(`a crafted next parameter cannot send the user to another site: ${JSON.stringify(next)}`, async ({
-    page,
-    baseURL,
-  }) => {
-    const email = `redirect-${unique()}@example.com`;
-    await signUp(page, "Ada Lovelace", email);
-    await page.context().clearCookies();
-    // Never let the browser actually leave, whatever happens.
-    await page.route("**://redirect.invalid/**", (route) => route.abort());
+test.describe("a crafted next parameter", () => {
+  // One account for every case: sign-ups are limited per address, and the
+  // whole suite comes from one.
+  const email = `redirect-${unique()}@example.com`;
 
-    await page.goto(`/sign-in?next=${encodeURIComponent(next)}`);
-    await page.getByLabel("Email address").fill(email);
-    await page.getByLabel("Password").fill(PASSWORD);
-    await page.getByRole("button", { name: "Sign in" }).click();
-
-    await expect(page.getByRole("heading", { name: "Events" })).toBeVisible();
-    expect(new URL(page.url()).origin).toBe(new URL(baseURL ?? "").origin);
-    expect(new URL(page.url()).pathname).toBe("/events");
+  test.beforeAll(async ({ request, baseURL }) => {
+    const response = await request.post("/api/v1/auth/sign-up", {
+      headers: { Origin: new URL(baseURL ?? "").origin },
+      data: { name: "Ada Lovelace", email, password: PASSWORD },
+    });
+    expect(response.status()).toBe(202);
   });
-}
+
+  for (const next of [
+    "/\\redirect.invalid",
+    "/\t/redirect.invalid",
+    "/.//redirect.invalid",
+    "/%2e//redirect.invalid",
+  ]) {
+    test(`cannot send the user to another site: ${JSON.stringify(next)}`, async ({
+      page,
+      baseURL,
+    }) => {
+      // Never let the browser actually leave, whatever happens.
+      await page.route("**://redirect.invalid/**", (route) => route.abort());
+
+      await page.goto(`/sign-in?next=${encodeURIComponent(next)}`);
+      await page.getByLabel("Email address").fill(email);
+      await page.getByLabel("Password").fill(PASSWORD);
+      await page.getByRole("button", { name: "Sign in" }).click();
+
+      await expect(page.getByRole("heading", { name: "Events" })).toBeVisible();
+      expect(new URL(page.url()).origin).toBe(new URL(baseURL ?? "").origin);
+      expect(new URL(page.url()).pathname).toBe("/events");
+    });
+  }
+});

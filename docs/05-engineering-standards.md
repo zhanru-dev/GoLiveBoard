@@ -125,7 +125,14 @@ Further rules:
 | JavaScript on the public event page               | ≤ 150 kB compressed |
 | API read endpoints (p95 at target load)           | < 300 ms            |
 
-Lighthouse CI runs on the public event page in every pull request that touches `apps/web`.
+How they are checked, in CI's images job on every pull request (`npm run lighthouse`, on the seeded demo event's public page in the production-like stack, as a mid-range phone on slow 4G with the CPU slowed four times):
+
+- **Lighthouse CI** (`lighthouserc.cjs`, median of three runs): Largest Contentful Paint, Cumulative Layout Shift, the JavaScript budget, and an accessibility score of at least 0.95. These are lab figures; the targets above are for field data at the 75th percentile, which the lab must beat.
+- **Interaction to Next Paint** (`scripts/lighthouse-inp.mjs`): a Lighthouse user flow fills in and submits the registration form; the median of five runs must stay under 200 ms. A page load has no interactions, so Lighthouse's usual stand-in, Total Blocking Time, is only reported: React and the Next.js runtime alone take about 200 ms of it on this emulated phone, measured on a public page without the form, so it says little about the page's own work.
+
+To stay within the JavaScript budget, the public event page loads no Zod, no form library, no Radix and no Tailwind class-merging engine (its controls are in `src/features/public/public-ui.tsx`), and the browser loads the Sentry SDK only when the first error happens.
+
+**Accessibility.** Every page is checked with axe against WCAG 2.2 AA in the browser tests (`e2e/accessibility.spec.ts`), with and without a session; a violation fails CI.
 
 ## 10. Git workflow
 

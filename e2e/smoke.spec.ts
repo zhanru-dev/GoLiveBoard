@@ -2,7 +2,7 @@ import { execFileSync } from "node:child_process";
 import { request as httpRequest } from "node:http";
 import { request as httpsRequest } from "node:https";
 
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./fixtures.js";
 
 import { E2E_TARGET, target } from "./target.js";
 
@@ -243,7 +243,14 @@ test("a demo visitor registers for a demo event and confirms from the demo inbox
   const visitor = await attendee.newPage();
   await visitor.goto(publicPath);
   await visitor.getByLabel("Name").fill("Demo Attendee");
-  await visitor.getByLabel("Email address").fill("someone@example.com");
+  // The seeded event admits addresses at northwind.example only, as its
+  // page says; any other address would get nothing, and be told nothing.
+  await expect(
+    visitor.getByText("Open to addresses at northwind.example."),
+  ).toBeVisible();
+  await visitor
+    .getByLabel("Email address")
+    .fill(`visitor-${String(Date.now())}@northwind.example`);
   await visitor.getByLabel(/agree to it/).check();
   await visitor.getByRole("button", { name: "Register" }).click();
   await visitor.getByRole("link", { name: "Open the demo inbox" }).click();

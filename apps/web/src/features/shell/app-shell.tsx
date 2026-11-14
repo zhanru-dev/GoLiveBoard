@@ -70,7 +70,12 @@ export function AppShell({
           </Link>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" aria-label="Switch workspace">
+              {/* The name includes the visible text (WCAG 2.5.3), so voice
+                  users can say what they see. */}
+              <Button
+                variant="ghost"
+                aria-label={`Switch workspace: ${me.activeWorkspace.workspaceName}`}
+              >
                 {me.activeWorkspace.workspaceName}
                 <ChevronsUpDown aria-hidden="true" />
               </Button>
