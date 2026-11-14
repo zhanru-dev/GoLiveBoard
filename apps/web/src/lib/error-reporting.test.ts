@@ -66,6 +66,25 @@ describe("errorReportingSettingsFromPage", () => {
     ["no tag", null],
     ["malformed JSON", "{"],
     ["an invalid DSN", JSON.stringify({ dsn: "x", environment: "demo" })],
+    [
+      "a DSN that is not HTTP",
+      JSON.stringify({ dsn: "ftp://sentry.example/1", environment: "demo" }),
+    ],
+    ["no environment", JSON.stringify({ dsn: DSN })],
+    ["an empty environment", JSON.stringify({ dsn: DSN, environment: "" })],
+    [
+      "an environment that is too long",
+      JSON.stringify({ dsn: DSN, environment: "x".repeat(65) }),
+    ],
+    [
+      "a release that is not text",
+      JSON.stringify({ dsn: DSN, environment: "demo", release: 3 }),
+    ],
+    [
+      "an empty release",
+      JSON.stringify({ dsn: DSN, environment: "demo", release: "" }),
+    ],
+    ["a list instead of settings", "[]"],
   ])("is off when the page has %s", (_case, content) => {
     expect(errorReportingSettingsFromPage(pageWith(content))).toBeNull();
   });

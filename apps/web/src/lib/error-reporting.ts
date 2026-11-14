@@ -1,17 +1,49 @@
 import type { BrowserOptions, ErrorEvent } from "@sentry/nextjs";
-import { z } from "zod";
 
 /**
  * Where the web app's errors go. Read from the web server's environment at
  * run time and handed to the browser in the page (a `<meta>` tag), so one
  * image works in every environment: nothing is fixed at build time.
  */
-export const ErrorReportingSettings = z.object({
-  dsn: z.url({ protocol: /^https?$/ }),
-  environment: z.string().min(1).max(64),
-  release: z.string().min(1).max(200).optional(),
-});
-export type ErrorReportingSettings = z.infer<typeof ErrorReportingSettings>;
+export interface ErrorReportingSettings {
+  readonly dsn: string;
+  readonly environment: string;
+  readonly release?: string | undefined;
+}
+
+/**
+ * Checks settings from the environment or the page. Written out rather than
+ * with Zod: this runs on every page in the browser, and Zod alone would
+ * weigh more than the page it reports for (NFR-3).
+ *
+ * @returns the settings, or null when anything is missing or malformed
+ */
+export function parseErrorReportingSettings(
+  value: unknown,
+): ErrorReportingSettings | null {
+  if (typeof value !== "object" || value === null) {
+    return null;
+  }
+  const { dsn, environment, release } = value as Record<string, unknown>;
+  const protocol =
+    typeof dsn === "string" ? URL.parse(dsn)?.protocol : undefined;
+  const validRelease =
+    release === undefined ||
+    (typeof release === "string" &&
+      release.length >= 1 &&
+      release.length <= 200);
+  if (
+    typeof dsn !== "string" ||
+    (protocol !== "https:" && protocol !== "http:") ||
+    typeof environment !== "string" ||
+    environment.length < 1 ||
+    environment.length > 64 ||
+    !validRelease
+  ) {
+    return null;
+  }
+  return { dsn, environment, release };
+}
 
 /** The name of the `<meta>` tag that carries the settings to the browser. */
 export const ERROR_REPORTING_META = "opspilot-error-reporting";
@@ -26,13 +58,12 @@ export function errorReportingSettings(
   // Compose passes an unset variable as an empty string: not set.
   const setting = (value: string | undefined) =>
     value === "" ? undefined : value;
-  const result = ErrorReportingSettings.safeParse({
+  return parseErrorReportingSettings({
     dsn: setting(env.SENTRY_DSN),
     environment:
       setting(env.SENTRY_ENVIRONMENT) ?? setting(env.NODE_ENV) ?? "production",
     release: setting(env.SENTRY_RELEASE),
   });
-  return result.success ? result.data : null;
 }
 
 /** The settings the server put in the page, or null. */
@@ -46,8 +77,7 @@ export function errorReportingSettingsFromPage(
     return null;
   }
   try {
-    const result = ErrorReportingSettings.safeParse(JSON.parse(content));
-    return result.success ? result.data : null;
+    return parseErrorReportingSettings(JSON.parse(content));
   } catch {
     return null;
   }

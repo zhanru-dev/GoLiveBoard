@@ -6,7 +6,7 @@ import { useState } from "react";
 
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { api } from "@/lib/api";
+import { postPublic } from "@/lib/public-api";
 
 /** What a signed-in attendee sees in place of the registration form. */
 export function AttendeePanel({
@@ -18,12 +18,9 @@ export function AttendeePanel({
 
   async function signOut() {
     setBusy(true);
-    try {
-      await api(`/public/events/${slug}/sign-out`, { method: "POST" });
-    } finally {
-      setBusy(false);
-      router.refresh();
-    }
+    await postPublic(`/public/events/${slug}/sign-out`);
+    setBusy(false);
+    router.refresh();
   }
 
   return (

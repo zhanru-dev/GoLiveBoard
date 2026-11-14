@@ -94,4 +94,42 @@ describe("RegistrationForm (FR-AD-3, FR-AD-6)", () => {
       await screen.findByRole("link", { name: "Open the demo inbox" }),
     ).toHaveAttribute("href", "/demo-inbox");
   });
+
+  it("shows the API's field errors next to their fields", async () => {
+    server.use(
+      http.post(`*/api/v1/public/events/${SLUG}/registrations`, () =>
+        HttpResponse.json(
+          {
+            type: "/problems/validation-failed",
+            title: "The request is not valid",
+            status: 400,
+            code: "VALIDATION_FAILED",
+            requestId: "r",
+            errors: [
+              {
+                path: "email",
+                code: "invalid_format",
+                message: "Enter an address that can receive email",
+              },
+            ],
+          },
+          { status: 400 },
+        ),
+      ),
+    );
+    renderScreen(
+      <RegistrationForm
+        slug={SLUG}
+        privacyNoticeVersion="2026-11"
+        demoMode={false}
+      />,
+    );
+
+    await fillIn(true);
+
+    expect(screen.getByLabelText("Email address")).toHaveAccessibleDescription(
+      "Enter an address that can receive email",
+    );
+    expect(screen.queryByRole("status")).toBeNull();
+  });
 });

@@ -223,3 +223,37 @@ test("a visitor signs in to the demo with one click", async ({ page }) => {
     page.getByRole("link", { name: "Autumn product launch" }),
   ).toBeVisible();
 });
+
+test("a demo visitor registers for a demo event and confirms from the demo inbox", async ({
+  page,
+  browser,
+}) => {
+  // The demo's Manager opens the seeded event, which is open for
+  // registration, and follows its public page link.
+  await page.goto("/sign-in");
+  await page.getByRole("button", { name: "Try the demo" }).click();
+  await page.getByRole("link", { name: "Autumn product launch" }).click();
+  const audience = page.getByRole("region", { name: "Audience" });
+  const publicPath =
+    (await audience.getByRole("link", { name: /^\/e\// }).textContent()) ?? "";
+
+  // Anyone can register, from any address: nothing is sent, the mail is in
+  // this browser's demo inbox.
+  const attendee = await browser.newContext();
+  const visitor = await attendee.newPage();
+  await visitor.goto(publicPath);
+  await visitor.getByLabel("Name").fill("Demo Attendee");
+  await visitor.getByLabel("Email address").fill("someone@example.com");
+  await visitor.getByLabel(/agree to it/).check();
+  await visitor.getByRole("button", { name: "Register" }).click();
+  await visitor.getByRole("link", { name: "Open the demo inbox" }).click();
+  const message = visitor.getByRole("article", {
+    name: "Confirm your registration for Autumn product launch",
+  });
+  await message.getByRole("link").click();
+
+  await expect(visitor.getByRole("status")).toContainText(
+    "You are registered as Demo Attendee",
+  );
+  await attendee.close();
+});

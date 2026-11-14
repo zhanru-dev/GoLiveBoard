@@ -1,21 +1,24 @@
 "use client";
 
-import { zodResolver } from "@hookform/resolvers/zod";
-import { RegistrationRequest } from "@opspilot/contracts";
-import { useState } from "react";
-import { useForm } from "react-hook-form";
+import { type SyntheticEvent, useId, useState } from "react";
 
 import { FormAlert } from "@/components/form-alert";
 import { FormField } from "@/components/form-field";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { api } from "@/lib/api";
-import { applyApiError } from "@/lib/form-errors";
+import { postPublic } from "@/lib/public-api";
+
+type Fields = "name" | "email" | "consent";
+type Errors = Partial<Record<Fields, string>>;
 
 /**
  * Registration (FR-AD-3). Whatever happens to the address (new, already
  * registered, not admitted), the answer is the same, so the page says the
  * same thing too: only the mailbox learns more.
+ *
+ * Plain inputs and a few checks of its own rather than a form library and
+ * Zod: the public page has a performance budget (NFR-3), and the API
+ * validates every field and answers with field errors.
  */
 export function RegistrationForm({
   slug,
@@ -27,31 +30,62 @@ export function RegistrationForm({
   demoMode: boolean;
 }>) {
   const [sent, setSent] = useState(false);
+  const [busy, setBusy] = useState(false);
   const [formError, setFormError] = useState("");
-  const {
-    register,
-    handleSubmit,
-    setError,
-    formState: { errors, isSubmitting },
-  } = useForm<RegistrationRequest>({
-    resolver: zodResolver(RegistrationRequest),
-    defaultValues: { privacyNoticeVersion, remindersOptIn: true },
-  });
+  const [errors, setErrors] = useState<Errors>({});
+  const consentErrorId = useId();
 
-  const onSubmit = handleSubmit(async (values) => {
+  async function submit(event: SyntheticEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const data = new FormData(event.currentTarget);
+    const text = (key: string) => {
+      const value = data.get(key);
+      return typeof value === "string" ? value.trim() : "";
+    };
+    const name = text("name");
+    const email = text("email");
+    const consent = data.get("consent") === "on";
+    const found: Errors = {
+      ...(name === "" && { name: "Enter your name" }),
+      ...(email === "" && { email: "Enter your email address" }),
+      ...(!consent && { consent: "Agree to the privacy notice to register" }),
+    };
+    setErrors(found);
     setFormError("");
-    try {
-      await api(`/public/events/${slug}/registrations`, {
-        method: "POST",
-        body: values,
-      });
-      setSent(true);
-    } catch (error) {
-      setFormError(
-        applyApiError(error, setError, ["name", "email", "consent"]),
-      );
+    if (Object.keys(found).length > 0) {
+      return;
     }
-  });
+    setBusy(true);
+    const result = await postPublic(`/public/events/${slug}/registrations`, {
+      name,
+      email,
+      privacyNoticeVersion,
+      consent: true,
+      remindersOptIn: data.get("remindersOptIn") === "on",
+    });
+    setBusy(false);
+    if (result.ok) {
+      setSent(true);
+      return;
+    }
+    const placed: Errors = {};
+    const unplaced: string[] = [];
+    for (const error of result.errors) {
+      if (
+        error.path === "name" ||
+        error.path === "email" ||
+        error.path === "consent"
+      ) {
+        placed[error.path] = error.message;
+      } else {
+        unplaced.push(error.message);
+      }
+    }
+    setErrors(placed);
+    if (Object.keys(placed).length === 0 || unplaced.length > 0) {
+      setFormError(unplaced.join(" ") || result.message);
+    }
+  }
 
   if (sent) {
     return (
@@ -77,7 +111,7 @@ export function RegistrationForm({
 
   return (
     <form
-      onSubmit={(event) => void onSubmit(event)}
+      onSubmit={(event) => void submit(event)}
       noValidate
       className="grid gap-4"
       aria-label="Register"
@@ -85,46 +119,48 @@ export function RegistrationForm({
       <FormAlert message={formError} />
       <FormField
         label="Name"
+        name="name"
         autoComplete="name"
-        error={errors.name?.message}
-        {...register("name")}
+        maxLength={100}
+        error={errors.name}
       />
       <FormField
         label="Email address"
+        name="email"
         type="email"
         autoComplete="email"
-        error={errors.email?.message}
-        {...register("email")}
+        maxLength={254}
+        error={errors.email}
       />
-      <input type="hidden" {...register("privacyNoticeVersion")} />
       <div className="grid gap-1">
         <label className="flex items-start gap-2 text-sm">
           <input
             type="checkbox"
+            name="consent"
             className="mt-1"
             aria-invalid={errors.consent !== undefined}
             aria-describedby={
-              errors.consent === undefined ? undefined : "consent-error"
+              errors.consent === undefined ? undefined : consentErrorId
             }
-            {...register("consent")}
           />
           I have read the privacy notice and agree to it.
         </label>
         {errors.consent === undefined ? null : (
-          <p id="consent-error" className="text-sm text-destructive">
-            {errors.consent.message}
+          <p id={consentErrorId} className="text-sm text-destructive">
+            {errors.consent}
           </p>
         )}
       </div>
       <label className="flex items-start gap-2 text-sm">
         <input
           type="checkbox"
+          name="remindersOptIn"
+          defaultChecked
           className="mt-1"
-          {...register("remindersOptIn")}
         />
         Remind me a day and an hour before it starts.
       </label>
-      <Button type="submit" disabled={isSubmitting}>
+      <Button type="submit" disabled={busy}>
         Register
       </Button>
     </form>
