@@ -17,14 +17,13 @@ import {
   uploadKeyFor,
   UPLOAD_URL_TTL_SECONDS,
 } from "../assets/assets.service.js";
-import { OutboxRelay } from "../outbox/outbox-relay.js";
-import { DEMO_PURGE_JOB_OPTIONS } from "../outbox/outbox-routes.js";
 import { QUEUES } from "../queues/queues.module.js";
 import {
   MAINTENANCE_JOBS,
   MAINTENANCE_QUEUE,
   type QueueName,
 } from "../queues/queues.js";
+import type { Clock } from "../shared/clock.js";
 import { ObjectStorage } from "../storage/object-storage.js";
 import { TEST_S3_BUCKET, TEST_S3_CREDENTIALS } from "../testing/containers.js";
 import { createTestDatabase, type TestDatabase } from "../testing/database.js";
@@ -33,8 +32,10 @@ import { DEMO_WORKSPACE } from "./demo-accounts.js";
 import {
   DEMO_RESET_SCHEDULER_ID,
   DemoResetConsumer,
+  FILE_PURGE_EVERY_MS,
+  FILE_PURGE_SCHEDULER_ID,
 } from "./demo-reset.consumer.js";
-import { DemoSeeder } from "./demo-seeder.js";
+import { DemoSeeder, PURGE_DELAY_MS } from "./demo-seeder.js";
 
 /** A PNG signature followed by filler. */
 const png = () =>
@@ -62,8 +63,16 @@ describe("the nightly demo reset (FR-AUTH-5)", () => {
     await database.drop();
   });
 
-  async function startWorker(demoMode: boolean, consume = true) {
+  async function startWorker(
+    demoMode: boolean,
+    consume = true,
+    overrides: {
+      readonly clock?: Clock;
+      readonly env?: Readonly<Record<string, string>>;
+    } = {},
+  ) {
     const worker = await createTestWorker({
+      clock: overrides.clock,
       env: {
         DATABASE_URL: database.url,
         VALKEY_URL: inject("valkeyUrl"),
@@ -75,6 +84,7 @@ describe("the nightly demo reset (FR-AUTH-5)", () => {
         S3_SECRET_ACCESS_KEY: TEST_S3_CREDENTIALS.secretAccessKey,
         S3_FORCE_PATH_STYLE: "true",
         S3_CREATE_BUCKET: "true",
+        ...overrides.env,
       },
       consume,
     });
@@ -111,6 +121,26 @@ describe("the nightly demo reset (FR-AUTH-5)", () => {
     expect(
       await maintenanceQueue(off)?.getJobScheduler(DEMO_RESET_SCHEDULER_ID),
     ).toBeUndefined();
+    // Purges recorded while demo mode was on are still swept.
+    expect(
+      await maintenanceQueue(off)?.getJobScheduler(FILE_PURGE_SCHEDULER_ID),
+    ).toMatchObject({
+      every: FILE_PURGE_EVERY_MS,
+      name: MAINTENANCE_JOBS.filePurge,
+    });
+  });
+
+  it("sweeps recorded file purges also in a deployment that never had demo mode on", async () => {
+    const off = await startWorker(false, true, {
+      env: { QUEUE_PREFIX: `test-${randomBytes(4).toString("hex")}` },
+    });
+
+    expect(
+      await maintenanceQueue(off)?.getJobScheduler(FILE_PURGE_SCHEDULER_ID),
+    ).toMatchObject({
+      every: FILE_PURGE_EVERY_MS,
+      name: MAINTENANCE_JOBS.filePurge,
+    });
   });
 
   it("schedules the reset once when several workers start at the same moment", async () => {
@@ -122,7 +152,9 @@ describe("the nightly demo reset (FR-AUTH-5)", () => {
     const queue = maintenanceQueue(started[0]);
 
     const schedulers = (await queue?.getJobSchedulers()) ?? [];
-    expect(schedulers.map(({ key }) => key)).toEqual([DEMO_RESET_SCHEDULER_ID]);
+    expect(schedulers.map(({ key }) => key).sort()).toEqual(
+      [DEMO_RESET_SCHEDULER_ID, FILE_PURGE_SCHEDULER_ID].sort(),
+    );
     // One next run is waiting, not one per worker.
     const waiting = (await queue?.getDelayed()) ?? [];
     expect(
@@ -135,7 +167,7 @@ describe("the nightly demo reset (FR-AUTH-5)", () => {
 
     await worker
       .get(DemoResetConsumer)
-      .process({ name: MAINTENANCE_JOBS.demoReset, data: {} });
+      .process({ name: MAINTENANCE_JOBS.demoReset });
 
     expect(await demoWorkspaces()).toBe(0);
   });
@@ -145,60 +177,82 @@ describe("the nightly demo reset (FR-AUTH-5)", () => {
 
     await worker
       .get(DemoResetConsumer)
-      .process({ name: MAINTENANCE_JOBS.demoReset, data: {} });
+      .process({ name: MAINTENANCE_JOBS.demoReset });
 
     expect(await demoWorkspaces()).toBe(1);
   });
 
-  it("deletes a file sent with an upload link from before the reset, once every such link has expired", async () => {
-    const worker = await startWorker(true, false);
-    const seeder = worker.get(DemoSeeder);
-    const storage = worker.get(ObjectStorage);
-    await seeder.reset();
-    const [event] = await database.query<{ id: string }>(
-      "SELECT id FROM events WHERE workspace_id = $1 LIMIT 1",
-      [DEMO_WORKSPACE.id],
-    );
-    const eventId = event?.id ?? "";
-    // A visitor asked for an upload link just before the reset...
-    const key = uploadKeyFor(`${eventFilesPrefix(eventId)}holding-slates/late`);
-    const body = png();
-    const url = await storage.presignUpload(
-      key,
-      "image/png",
-      body.length,
-      UPLOAD_URL_TTL_SECONDS,
-    );
-    await seeder.reset();
-    // ...and uses it after: the link still works, and nothing refers to
-    // the file any more.
-    const late = await fetch(url, {
-      method: "PUT",
-      headers: { "Content-Type": "image/png" },
-      body,
-    });
-    expect(late.status).toBe(200);
-    expect(await storage.stat(key)).toBeDefined();
+  it(
+    "deletes a file sent with an upload link from before the reset once the link has expired, however long storage is down",
+    { timeout: 60_000 },
+    async () => {
+      const worker = await startWorker(true, false);
+      const seeder = worker.get(DemoSeeder);
+      const storage = worker.get(ObjectStorage);
+      const sweep = (on: INestApplicationContext) =>
+        on.get(DemoResetConsumer).process({ name: MAINTENANCE_JOBS.filePurge });
+      await seeder.reset();
+      const [event] = await database.query<{ id: string }>(
+        "SELECT id FROM events WHERE workspace_id = $1 LIMIT 1",
+        [DEMO_WORKSPACE.id],
+      );
+      const eventId = event?.id ?? "";
+      const uploads = uploadKeyFor(eventFilesPrefix(eventId));
+      // A visitor asked for an upload link just before the reset...
+      const key = `${uploads}holding-slates/late`;
+      const body = png();
+      const url = await storage.presignUpload(
+        key,
+        "image/png",
+        body.length,
+        UPLOAD_URL_TTL_SECONDS,
+      );
+      await seeder.reset();
+      // ...and uses it after: the link still works, and no row refers to the
+      // file any more.
+      const late = await fetch(url, {
+        method: "PUT",
+        headers: { "Content-Type": "image/png" },
+        body,
+      });
+      expect(late.status).toBe(200);
+      const pending = () =>
+        database.query<{ prefix: string; not_before: Date }>(
+          "SELECT prefix, not_before FROM pending_file_purges WHERE prefix = ANY($1)",
+          [[eventFilesPrefix(eventId), uploads]],
+        );
+      // The reset recorded both prefixes, not to be emptied before the link
+      // has expired.
+      const recorded = await pending();
+      expect(recorded.map(({ prefix }) => prefix).sort()).toEqual(
+        [eventFilesPrefix(eventId), uploads].sort(),
+      );
+      for (const { not_before } of recorded) {
+        expect(not_before.getTime()).toBeGreaterThan(
+          Date.now() + UPLOAD_URL_TTL_SECONDS * 1000,
+        );
+      }
+      await sweep(worker);
+      expect(await storage.stat(key)).toBeDefined();
 
-    // The reset recorded the deleted events; the relay turns that into a
-    // purge that waits until the link has expired.
-    const [message] = await database.query<{ id: string }>(
-      `SELECT id FROM outbox_messages
-       WHERE type = 'demo.events_deleted' AND payload->'eventIds' ? $1`,
-      [eventId],
-    );
-    await worker.get(OutboxRelay).relayOnce();
-    const purge = await maintenanceQueue(worker)?.getJob(
-      `outbox-${message?.id ?? ""}`,
-    );
-    expect(purge?.name).toBe(MAINTENANCE_JOBS.demoPurgeFiles);
-    expect(purge?.opts).toMatchObject(DEMO_PURGE_JOB_OPTIONS);
-    expect(purge?.opts.delay).toBeGreaterThan(UPLOAD_URL_TTL_SECONDS * 1000);
+      // Later, with storage down: the sweep fails, and nothing is forgotten.
+      const later: Clock = {
+        now: () => new Date(Date.now() + PURGE_DELAY_MS + 60_000),
+      };
+      const storageDown = await startWorker(true, false, {
+        clock: later,
+        env: { S3_ENDPOINT: "http://127.0.0.1:9", S3_CREATE_BUCKET: "false" },
+      });
+      await sweep(storageDown);
+      await sweep(storageDown);
+      expect(await pending()).toHaveLength(2);
+      expect(await storage.stat(key)).toBeDefined();
 
-    await worker
-      .get(DemoResetConsumer)
-      .process({ name: purge?.name ?? "", data: purge?.data as unknown });
-
-    expect(await storage.stat(key)).toBeUndefined();
-  });
+      // Storage answers again, however much later: the next sweep empties both
+      // prefixes and forgets them.
+      await sweep(await startWorker(true, false, { clock: later }));
+      expect(await storage.stat(key)).toBeUndefined();
+      expect(await pending()).toHaveLength(0);
+    },
+  );
 });

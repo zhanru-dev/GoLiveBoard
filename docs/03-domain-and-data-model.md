@@ -331,6 +331,8 @@ erDiagram
 
 `IdempotencyRecord (scope, key, requestHash, responseStatus, responseBody, expiresAt)` stores responses to retried requests for 24 hours. The primary key is `(scope, key)`; the scope names the workspace, the user and the operation (`<workspaceId>:<userId>:create-event`), so a key never replays another user's response. Requests with the same key are serialised by a transaction-scoped advisory lock on the scope and key, and the record is written in the same transaction as the create.
 
+`PendingFilePurge (prefix, notBefore)` records storage prefixes whose files must be deleted once nothing can write to them any more: the demo reset records the prefixes of the events it deletes, with `notBefore` after the last upload link handed out for them has expired. The worker's maintenance sweep, every 5 minutes, empties each due prefix and only then deletes its row, so a storage outage of any length loses nothing.
+
 ## 5. Invariants and where they are enforced
 
 The rule of thumb: **if a rule must hold under concurrency, the database enforces it**; the application also checks it first so users get a clear error.

@@ -36,6 +36,12 @@ describe("DemoWriteBudgetGuard", () => {
     ]);
   });
 
+  it("refuses rather than skips both limits when they cannot be counted", () => {
+    // They bound what the demo stores, so a Valkey outage must not lift them.
+    expect(RATE_LIMITS.demoWritesPerIp.failClosed).toBe(true);
+    expect(RATE_LIMITS.demoWritesPerWorkspace.failClosed).toBe(true);
+  });
+
   it("refuses once the budget is spent", async () => {
     const { guard } = guardWith(
       vi.fn(() => Promise.reject(new Error("RATE_LIMITED"))),

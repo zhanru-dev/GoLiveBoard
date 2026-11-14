@@ -62,6 +62,10 @@ describe("the shared Valkey client while Valkey is frozen", () => {
         // Both bursts are abandoned after the command timeout...
         expect(await burst("frozen")).toBeLessThan(COMMAND_TIMEOUT_MS + 300);
         expect(await burst("frozen")).toBeLessThan(COMMAND_TIMEOUT_MS + 300);
+        // A limit that bounds what is stored refuses instead (503).
+        await expect(
+          limiter.consume({ ...RULE, failClosed: true }, "frozen"),
+        ).rejects.toMatchObject({ code: "SERVICE_UNAVAILABLE" });
         // ...and once the socket has been silent for its timeout, it is
         // destroyed, failing everything queued on it. Without that, the queue
         // would grow with every request for as long as Valkey stays frozen.

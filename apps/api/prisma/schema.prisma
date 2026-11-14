@@ -392,6 +392,20 @@ model Asset {
   @@map("assets")
 }
 
+/// Stored files to delete once nothing can write to them any more: the
+/// storage prefixes of events the demo reset deleted (FR-AUTH-5). An upload
+/// link handed out before the reset works until `notBefore`. The maintenance
+/// sweep then deletes the prefix's files and the row; while storage fails,
+/// the row stays and every later sweep tries again.
+model PendingFilePurge {
+  prefix    String   @id
+  notBefore DateTime @map("not_before") @db.Timestamptz(3)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@index([notBefore])
+  @@map("pending_file_purges")
+}
+
 /// A side effect to perform once the change that caused it has committed
 /// (ADR-0007). Written in the same transaction as the change; the worker's
 /// relay turns it into a job.

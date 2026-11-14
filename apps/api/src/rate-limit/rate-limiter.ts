@@ -11,6 +11,12 @@ export interface RateLimitRule {
   readonly name: string;
   readonly limit: number;
   readonly windowMs: number;
+  /**
+   * Refuse with `503` when Valkey cannot count, instead of skipping the
+   * limit. For limits that bound what is stored rather than slow down
+   * guessing (the demo's write budget).
+   */
+  readonly failClosed?: boolean;
 }
 
 const MINUTE_MS = 60_000;
@@ -33,12 +39,18 @@ export const RATE_LIMITS = {
   /** Each demo sign-in starts a session; a person needs a handful at most. */
   demoSignInPerIp: { name: "demo-sign-in:ip", limit: 20, windowMs: HOUR_MS },
   /** Changes to the demo workspace (DemoWriteBudgetGuard): from one address... */
-  demoWritesPerIp: { name: "demo-writes:ip", limit: 300, windowMs: HOUR_MS },
+  demoWritesPerIp: {
+    name: "demo-writes:ip",
+    limit: 300,
+    windowMs: HOUR_MS,
+    failClosed: true,
+  },
   /** ...and from everyone together, so the demo stays small between resets. */
   demoWritesPerWorkspace: {
     name: "demo-writes:workspace",
     limit: 3_000,
     windowMs: HOUR_MS,
+    failClosed: true,
   },
   passwordResetPerIp: {
     name: "password-reset:ip",
@@ -72,7 +84,8 @@ return 0`;
  * Fixed-window counters in Valkey, shared by every API process. If Valkey is
  * unreachable the limits are skipped (fail open) and the outage is logged:
  * losing brute-force protection for a while is better than locking everyone
- * out, and the readiness check reports the outage anyway.
+ * out, and the readiness check reports the outage anyway. A rule that bounds
+ * what is stored fails closed instead (`failClosed`).
  */
 @Injectable()
 export class RateLimiter {
@@ -81,10 +94,22 @@ export class RateLimiter {
     @InjectPinoLogger(RateLimiter.name) private readonly logger: PinoLogger,
   ) {}
 
-  /** Counts one event; true while the key is within its limit. */
+  /**
+   * Counts one event; true while the key is within its limit. When Valkey
+   * cannot count, true (fail open), unless the rule fails closed.
+   *
+   * @throws DomainError `SERVICE_UNAVAILABLE` when Valkey cannot count and
+   * the rule fails closed
+   */
   async consume(rule: RateLimitRule, subject: string): Promise<boolean> {
     const count = await this.increment(rule, subject);
-    return count === undefined || count <= rule.limit;
+    if (count === undefined) {
+      if (rule.failClosed === true) {
+        throw new DomainError("SERVICE_UNAVAILABLE");
+      }
+      return true;
+    }
+    return count <= rule.limit;
   }
 
   /** Like consume, but answers an exceeded limit with 429. */

@@ -15,7 +15,8 @@ import { recordAudit } from "../audit/audit.js";
 import type { Actor } from "../auth/actor.js";
 import { PRISMA } from "../database/prisma.js";
 import { claimDemoAssetSlot } from "../demo/demo-workspace.js";
-import { lockWritableEvent } from "../events/event-lock.queries.js";
+import { isReadOnly } from "../events/domain/lifecycle.js";
+import { lockEvent, lockWritableEvent } from "../events/event-lock.queries.js";
 import type { Prisma, PrismaClient } from "../generated/prisma/client.js";
 import { CLOCK, type Clock } from "../shared/clock.js";
 import { DomainError } from "../shared/domain/domain-error.js";
@@ -140,9 +141,11 @@ export class AssetsService {
    * Verifies an upload and makes it the event's holding slate. Calling it
    * again for a slate that is already ready returns it unchanged.
    *
-   * In one transaction it locks the asset (so completions of one asset run
-   * one at a time), then the event (so an archived event refuses it, and a
-   * transition never sees a half-finished slate). It copies the upload to
+   * In one transaction it locks the event (so an archived event refuses it,
+   * and a transition never sees a half-finished slate), then the asset (so
+   * completions of one asset run one at a time). That order is the one every
+   * path takes; the other way round, completing a slate while the demo reset
+   * deletes its event deadlocks. It copies the upload to
    * the final key, which no presigned URL can write, and checks that copy:
    * what was verified is exactly what is served, even if the upload URL is
    * used again afterwards. Files are deleted only after this request has
@@ -160,6 +163,17 @@ export class AssetsService {
   async complete(actor: Actor, assetId: string): Promise<Asset> {
     const { asset, completion } = await this.prisma.$transaction(
       async (tx) => {
+        // The event first, then the asset: the order of every other path
+        // (an upload locks the event, then inserts the asset; the demo
+        // reset deletes the event, and with it the asset).
+        const event = await lockEvent(
+          tx,
+          actor.workspaceId,
+          await this.eventOf(tx, actor, assetId),
+        );
+        if (event === undefined) {
+          throw new DomainError("NOT_FOUND");
+        }
         const locked = await this.lockAsset(tx, actor, assetId);
         if (locked.status === "READY") {
           return {
@@ -170,7 +184,9 @@ export class AssetsService {
         if (locked.status === "REJECTED") {
           throw new DomainError("ASSET_REJECTED");
         }
-        await lockWritableEvent(tx, actor.workspaceId, locked.eventId);
+        if (isReadOnly(event.status)) {
+          throw new DomainError("EVENT_ARCHIVED");
+        }
         const reason = await this.copyAndVerify(
           locked,
           AbortSignal.timeout(COMPLETE_STORAGE_BUDGET_MS),
@@ -307,6 +323,22 @@ export class AssetsService {
   }
 
   /** Locks an asset of the actor's workspace; another workspace's is `404`. */
+  /** The asset's event, in the actor's workspace; it never changes. */
+  private async eventOf(
+    tx: Prisma.TransactionClient,
+    actor: Actor,
+    assetId: string,
+  ): Promise<string> {
+    const asset = await tx.asset.findFirst({
+      where: { id: assetId, event: { workspaceId: actor.workspaceId } },
+      select: { eventId: true },
+    });
+    if (asset === null) {
+      throw new DomainError("NOT_FOUND");
+    }
+    return asset.eventId;
+  }
+
   private async lockAsset(
     tx: Prisma.TransactionClient,
     actor: Actor,

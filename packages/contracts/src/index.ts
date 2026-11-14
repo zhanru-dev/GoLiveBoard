@@ -62,7 +62,6 @@ export {
 export { HealthCheckResult, HealthReport, LivenessReport } from "./health.js";
 export {
   CheckStreamJob,
-  DemoEventsDeletedPayload,
   EventTransitionedPayload,
   OutboxMessageType,
   StreamCheckRequestedPayload,

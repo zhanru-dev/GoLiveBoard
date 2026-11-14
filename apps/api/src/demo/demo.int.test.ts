@@ -424,6 +424,42 @@ describe("demo mode (FR-AUTH-5)", () => {
     expect(await eventTitles(api, visitor)).toEqual(SEED_TITLES);
   });
 
+  it("finishes a reset while a visitor completes a slate of an event it deletes, without a deadlock", async () => {
+    const visitor = await demoSession(app);
+    const seeder = app.get(DemoSeeder);
+    await seeder.reset();
+    const launch = EventPage.parse(
+      (await api.get(visitor, "/events?q=Autumn")).body,
+    ).items[0];
+    const started = await api.send(
+      visitor,
+      "post",
+      `/events/${launch?.id ?? ""}/assets/holding-slate`,
+      { contentType: "image/png", sizeBytes: png().length },
+    );
+    expect(started.status, started.text).toBe(201);
+    const { assetId } = AssetUpload.parse(started.body);
+    // The reset holds the event it deletes and waits to delete its asset...
+    const block = await blockWrites(database.url, "assets");
+    const reset = seeder.reset();
+    await block.waitForWaiters(1);
+    // ...while the completion waits for the event, holding nothing the
+    // reset needs.
+    const completion = Promise.resolve(
+      api.send(visitor, "post", `/assets/${assetId}/complete`),
+    );
+    try {
+      await block.waitForWaiters(2);
+    } finally {
+      await block.release();
+    }
+
+    await reset;
+    const response = await completion;
+    expect(response.status, response.text).toBe(404);
+    expect(await eventTitles(api, visitor)).toEqual(SEED_TITLES);
+  });
+
   it("restores the seed once when two resets run at the same moment", async () => {
     const block = await blockWrites(database.url, "events");
     const seeder = app.get(DemoSeeder);
@@ -726,6 +762,51 @@ describe("demo mode, first use", () => {
       [DEMO_WORKSPACE.id],
     );
     expect(events[0]?.count).toBe(SEED_TITLES.length);
+  });
+});
+
+describe("demo mode while Valkey is unreachable", () => {
+  let database: TestDatabase;
+  let app: NestExpressApplication;
+
+  beforeAll(async () => {
+    database = await createTestDatabase();
+    // The default test configuration points Valkey at a closed port.
+    app = await createTestApp({
+      env: {
+        DATABASE_URL: database.url,
+        DEMO_MODE: "true",
+        TRUST_PROXY_HOPS: "1",
+      },
+      mailer: new CapturingMailer(),
+    });
+  });
+
+  afterAll(async () => {
+    await app.close();
+    await database.drop();
+  });
+
+  it("refuses changes to the demo, which its write budget cannot count, and goes on reading", async () => {
+    const api = new ApiClient(app, newAddress());
+    // Signing in still works: its limit fails open.
+    const visitor = await demoSession(app);
+
+    const change = await api.send(
+      visitor,
+      "post",
+      "/events",
+      newEvent("While Valkey is down"),
+    );
+
+    expect(change.status).toBe(503);
+    expect(ProblemDetails.parse(change.body).code).toBe("SERVICE_UNAVAILABLE");
+    expect((await api.get(visitor, "/events")).status).toBe(200);
+    const [row] = await database.query<{ count: number }>(
+      "SELECT count(*)::int AS count FROM events WHERE title = $1",
+      ["While Valkey is down"],
+    );
+    expect(row?.count).toBe(0);
   });
 });
 

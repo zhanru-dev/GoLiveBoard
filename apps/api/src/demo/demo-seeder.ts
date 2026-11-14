@@ -1,26 +1,32 @@
 import { randomBytes } from "node:crypto";
 
 import { Inject, Injectable } from "@nestjs/common";
-import type {
-  DemoEventsDeletedPayload,
-  OutboxMessageType,
-} from "@opspilot/contracts";
 import { InjectPinoLogger, PinoLogger } from "nestjs-pino";
 
-import { eventFilesPrefix, uploadKeyFor } from "../assets/assets.service.js";
+import {
+  eventFilesPrefix,
+  UPLOAD_URL_TTL_SECONDS,
+  uploadKeyFor,
+} from "../assets/assets.service.js";
 import { PasswordHasher } from "../auth/password-hasher.js";
 import { PRISMA } from "../database/prisma.js";
 import { eventSlug } from "../events/domain/slug.js";
 import { randomSlugSuffix } from "../events/slug-suffix.js";
 import type { Prisma, PrismaClient } from "../generated/prisma/client.js";
-import { writeOutbox } from "../outbox/outbox.js";
 import { CLOCK, type Clock } from "../shared/clock.js";
 import { ObjectStorage } from "../storage/object-storage.js";
 import { DEMO_PEOPLE, DEMO_WORKSPACE } from "./demo-accounts.js";
 import { lockDemoWorkspace } from "./demo-workspace.js";
 import { demoSeed } from "./domain/demo-seed.js";
 
-const EVENTS_DELETED = "demo.events_deleted" satisfies OutboxMessageType;
+/**
+ * A deleted event's files are deleted again once every upload link handed
+ * out before the reset has expired, with a margin for clocks that differ.
+ */
+export const PURGE_DELAY_MS = UPLOAD_URL_TTL_SECONDS * 1000 + 5 * 60 * 1000;
+
+/** How many prefixes one sweep empties at most; the next sweep goes on. */
+const PURGE_BATCH = 200;
 
 /** Generous: the reset deletes and writes a few hundred rows at most. */
 const TRANSACTION_TIMEOUT_MS = 30_000;
@@ -82,9 +88,10 @@ export class DemoSeeder {
    * goes too: everything under their storage prefixes, so a slate uploaded
    * while the reset ran is not left behind. An upload link handed out before
    * the reset still works for a few minutes, though, and storage may be
-   * down, so the same transaction also records the deleted events in the
-   * outbox: the worker deletes their files again once every such link has
-   * expired, retrying until storage answers (purgeEventFiles).
+   * down, so the same transaction also records the deleted events' prefixes
+   * in `pending_file_purges`: the worker's sweep empties them once every such
+   * link has expired, and keeps trying for as long as storage fails
+   * (purgeDueFiles).
    *
    * @returns how many events were replaced
    */
@@ -104,12 +111,8 @@ export class DemoSeeder {
         await tx.auditEntry.deleteMany({
           where: { workspaceId: DEMO_WORKSPACE.id },
         });
-        // Except the file purges of earlier resets still waiting to be relayed.
         await tx.outboxMessage.deleteMany({
-          where: {
-            workspaceId: DEMO_WORKSPACE.id,
-            NOT: { type: EVENTS_DELETED, dispatchedAt: null },
-          },
+          where: { workspaceId: DEMO_WORKSPACE.id },
         });
         // Stored responses of creates, which would replay deleted events.
         await tx.idempotencyRecord.deleteMany({
@@ -118,21 +121,19 @@ export class DemoSeeder {
         await this.restoreAccounts(tx, passwordHash);
         await this.writeEvents(tx);
         const eventIds = deleted.map(({ id }) => id);
-        if (eventIds.length > 0) {
-          await writeOutbox(tx, {
-            workspaceId: DEMO_WORKSPACE.id,
-            type: EVENTS_DELETED,
-            payload: { eventIds } satisfies DemoEventsDeletedPayload,
-          });
-        }
+        const notBefore = new Date(this.clock.now().getTime() + PURGE_DELAY_MS);
+        await tx.pendingFilePurge.createMany({
+          data: eventIds.flatMap((eventId) =>
+            filePrefixesOf(eventId).map((prefix) => ({ prefix, notBefore })),
+          ),
+          skipDuplicates: true,
+        });
         return eventIds;
       },
       { timeout: TRANSACTION_TIMEOUT_MS },
     );
-    for (const eventId of deletedEventIds) {
-      const prefix = eventFilesPrefix(eventId);
+    for (const prefix of deletedEventIds.flatMap(filePrefixesOf)) {
       await this.removeAllQuietly(prefix);
-      await this.removeAllQuietly(uploadKeyFor(prefix));
     }
     return deletedEventIds.length;
   }
@@ -244,17 +245,35 @@ export class DemoSeeder {
   }
 
   /**
-   * Deletes every stored file of these events: their slates and whatever was
-   * uploaded for them.
+   * Empties every recorded prefix whose upload links have all expired, and
+   * forgets it. When storage fails, the sweep stops and logs the failure;
+   * what is left stays recorded, and the next sweep tries again, however
+   * long storage stays down.
    *
-   * @throws when storage fails, so the job is retried
+   * @returns how many prefixes were emptied, and whether any are left due
    */
-  async purgeEventFiles(eventIds: readonly string[]): Promise<void> {
-    for (const eventId of eventIds) {
-      const prefix = eventFilesPrefix(eventId);
-      await this.removeAll(prefix);
-      await this.removeAll(uploadKeyFor(prefix));
+  async purgeDueFiles(): Promise<{ purged: number; failed: boolean }> {
+    const due = await this.prisma.pendingFilePurge.findMany({
+      where: { notBefore: { lte: this.clock.now() } },
+      orderBy: { notBefore: "asc" },
+      take: PURGE_BATCH,
+      select: { prefix: true },
+    });
+    let purged = 0;
+    for (const { prefix } of due) {
+      try {
+        await this.removeAll(prefix);
+      } catch (error) {
+        this.logger.error(
+          { err: error, prefix },
+          "Could not delete stored files; the next sweep tries again",
+        );
+        return { purged, failed: true };
+      }
+      await this.prisma.pendingFilePurge.deleteMany({ where: { prefix } });
+      purged += 1;
     }
+    return { purged, failed: false };
   }
 
   private async removeAll(prefix: string): Promise<void> {
@@ -264,9 +283,8 @@ export class DemoSeeder {
   }
 
   /**
-   * At once, best effort: the purge recorded in the outbox runs later and
-   * retries, while failing the reset here would leave the demo as visitors
-   * left it.
+   * At once, best effort: the recorded purge runs later and retries, while
+   * failing the reset here would leave the demo as visitors left it.
    */
   private async removeAllQuietly(prefix: string): Promise<void> {
     try {
@@ -278,4 +296,10 @@ export class DemoSeeder {
       );
     }
   }
+}
+
+/** Where an event's files are: its slates, and whatever was uploaded for them. */
+function filePrefixesOf(eventId: string): string[] {
+  const prefix = eventFilesPrefix(eventId);
+  return [prefix, uploadKeyFor(prefix)];
 }

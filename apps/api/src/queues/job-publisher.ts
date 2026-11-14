@@ -1,4 +1,4 @@
-import type { JobsOptions, Queue } from "bullmq";
+import type { Queue } from "bullmq";
 
 import type { QueueName } from "./queues.js";
 
@@ -11,8 +11,6 @@ export interface JobRequest {
    * published twice runs once. IDs may not contain ":".
    */
   readonly jobId: string;
-  /** When to run it and how to retry it, if not as the queue's defaults say. */
-  readonly options?: Pick<JobsOptions, "delay" | "attempts" | "backoff">;
 }
 
 /** Puts jobs on BullMQ queues. */
@@ -24,6 +22,6 @@ export class JobPublisher {
     if (queue === undefined) {
       throw new Error(`No queue named ${job.queue}`);
     }
-    await queue.add(job.name, job.data, { ...job.options, jobId: job.jobId });
+    await queue.add(job.name, job.data, { jobId: job.jobId });
   }
 }
