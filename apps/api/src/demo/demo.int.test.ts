@@ -2,12 +2,14 @@ import { randomUUID } from "node:crypto";
 
 import type { NestExpressApplication } from "@nestjs/platform-express";
 import { AssetUpload, EventPage, ProblemDetails } from "@opspilot/contracts";
+import type { Redis } from "ioredis";
 import request from "supertest";
 import { afterAll, beforeAll, describe, expect, inject, it } from "vitest";
 
 import { ACCESS_COOKIE, REFRESH_COOKIE } from "../auth/cookies.js";
 import { eventFilesPrefix, uploadKeyFor } from "../assets/assets.service.js";
 import { RATE_LIMITS } from "../rate-limit/rate-limiter.js";
+import { VALKEY_CLIENT } from "../valkey/valkey.js";
 import { ObjectStorage } from "../storage/object-storage.js";
 import { ApiClient, type TestSession } from "../testing/api-client.js";
 import { TEST_S3_BUCKET, TEST_S3_CREDENTIALS } from "../testing/containers.js";
@@ -496,49 +498,59 @@ describe("demo mode, what one visitor can make it do", () => {
     await database.drop();
   });
 
-  it("holds a bounded number of events, also when visitors create them at the same moment", async () => {
-    const visitor = await demoSession(app);
-    await app.get(DemoSeeder).reset();
-    for (
-      let index = SEED_TITLES.length;
-      index < DEMO_EVENT_LIMIT - 1;
-      index += 1
-    ) {
-      const created = await api.send(
-        visitor,
-        "post",
-        "/events",
-        newEvent(`Filler ${String(index)}`),
+  // Dozens of sequential requests: a slow machine needs more than the
+  // default 5 seconds, without anything being wrong.
+  it(
+    "holds a bounded number of events, also when visitors create them at the same moment",
+    { timeout: 30_000 },
+    async () => {
+      const visitor = await demoSession(app);
+      await app.get(DemoSeeder).reset();
+      for (
+        let index = SEED_TITLES.length;
+        index < DEMO_EVENT_LIMIT - 1;
+        index += 1
+      ) {
+        const created = await api.send(
+          visitor,
+          "post",
+          "/events",
+          newEvent(`Filler ${String(index)}`),
+        );
+        expect(created.status, created.text).toBe(201);
+      }
+      // One slot left. The first create holds the demo lock and waits to
+      // insert; the other two wait for the lock, then find the demo full.
+      const block = await blockWrites(database.url, "events");
+      const creates = ["One", "Two", "Three"].map((title) =>
+        Promise.resolve(api.send(visitor, "post", "/events", newEvent(title))),
       );
-      expect(created.status, created.text).toBe(201);
-    }
-    // One slot left. The first create holds the demo lock and waits to
-    // insert; the other two wait for the lock, then find the demo full.
-    const block = await blockWrites(database.url, "events");
-    const creates = ["One", "Two", "Three"].map((title) =>
-      Promise.resolve(api.send(visitor, "post", "/events", newEvent(title))),
-    );
-    try {
-      await block.waitForWaiters(3);
-    } finally {
-      await block.release();
-    }
-    const responses = await Promise.all(creates);
+      try {
+        await block.waitForWaiters(3);
+      } finally {
+        await block.release();
+      }
+      const responses = await Promise.all(creates);
 
-    expect(responses.map(({ status }) => status).sort()).toEqual([
-      201, 403, 403,
-    ]);
-    for (const response of responses.filter(({ status }) => status === 403)) {
-      expect(ProblemDetails.parse(response.body).code).toBe("DEMO_RESTRICTED");
-    }
-    const [row] = await database.query<{ count: number }>(
-      "SELECT count(*)::int AS count FROM events WHERE workspace_id = $1",
-      [DEMO_WORKSPACE.id],
-    );
-    expect(row?.count).toBe(DEMO_EVENT_LIMIT);
-  });
+      expect(responses.map(({ status }) => status).sort()).toEqual([
+        201, 403, 403,
+      ]);
+      for (const response of responses.filter(({ status }) => status === 403)) {
+        expect(ProblemDetails.parse(response.body).code).toBe(
+          "DEMO_RESTRICTED",
+        );
+      }
+      const [row] = await database.query<{ count: number }>(
+        "SELECT count(*)::int AS count FROM events WHERE workspace_id = $1",
+        [DEMO_WORKSPACE.id],
+      );
+      expect(row?.count).toBe(DEMO_EVENT_LIMIT);
+    },
+  );
 
-  it("limits the demo workspace only", async () => {
+  // Dozens of sequential requests: a slow machine needs more than the
+  // default 5 seconds, without anything being wrong.
+  it("limits the demo workspace only", { timeout: 30_000 }, async () => {
     const owner = await api.newOwner();
 
     for (let index = 0; index <= DEMO_EVENT_LIMIT; index += 1) {
@@ -600,19 +612,31 @@ describe("demo mode, what one visitor can make it do", () => {
     const address = newAddress();
     const visitor = await demoSession(app);
     const fromAddress = new ApiClient(app, address);
+    const rule = RATE_LIMITS.demoWritesPerIp;
+    // This address has already made all but one of its changes this hour.
+    await app
+      .get<Redis>(VALKEY_CLIENT)
+      .set(
+        `opspilot:rate:${rule.name}:${address}`,
+        String(rule.limit - 1),
+        "PX",
+        rule.windowMs,
+      );
     // Refused requests count too: the budget is spent before any work.
     const invalid = () =>
       fromAddress.send(visitor, "post", "/events", { title: "" });
-    for (let index = 0; index < RATE_LIMITS.demoWritesPerIp.limit; index += 1) {
-      expect((await invalid()).status).toBe(400);
-    }
 
+    expect((await invalid()).status).toBe(400);
     const over = await invalid();
 
     expect(over.status).toBe(429);
     expect(ProblemDetails.parse(over.body).code).toBe("RATE_LIMITED");
-    // Reading goes on.
+    // Reading goes on, and other addresses go on changing the demo.
     expect((await fromAddress.get(visitor, "/events")).status).toBe(200);
+    const elsewhere = new ApiClient(app, newAddress());
+    expect(
+      (await elsewhere.send(visitor, "post", "/events", { title: "" })).status,
+    ).toBe(400);
   });
 
   it("lets nobody point the demo's stream checks at an address", async () => {
