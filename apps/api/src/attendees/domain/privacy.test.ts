@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   anonymisedEmail,
+  maskEmail,
   attendeeSessionExpiresAt,
   retentionEndsAt,
   VERIFICATION_TTL_MS,
@@ -48,5 +49,17 @@ describe("attendeeSessionExpiresAt", () => {
 describe("VERIFICATION_TTL_MS", () => {
   it("is 15 minutes (FR-AD-3)", () => {
     expect(VERIFICATION_TTL_MS).toBe(15 * 60 * 1000);
+  });
+});
+
+describe("maskEmail", () => {
+  it.each([
+    ["ada@example.com", "a***@example.com"],
+    ["a@b.org", "a***@b.org"],
+    ['"x@y"@partner.org', '"***@partner.org'],
+    ["no-at-sign", "***"],
+    ["@example.com", "***"],
+  ])("masks %s as %s", (email, masked) => {
+    expect(maskEmail(email)).toBe(masked);
   });
 });

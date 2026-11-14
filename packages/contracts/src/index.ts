@@ -1,11 +1,17 @@
 export {
+  AttendeeInvitation,
   AttendeeMe,
+  AttendeePage,
+  AttendeeQuery,
+  AttendeeStatus,
   AttendeeVerificationRequest,
   AttendeeVerified,
+  CreateAttendeeInvitationRequest,
   DemoInbox,
   PublicEvent,
   PublicEventStatus,
   RegistrationRequest,
+  StaffAttendee,
   UnsubscribeRequest,
 } from "./admission.js";
 export {

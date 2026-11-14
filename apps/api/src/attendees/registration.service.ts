@@ -241,23 +241,31 @@ export class RegistrationService {
     );
     const now = this.clock.now();
     return this.prisma.$transaction(async (tx) => {
-      // Spent in the statement that checks it: of two requests with the
-      // same link, exactly one gets a row back.
-      const [used] = await tx.$queryRaw<{ attendee_id: string }[]>`
-        UPDATE attendee_verification_tokens SET used_at = ${now}
-        WHERE token_hash = ${hashToken(token)} AND used_at IS NULL
-          AND expires_at > ${now}
-        RETURNING attendee_id`;
-      if (used === undefined) {
+      // The attendee first, then the link: the order of every other path
+      // that touches both (registering again, revoking, erasing). The other
+      // way round, using a link while a Manager revokes its attendee
+      // deadlocked.
+      const [link] = await tx.$queryRaw<{ attendee_id: string }[]>`
+        SELECT attendee_id FROM attendee_verification_tokens
+        WHERE token_hash = ${hashToken(token)}`;
+      if (link === undefined) {
         throw new DomainError("TOKEN_INVALID");
       }
       const [attendee] = await tx.$queryRaw<
         { id: string; status: string; email: string; event_id: string }[]
       >`
         SELECT id, status::text AS status, email::text AS email, event_id
-        FROM attendees WHERE id = ${used.attendee_id}::uuid
+        FROM attendees WHERE id = ${link.attendee_id}::uuid
         FOR UPDATE`;
+      // Spent in the statement that checks it: of two requests with the
+      // same link, exactly one gets a row back.
+      const [used] = await tx.$queryRaw<{ id: string }[]>`
+        UPDATE attendee_verification_tokens SET used_at = ${now}
+        WHERE token_hash = ${hashToken(token)} AND used_at IS NULL
+          AND expires_at > ${now}
+        RETURNING id`;
       if (
+        used === undefined ||
         attendee === undefined ||
         (attendee.status !== "PENDING" && attendee.status !== "VERIFIED")
       ) {

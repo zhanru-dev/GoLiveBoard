@@ -2,6 +2,7 @@ import { z } from "zod";
 
 import { Email, PersonName } from "./auth.js";
 import { AccessMode } from "./launch-control.js";
+import { PageQuery, pageOf } from "./pagination.js";
 
 /**
  * What the public sees of an event's progress. Internal statuses
@@ -90,3 +91,48 @@ export const DemoInbox = z.object({
   ),
 });
 export type DemoInbox = z.infer<typeof DemoInbox>;
+
+export const AttendeeStatus = z.enum([
+  "PENDING",
+  "VERIFIED",
+  "REVOKED",
+  "ERASED",
+]);
+export type AttendeeStatus = z.infer<typeof AttendeeStatus>;
+
+/**
+ * An attendee as staff see them (docs/04, section 3.4). Analysts see the
+ * address masked; an erased attendee has no address at all.
+ */
+export const StaffAttendee = z.object({
+  id: z.uuid(),
+  name: z.string(),
+  email: z.string().nullable(),
+  status: AttendeeStatus,
+  remindersOptIn: z.boolean(),
+  registeredAt: z.iso.datetime(),
+  verifiedAt: z.iso.datetime().nullable(),
+});
+export type StaffAttendee = z.infer<typeof StaffAttendee>;
+
+export const AttendeePage = pageOf(StaffAttendee);
+export type AttendeePage = z.infer<typeof AttendeePage>;
+
+/** `?status=…` on top of the page parameters. */
+export const AttendeeQuery = PageQuery.extend({
+  status: AttendeeStatus.optional(),
+});
+export type AttendeeQuery = z.infer<typeof AttendeeQuery>;
+
+/** An address invited to an invitation-only event (FR-AD-4). */
+export const AttendeeInvitation = z.object({
+  id: z.uuid(),
+  email: z.string(),
+  invitedAt: z.iso.datetime(),
+});
+export type AttendeeInvitation = z.infer<typeof AttendeeInvitation>;
+
+export const CreateAttendeeInvitationRequest = z.object({ email: Email });
+export type CreateAttendeeInvitationRequest = z.infer<
+  typeof CreateAttendeeInvitationRequest
+>;

@@ -124,13 +124,15 @@ A membership, invitation or workspace outside the session's active workspace is 
 
 ### 3.4 Audience (staff side)
 
-| Method and path                                 | Role  | Notes                                                 |
-| ----------------------------------------------- | ----- | ----------------------------------------------------- |
-| `GET /events/:id/attendees`                     | O M A | Status filter, cursor; email shown masked to Analysts |
-| `POST /events/:id/attendees/:attendeeId/revoke` | M     | Ends live sessions within 5 seconds                   |
-| `POST /events/:id/attendees/:attendeeId/erase`  | M     | UK GDPR erasure; audited                              |
-| `GET /events/:id/invitations` · `POST …`        | M     | Invitation-only events                                |
-| `DELETE /event-invitations/:id`                 | M     | Also revokes the attendee if registered               |
+Every write locks the event row and then the attendee's, the order every path that touches both takes (registration and verification lock the attendee before its links). Attendee addresses never appear in audit entries or logs.
+
+| Method and path                                 | Role  | Notes                                                                                                                                                                                                        |
+| ----------------------------------------------- | ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `GET /events/:id/attendees`                     | O M A | `?status=`, cursor; newest registration first. Analysts see addresses masked (`a***@example.com`); an erased attendee has none                                                                               |
+| `POST /events/:id/attendees/:attendeeId/revoke` | M     | Their sessions and unused links stop working at once (the 5-second end of live sessions arrives with the real-time gateway in milestone 6). Repeating it changes nothing. `409 EVENT_ARCHIVED` once archived |
+| `POST /events/:id/attendees/:attendeeId/erase`  | M     | UK GDPR erasure, also after the event is archived: anonymised at once (docs/03, section 8), with their sessions, links, demo inbox mail and the event's invitations for their address. Audited once          |
+| `GET /events/:id/invitations` · `POST …`        | M     | `POST { email }` emails a link to the event page (not in the demo workspace); inviting a live address again returns its invitation and sends nothing                                                         |
+| `DELETE /event-invitations/:id`                 | M     | `204`; also revokes the attendee who registered with that address. Repeating it changes nothing                                                                                                              |
 
 ### 3.5 Public and attendee
 

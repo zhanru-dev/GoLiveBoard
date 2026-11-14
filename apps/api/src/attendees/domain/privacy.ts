@@ -43,3 +43,15 @@ export function retentionEndsAt(
 export function attendeeSessionExpiresAt(eventEndsAt: Date, now: Date): Date {
   return new Date(Math.max(eventEndsAt.getTime(), now.getTime()) + DAY_MS);
 }
+
+/**
+ * An address as Analysts see it (docs/04, section 3.4): the first character
+ * of the local part and the domain, enough to tell attendees apart.
+ */
+export function maskEmail(email: string): string {
+  const at = email.lastIndexOf("@");
+  if (at <= 0) {
+    return "***";
+  }
+  return `${email.slice(0, 1)}***${email.slice(at)}`;
+}

@@ -59,3 +59,22 @@ export function signInLinkEmail(
     ].join("\n"),
   };
 }
+
+/** FR-AD-4: an invitation to an invitation-only event. */
+export function invitationEmail(
+  to: string,
+  event: EventSummary,
+  appOrigin: string,
+): MailMessage {
+  return {
+    to,
+    subject: `You're invited to ${event.title}`,
+    text: [
+      `You're invited to ${event.title}.`,
+      "Register with this email address on the event page:",
+      eventPageUrl(appOrigin, event.slug),
+      "",
+      "If you were not expecting this, you can ignore this email.",
+    ].join("\n"),
+  };
+}

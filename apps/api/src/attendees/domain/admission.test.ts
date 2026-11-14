@@ -1,10 +1,9 @@
-import type { EventStatus } from "@opspilot/contracts";
+import type { AttendeeStatus, EventStatus } from "@opspilot/contracts";
 import { describe, expect, it } from "vitest";
 
 import {
   admitsAttendance,
   admitsRegistration,
-  type AttendeeStatus,
   emailDomain,
   isPublic,
   isRegistrationOpen,

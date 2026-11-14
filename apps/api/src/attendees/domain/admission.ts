@@ -1,7 +1,8 @@
-import type { AccessMode, EventStatus } from "@opspilot/contracts";
-
-/** The attendee statuses (docs/03, section 4.3). */
-export type AttendeeStatus = "PENDING" | "VERIFIED" | "REVOKED" | "ERASED";
+import type {
+  AccessMode,
+  AttendeeStatus,
+  EventStatus,
+} from "@opspilot/contracts";
 
 /**
  * Whether an event has a public page. A draft is not announced yet, and an
