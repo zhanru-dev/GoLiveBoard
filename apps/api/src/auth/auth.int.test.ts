@@ -97,6 +97,7 @@ describe("authentication", () => {
       expect(profile.activeWorkspace).toMatchObject({
         workspaceName: "Ada Lovelace's workspace",
         role: "OWNER",
+        isDemo: false,
       });
       expect(mailer.to(email).map((message) => message.subject)).toEqual([
         "Welcome to OpsPilot",

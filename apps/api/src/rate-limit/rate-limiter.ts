@@ -30,6 +30,8 @@ export const RATE_LIMITS = {
     windowMs: 15 * MINUTE_MS,
   },
   signUpPerIp: { name: "sign-up:ip", limit: 10, windowMs: HOUR_MS },
+  /** Each demo sign-in starts a session; a person needs a handful at most. */
+  demoSignInPerIp: { name: "demo-sign-in:ip", limit: 20, windowMs: HOUR_MS },
   passwordResetPerIp: {
     name: "password-reset:ip",
     limit: 10,

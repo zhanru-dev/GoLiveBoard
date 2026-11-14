@@ -16,6 +16,7 @@
     "stack:down": "docker compose --file docker-compose.prod.yml down",
     "db:migrate": "npm run db:migrate -w @opspilot/api --",
     "db:deploy": "npm run db:deploy -w @opspilot/api",
+    "db:seed": "npm run db:seed -w @opspilot/api",
     "build": "npm run build --workspaces --if-present",
     "typecheck": "tsc --noEmit -p tsconfig.json && npm run typecheck --workspaces --if-present",
     "lint": "eslint --max-warnings=0 .",

@@ -208,3 +208,18 @@ test("reports a browser error to Sentry, without the page's secrets", async ({
   expect(envelope).not.toContain("one-time-secret");
   expect(envelope).not.toContain("next=");
 });
+
+test("a visitor signs in to the demo with one click", async ({ page }) => {
+  await page.goto("/sign-in");
+
+  await page.getByRole("button", { name: "Try the demo" }).click();
+
+  await expect(page.getByRole("heading", { name: "Events" })).toBeVisible();
+  await expect(page.getByRole("note")).toContainText("shared demo workspace");
+  await expect(
+    page.getByRole("button", { name: "Switch workspace" }),
+  ).toHaveText("Northwind Events (demo)");
+  await expect(
+    page.getByRole("link", { name: "Autumn product launch" }),
+  ).toBeVisible();
+});

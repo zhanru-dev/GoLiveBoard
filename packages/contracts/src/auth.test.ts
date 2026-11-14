@@ -3,6 +3,13 @@ import { describe, expect, it } from "vitest";
 import { Email, Password, SignInRequest, SignUpRequest } from "./auth.js";
 
 describe("Email", () => {
+  it.each(["manager@demo.opspilot.invalid", "someone@EXAMPLE.INVALID"])(
+    "refuses %j, an address that can never receive email",
+    (email) => {
+      expect(Email.safeParse(email).success).toBe(false);
+    },
+  );
+
   it("trims surrounding spaces and keeps the address as typed", () => {
     expect(Email.parse("  Ada@Example.com ")).toBe("Ada@Example.com");
   });

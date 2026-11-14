@@ -15,12 +15,14 @@ export const OWNER: Me = {
     workspaceId: "0195f0a0-0000-7000-8000-0000000000aa",
     workspaceName: "Ada's workspace",
     role: "OWNER",
+    isDemo: false,
   },
   memberships: [
     {
       workspaceId: "0195f0a0-0000-7000-8000-0000000000aa",
       workspaceName: "Ada's workspace",
       role: "OWNER",
+      isDemo: false,
     },
   ],
 };

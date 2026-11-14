@@ -15,7 +15,7 @@ export class MeService {
       where: { id: actor.userId },
       include: {
         memberships: {
-          include: { workspace: { select: { name: true } } },
+          include: { workspace: { select: { name: true, isDemo: true } } },
           orderBy: { createdAt: "asc" },
         },
       },
@@ -24,6 +24,7 @@ export class MeService {
       workspaceId: membership.workspaceId,
       workspaceName: membership.workspace.name,
       role: membership.role,
+      isDemo: membership.workspace.isDemo,
     }));
     const activeWorkspace = memberships.find(
       (membership) => membership.workspaceId === actor.workspaceId,

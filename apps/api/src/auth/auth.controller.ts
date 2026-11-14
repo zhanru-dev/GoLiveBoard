@@ -63,6 +63,20 @@ export class AuthController {
     );
   }
 
+  /** Demo mode only (FR-AUTH-5); otherwise `404`, as if it did not exist. */
+  @Public()
+  @Post("demo")
+  @HttpCode(204)
+  async signInToDemo(
+    @Req() request: Request,
+    @Res({ passthrough: true }) response: Response,
+  ): Promise<void> {
+    setSessionCookies(
+      response,
+      await this.auth.signInToDemo(clientIp(request)),
+    );
+  }
+
   @Public()
   @Post("refresh")
   @HttpCode(204)

@@ -239,3 +239,11 @@ The demo environment runs with `DEMO_MODE=true`:
 - **Webhooks** can only target the built-in test receiver, whose deliveries are visible in the Integrations screen.
 - **AI triage** has a per-workspace daily budget; when it is spent, the panel says so and Q&A carries on normally.
 - **Nightly reset** at 03:00 UK time restores the seed data; real workspaces are never touched.
+
+**What runs today** (milestone 4):
+
+- `POST /auth/demo` signs a visitor in as the demo workspace's Manager ("Demo Visitor"); the sign-in page shows **Try the demo** when the web server runs with `DEMO_MODE=true`, and every page in the demo workspace carries the banner. The first sign-in creates the workspace, so a new environment needs no manual step.
+- The seed (`apps/api/src/demo/domain/demo-seed.ts`) is dated from the moment it is written: an event being prepared with blockers left to clear, a draft, one that ran last week and an archived one. None is READY or LIVE, because those promise a recent stream check.
+- The worker resets the workspace with a BullMQ job scheduler at `0 3 * * *` in `Europe/London`, so it follows British Summer Time. The reset deletes everything in the demo workspace (events with everything they own, invitations, audit entries, outbox messages, stored idempotent responses and the files of holding slates), restores its three people and their roles, and writes the seed again; visitors stay signed in. With demo mode off, the worker removes the schedule. `npm run db:seed` runs the same reset at once.
+- The demo people's addresses are under `demo.opspilot.invalid`. The reserved `.invalid` top-level domain cannot receive email, so request schemas refuse it (nobody can register, invite or reset the password of a demo account), and the mailer never sends to it: the demo sends no real email and earns no bounce. Their passwords are hashes of random secrets nobody knows.
+- Still to come: the demo inbox with attendee registration (milestone 5), the webhook test receiver (milestone 7) and the AI budget (milestone 8).

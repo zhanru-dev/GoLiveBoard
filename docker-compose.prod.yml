@@ -34,6 +34,9 @@ x-app-environment: &app-environment
   S3_SECRET_ACCESS_KEY: opspilot-local-only
   S3_FORCE_PATH_STYLE: "true"
   S3_CREATE_BUCKET: "true"
+  # The demo: one-click sign-in and the nightly reset (FR-AUTH-5), as in the
+  # AWS demo environment.
+  DEMO_MODE: "true"
   # Errors go to Sentry. Locally a reserved name that never resolves, so
   # nothing leaves the machine; the browser tests intercept what the page
   # sends there.
@@ -164,6 +167,8 @@ services:
       SENTRY_DSN: ${STACK_SENTRY_DSN:-https://public@sentry.invalid/1}
       SENTRY_ENVIRONMENT: stack
       SENTRY_RELEASE: ${STACK_RELEASE:-local}
+      # Shows the one-click demo sign-in.
+      DEMO_MODE: "true"
     tmpfs:
       - /tmp
       # Next.js caches optimised images and fetches here.

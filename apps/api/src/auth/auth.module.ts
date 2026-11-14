@@ -2,6 +2,7 @@ import { Module } from "@nestjs/common";
 import { APP_GUARD } from "@nestjs/core";
 
 import { DatabaseModule } from "../database/database.module.js";
+import { DemoModule } from "../demo/demo.module.js";
 import { MailModule } from "../mail/mail.module.js";
 import { RateLimitModule } from "../rate-limit/rate-limit.module.js";
 import { AuthController, MeController } from "./auth.controller.js";
@@ -13,7 +14,13 @@ import { OriginGuard } from "./origin.guard.js";
 import { SessionGuard } from "./session.guard.js";
 
 @Module({
-  imports: [DatabaseModule, MailModule, PasswordHasherModule, RateLimitModule],
+  imports: [
+    DatabaseModule,
+    DemoModule,
+    MailModule,
+    PasswordHasherModule,
+    RateLimitModule,
+  ],
   controllers: [AuthController, MeController],
   providers: [
     AuthService,

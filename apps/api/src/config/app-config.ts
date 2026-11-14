@@ -97,6 +97,11 @@ const AppConfigSchema = z
     S3_CREATE_BUCKET: Flag,
     SMTP_URL: z.url({ protocol: /^smtps?$/ }),
     MAIL_FROM: z.string().min(1),
+    /**
+     * Demo mode (FR-AUTH-5): one-click sign-in to the shared demo workspace,
+     * and its nightly reset. The demo environment only.
+     */
+    DEMO_MODE: Flag,
     /** Where errors are reported; reporting is off when unset. */
     SENTRY_DSN: optional(z.url({ protocol: /^https?$/ })),
     /** Defaults to NODE_ENV. */
@@ -139,6 +144,7 @@ const AppConfigSchema = z
       jwtPreviousSecret: env.JWT_SECRET_PREVIOUS,
     },
     mail: { smtpUrl: env.SMTP_URL, from: env.MAIL_FROM },
+    demo: { enabled: env.DEMO_MODE },
     errorReporting: {
       dsn: env.SENTRY_DSN,
       environment: env.SENTRY_ENVIRONMENT ?? env.NODE_ENV,

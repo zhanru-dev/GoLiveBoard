@@ -44,4 +44,4 @@ Open <http://localhost:3300> and create a workspace. Emails the app sends (invit
 
 ### The production build
 
-`npm run stack:up` builds the production images and runs them with every dependency behind Caddy over HTTPS, as in production. Open <https://opspilot.localhost:3443>; the certificate comes from a local authority that your browser does not trust until you add it ([how](docs/06-infrastructure-and-operations.md#14-production-like-stack)). `npm run test:e2e:stack` runs the browser tests against it, and `npm run stack:down` stops it.
+`npm run stack:up` builds the production images and runs them with every dependency behind Caddy over HTTPS, as in production. Open <https://opspilot.localhost:3443>; the certificate comes from a local authority that your browser does not trust until you add it ([how](docs/06-infrastructure-and-operations.md#14-production-like-stack)). It runs in demo mode: **Try the demo** on the sign-in page opens a shared demo workspace with sample events, reset every night. `npm run test:e2e:stack` runs the browser tests against it, and `npm run stack:down` stops it.

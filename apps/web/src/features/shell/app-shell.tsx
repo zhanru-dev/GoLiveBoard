@@ -112,6 +112,15 @@ export function AppShell({
           </div>
         </div>
       </header>
+      {me.activeWorkspace.isDemo ? (
+        <p
+          role="note"
+          className="border-b bg-amber-50 px-6 py-2 text-center text-sm text-amber-950"
+        >
+          This is a shared demo workspace: anyone trying the demo can see what
+          you enter, and everything is reset every night at 03:00 UK time.
+        </p>
+      ) : null}
       {/* Keyed by workspace: nothing from the previous one survives a switch. */}
       <main
         key={me.activeWorkspace.workspaceId}

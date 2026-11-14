@@ -108,6 +108,7 @@ describe("workspace and team", () => {
         workspaceId: ownerWorkspace.activeWorkspace.workspaceId,
         workspaceName: ownerWorkspace.activeWorkspace.workspaceName,
         role: "MANAGER",
+        isDemo: false,
       });
     });
 

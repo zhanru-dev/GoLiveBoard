@@ -5,6 +5,8 @@ import type { DestinationStream } from "pino";
 import type { AppConfig } from "../config/app-config.js";
 import { ConfigModule } from "../config/config.module.js";
 import { DatabaseModule } from "../database/database.module.js";
+import { DemoResetConsumer } from "../demo/demo-reset.consumer.js";
+import { DemoModule } from "../demo/demo.module.js";
 import { NetModule } from "../net/net.module.js";
 import type { SafeHttpOptions } from "../net/safe-http.js";
 import { createLogger } from "../observability/logger.js";
@@ -46,6 +48,7 @@ export class WorkerModule {
         LoggerModule.forRoot({ pinoHttp: { logger }, useExisting: true }),
         NetModule.forRoot(options.safeHttp),
         DatabaseModule,
+        DemoModule,
         QueuesModule,
       ],
       providers: [
@@ -58,6 +61,7 @@ export class WorkerModule {
         StreamMonitor,
         StreamCheckScheduler,
         StreamChecksConsumer,
+        DemoResetConsumer,
       ],
     };
   }

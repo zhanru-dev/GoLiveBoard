@@ -27,6 +27,7 @@ describe("loadConfig", () => {
         smtpUrl: REQUIRED.SMTP_URL,
         from: "OpsPilot <no-reply@opspilot.test>",
       },
+      demo: { enabled: false },
       errorReporting: {
         dsn: undefined,
         environment: "development",

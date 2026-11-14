@@ -34,3 +34,23 @@ export class SmtpMailer extends Mailer {
     await this.transport.sendMail({ from: this.from, ...message });
   }
 }
+
+/**
+ * Never sends to an address that cannot receive email: the reserved
+ * `.invalid` top-level domain (RFC 2606), which the demo workspace's people
+ * use. Request schemas already refuse such addresses; this guard covers mail
+ * to the demo accounts themselves, so the demo never sends a real message
+ * and never earns a bounce against the sending domain (FR-AUTH-5).
+ */
+export class UndeliverableAddressGuard extends Mailer {
+  constructor(private readonly inner: Mailer) {
+    super();
+  }
+
+  async send(message: MailMessage): Promise<void> {
+    if (message.to.toLowerCase().endsWith(".invalid")) {
+      return;
+    }
+    await this.inner.send(message);
+  }
+}

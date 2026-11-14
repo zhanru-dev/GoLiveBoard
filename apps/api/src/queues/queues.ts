@@ -12,8 +12,16 @@ export const STREAM_CHECK_JOBS = {
   schedule: "schedule",
 } as const;
 
+/** Housekeeping on a schedule, such as the nightly demo reset. */
+export const MAINTENANCE_QUEUE = "maintenance";
+
+export const MAINTENANCE_JOBS = {
+  /** Restores the demo workspace to its seed (FR-AUTH-5). */
+  demoReset: "demo-reset",
+} as const;
+
 /** Every queue the worker consumes. */
-export const QUEUE_NAMES = [STREAM_CHECKS_QUEUE] as const;
+export const QUEUE_NAMES = [STREAM_CHECKS_QUEUE, MAINTENANCE_QUEUE] as const;
 export type QueueName = (typeof QUEUE_NAMES)[number];
 
 /** A queue command that has not answered by then fails (relay, scheduler). */

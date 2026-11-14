@@ -4,6 +4,8 @@ import { InjectPinoLogger, PinoLogger } from "nestjs-pino";
 
 import { APP_CONFIG, type AppConfig } from "../config/app-config.js";
 import { PRISMA } from "../database/prisma.js";
+import { DEMO_PEOPLE, DEMO_WORKSPACE } from "../demo/demo-accounts.js";
+import { DemoSeeder } from "../demo/demo-seeder.js";
 import { Prisma, type PrismaClient } from "../generated/prisma/client.js";
 import { Mailer, type MailMessage } from "../mail/mailer.js";
 import { RATE_LIMITS, RateLimiter } from "../rate-limit/rate-limiter.js";
@@ -46,6 +48,7 @@ export class AuthService {
     private readonly mailer: Mailer,
     private readonly rateLimiter: RateLimiter,
     private readonly passwords: PasswordHasher,
+    private readonly demo: DemoSeeder,
     @InjectPinoLogger(AuthService.name) private readonly logger: PinoLogger,
   ) {
     this.tokenKeys = {
@@ -130,6 +133,28 @@ export class AuthService {
     );
     await this.rateLimiter.refund(RATE_LIMITS.signInFailuresPerIp, ip);
     return tokens;
+  }
+
+  /**
+   * One-click sign-in to the shared demo workspace as its Manager
+   * (FR-AUTH-5). Answers as if the endpoint did not exist unless demo mode
+   * is on. The workspace is created on first use.
+   */
+  async signInToDemo(ip: string): Promise<SessionTokens> {
+    if (!this.config.demo.enabled) {
+      throw new DomainError("NOT_FOUND");
+    }
+    await this.rateLimiter.consumeOrThrow(RATE_LIMITS.demoSignInPerIp, ip);
+    await this.demo.ensure();
+    const visitor = await this.prisma.user.findUniqueOrThrow({
+      where: { id: DEMO_PEOPLE.manager.id },
+      select: { passwordHash: true },
+    });
+    return this.startSession(
+      DEMO_PEOPLE.manager.id,
+      DEMO_WORKSPACE.id,
+      visitor.passwordHash,
+    );
   }
 
   /**
