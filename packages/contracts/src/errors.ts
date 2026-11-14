@@ -14,6 +14,7 @@ export const ErrorCode = z.enum([
   "TOKEN_INVALID",
   "FORBIDDEN",
   "ORIGIN_FORBIDDEN",
+  "DEMO_RESTRICTED",
   "OWNER_REQUIRED",
   "MEMBERSHIP_EXISTS",
   "WORKSPACE_CHANGED",
@@ -64,6 +65,10 @@ export const ERROR_DEFINITIONS = {
   ORIGIN_FORBIDDEN: {
     status: 403,
     title: "The request did not come from the OpsPilot web app",
+  },
+  DEMO_RESTRICTED: {
+    status: 403,
+    title: "This is not available in the demo",
   },
   OWNER_REQUIRED: {
     status: 409,

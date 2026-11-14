@@ -1,10 +1,29 @@
 import {
+  DemoEventsDeletedPayload,
   OutboxMessageType,
   StreamCheckRequestedPayload,
 } from "@opspilot/contracts";
 
+import { UPLOAD_URL_TTL_SECONDS } from "../assets/assets.service.js";
 import type { JobRequest } from "../queues/job-publisher.js";
-import { STREAM_CHECK_JOBS, STREAM_CHECKS_QUEUE } from "../queues/queues.js";
+import {
+  MAINTENANCE_JOBS,
+  MAINTENANCE_QUEUE,
+  STREAM_CHECK_JOBS,
+  STREAM_CHECKS_QUEUE,
+} from "../queues/queues.js";
+
+/**
+ * The files of events a demo reset deleted are deleted again once every
+ * upload link handed out before the reset has expired, so a slow upload
+ * cannot leave a file behind (the milestone 4 review). Storage may be down
+ * then: the job keeps retrying for hours.
+ */
+export const DEMO_PURGE_JOB_OPTIONS = {
+  delay: UPLOAD_URL_TTL_SECONDS * 1000 + 5 * 60 * 1000,
+  attempts: 10,
+  backoff: { type: "exponential", delay: 30_000 },
+} as const;
 
 export interface RelayedMessage {
   readonly id: string;
@@ -39,6 +58,14 @@ export function routeOutboxMessage(
         jobId: `outbox-${message.id}`,
       };
     }
+    case "demo.events_deleted":
+      return {
+        queue: MAINTENANCE_QUEUE,
+        name: MAINTENANCE_JOBS.demoPurgeFiles,
+        data: DemoEventsDeletedPayload.parse(message.payload),
+        jobId: `outbox-${message.id}`,
+        options: DEMO_PURGE_JOB_OPTIONS,
+      };
     case "event.transitioned":
       return undefined;
     default:

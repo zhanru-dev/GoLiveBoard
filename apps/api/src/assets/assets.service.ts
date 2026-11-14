@@ -14,6 +14,7 @@ import {
 import { recordAudit } from "../audit/audit.js";
 import type { Actor } from "../auth/actor.js";
 import { PRISMA } from "../database/prisma.js";
+import { claimDemoAssetSlot } from "../demo/demo-workspace.js";
 import { lockWritableEvent } from "../events/event-lock.queries.js";
 import type { Prisma, PrismaClient } from "../generated/prisma/client.js";
 import { CLOCK, type Clock } from "../shared/clock.js";
@@ -102,6 +103,7 @@ export class AssetsService {
   ): Promise<AssetUpload> {
     const now = this.clock.now();
     const asset = await this.prisma.$transaction(async (tx) => {
+      await claimDemoAssetSlot(tx, actor.workspaceId);
       await lockWritableEvent(tx, actor.workspaceId, eventId);
       return tx.asset.create({
         data: {

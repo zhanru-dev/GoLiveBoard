@@ -32,6 +32,14 @@ export const RATE_LIMITS = {
   signUpPerIp: { name: "sign-up:ip", limit: 10, windowMs: HOUR_MS },
   /** Each demo sign-in starts a session; a person needs a handful at most. */
   demoSignInPerIp: { name: "demo-sign-in:ip", limit: 20, windowMs: HOUR_MS },
+  /** Changes to the demo workspace (DemoWriteBudgetGuard): from one address... */
+  demoWritesPerIp: { name: "demo-writes:ip", limit: 300, windowMs: HOUR_MS },
+  /** ...and from everyone together, so the demo stays small between resets. */
+  demoWritesPerWorkspace: {
+    name: "demo-writes:workspace",
+    limit: 3_000,
+    windowMs: HOUR_MS,
+  },
   passwordResetPerIp: {
     name: "password-reset:ip",
     limit: 10,

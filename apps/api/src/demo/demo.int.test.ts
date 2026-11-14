@@ -7,6 +7,7 @@ import { afterAll, beforeAll, describe, expect, inject, it } from "vitest";
 
 import { ACCESS_COOKIE, REFRESH_COOKIE } from "../auth/cookies.js";
 import { eventFilesPrefix, uploadKeyFor } from "../assets/assets.service.js";
+import { RATE_LIMITS } from "../rate-limit/rate-limiter.js";
 import { ObjectStorage } from "../storage/object-storage.js";
 import { ApiClient, type TestSession } from "../testing/api-client.js";
 import { TEST_S3_BUCKET, TEST_S3_CREDENTIALS } from "../testing/containers.js";
@@ -14,6 +15,7 @@ import { setCookies } from "../testing/cookies.js";
 import {
   blockWrites,
   createTestDatabase,
+  holdLock,
   type TestDatabase,
 } from "../testing/database.js";
 import { createEvent } from "../testing/events.js";
@@ -21,6 +23,11 @@ import { CapturingMailer } from "../testing/fakes.js";
 import { createTestApp, TEST_ORIGIN } from "../testing/test-app.js";
 import { DEMO_PEOPLE, DEMO_WORKSPACE } from "./demo-accounts.js";
 import { DemoSeeder } from "./demo-seeder.js";
+import {
+  DEMO_ASSET_LIMIT,
+  DEMO_EVENT_LIMIT,
+  DEMO_SESSION_LIMIT,
+} from "./demo-workspace.js";
 
 const SEED_TITLES = [
   "Autumn product launch",
@@ -47,6 +54,14 @@ async function put(storage: ObjectStorage, key: string): Promise<void> {
   });
   expect(response.status).toBe(200);
 }
+
+/** A valid new event. */
+const newEvent = (title: string) => ({
+  title,
+  startsAt: "2027-01-10T18:00:00Z",
+  endsAt: "2027-01-10T19:00:00Z",
+  timeZone: "Europe/London",
+});
 
 let addressCounter = 0;
 /** Each test its own client address, so rate limits never meet. */
@@ -297,6 +312,118 @@ describe("demo mode (FR-AUTH-5)", () => {
     expect(await eventTitles(api, visitor)).toEqual(SEED_TITLES);
   });
 
+  it("deletes an event whose create was still in flight when the reset began", async () => {
+    const visitor = await demoSession(app);
+    const seeder = app.get(DemoSeeder);
+    await seeder.reset();
+    const block = await blockWrites(database.url, "events");
+    // The create holds the demo lock and waits to insert its event...
+    const create = Promise.resolve(
+      api.send(visitor, "post", "/events", newEvent("Created as reset began")),
+    );
+    await block.waitForWaiters(1);
+    // ...so the reset waits for it to commit, then deletes its event.
+    const reset = seeder.reset();
+    try {
+      await block.waitForWaiters(2);
+    } finally {
+      await block.release();
+    }
+
+    expect((await create).status).toBe(201);
+    await reset;
+    expect(await eventTitles(api, visitor)).toEqual(SEED_TITLES);
+  });
+
+  it("keeps an event created while the reset runs: the create waits and commits after it", async () => {
+    const visitor = await demoSession(app);
+    const seeder = app.get(DemoSeeder);
+    // The reset has deleted the events and waits to delete invitations...
+    const block = await blockWrites(database.url, "team_invitations");
+    const reset = seeder.reset();
+    await block.waitForWaiters(1);
+    // ...while a create waits for the demo lock it holds.
+    const create = Promise.resolve(
+      api.send(visitor, "post", "/events", newEvent("Created after the reset")),
+    );
+    try {
+      await block.waitForWaiters(2);
+    } finally {
+      await block.release();
+    }
+
+    await reset;
+    expect((await create).status).toBe(201);
+    expect(await eventTitles(api, visitor)).toEqual(
+      [...SEED_TITLES, "Created after the reset"].sort(),
+    );
+  });
+
+  /** The session's cookies, as a test session. */
+  function sessionFrom(response: request.Response): TestSession {
+    const cookies = setCookies(response);
+    return {
+      email: DEMO_PEOPLE.manager.email,
+      access: cookies.get(ACCESS_COOKIE)?.value ?? "",
+      refresh: cookies.get(REFRESH_COOKIE)?.value ?? "",
+    };
+  }
+
+  it("signs a visitor in while a reset restores the accounts, and the session works after it", async () => {
+    const seeder = app.get(DemoSeeder);
+    // The reset restores the owner and the visitor (their rows stay locked
+    // until it commits), then waits for the analyst's row...
+    const block = await holdLock(
+      database.url,
+      "SELECT id FROM users WHERE id = $1 FOR SHARE",
+      [DEMO_PEOPLE.analyst.id],
+    );
+    const reset = seeder.reset();
+    await block.waitForWaiters(1);
+    // ...so the sign-in waits to check the visitor's account, and then
+    // finds it as the reset left it.
+    const signIn = Promise.resolve(demoSignIn(app));
+    try {
+      await block.waitForWaiters(2);
+    } finally {
+      await block.release();
+    }
+
+    const response = await signIn;
+    expect(response.status, response.text).toBe(204);
+    await reset;
+    const visitor = sessionFrom(response);
+    expect((await api.me(visitor)).activeWorkspace.workspaceId).toBe(
+      DEMO_WORKSPACE.id,
+    );
+    expect(await eventTitles(api, visitor)).toEqual(SEED_TITLES);
+  });
+
+  it("keeps a session whose sign-in was in flight when the reset began", async () => {
+    const seeder = app.get(DemoSeeder);
+    // The sign-in has checked the visitor's account (and holds it) and
+    // waits to store its session...
+    const block = await blockWrites(database.url, "sessions");
+    const signIn = Promise.resolve(demoSignIn(app));
+    await block.waitForWaiters(1);
+    // ...so the reset waits to restore that account.
+    const reset = seeder.reset();
+    try {
+      await block.waitForWaiters(2);
+    } finally {
+      await block.release();
+    }
+
+    const response = await signIn;
+    expect(response.status, response.text).toBe(204);
+    await reset;
+    const visitor = sessionFrom(response);
+    expect((await api.me(visitor)).activeWorkspace.workspaceId).toBe(
+      DEMO_WORKSPACE.id,
+    );
+    expect(await eventTitles(api, visitor)).toEqual(SEED_TITLES);
+  });
+
   it("restores the seed once when two resets run at the same moment", async () => {
     const block = await blockWrites(database.url, "events");
     const seeder = app.get(DemoSeeder);
@@ -314,6 +441,250 @@ describe("demo mode (FR-AUTH-5)", () => {
       [DEMO_WORKSPACE.id],
     );
     expect(rows.map(({ title }) => title)).toEqual(SEED_TITLES);
+  });
+});
+
+describe("demo mode, what one visitor can make it do", () => {
+  let database: TestDatabase;
+  let app: NestExpressApplication;
+  let api: ApiClient;
+
+  beforeAll(async () => {
+    database = await createTestDatabase();
+    app = await startApp(database, true);
+    api = new ApiClient(app, newAddress());
+  });
+
+  afterAll(async () => {
+    await app.close();
+    await database.drop();
+  });
+
+  it("holds a bounded number of events, also when visitors create them at the same moment", async () => {
+    const visitor = await demoSession(app);
+    await app.get(DemoSeeder).reset();
+    for (
+      let index = SEED_TITLES.length;
+      index < DEMO_EVENT_LIMIT - 1;
+      index += 1
+    ) {
+      const created = await api.send(
+        visitor,
+        "post",
+        "/events",
+        newEvent(`Filler ${String(index)}`),
+      );
+      expect(created.status, created.text).toBe(201);
+    }
+    // One slot left. The first create holds the demo lock and waits to
+    // insert; the other two wait for the lock, then find the demo full.
+    const block = await blockWrites(database.url, "events");
+    const creates = ["One", "Two", "Three"].map((title) =>
+      Promise.resolve(api.send(visitor, "post", "/events", newEvent(title))),
+    );
+    try {
+      await block.waitForWaiters(3);
+    } finally {
+      await block.release();
+    }
+    const responses = await Promise.all(creates);
+
+    expect(responses.map(({ status }) => status).sort()).toEqual([
+      201, 403, 403,
+    ]);
+    for (const response of responses.filter(({ status }) => status === 403)) {
+      expect(ProblemDetails.parse(response.body).code).toBe("DEMO_RESTRICTED");
+    }
+    const [row] = await database.query<{ count: number }>(
+      "SELECT count(*)::int AS count FROM events WHERE workspace_id = $1",
+      [DEMO_WORKSPACE.id],
+    );
+    expect(row?.count).toBe(DEMO_EVENT_LIMIT);
+  });
+
+  it("limits the demo workspace only", async () => {
+    const owner = await api.newOwner();
+
+    for (let index = 0; index <= DEMO_EVENT_LIMIT; index += 1) {
+      const created = await api.send(
+        owner,
+        "post",
+        "/events",
+        newEvent(`Real event ${String(index)}`),
+      );
+      expect(created.status, created.text).toBe(201);
+    }
+  });
+
+  it("hands out a bounded number of upload links, also when visitors ask at the same moment", async () => {
+    const visitor = await demoSession(app);
+    await app.get(DemoSeeder).reset();
+    const launch = EventPage.parse(
+      (await api.get(visitor, "/events?q=Autumn")).body,
+    ).items[0];
+    const eventId = launch?.id ?? "";
+    await database.query(
+      `INSERT INTO assets (event_id, kind, storage_key, content_type, size_bytes)
+       SELECT $1::uuid, 'HOLDING_SLATE', 'events/' || $1::text || '/filler-' || n, 'image/png', 2048
+       FROM generate_series(1, $2::int) AS n`,
+      [eventId, DEMO_ASSET_LIMIT - 1],
+    );
+    // One slot left. The first request holds the demo lock and waits to
+    // insert; the other two wait for the lock, then find the demo full.
+    const block = await blockWrites(database.url, "assets");
+    const uploads = [1, 2, 3].map(() =>
+      Promise.resolve(
+        api.send(visitor, "post", `/events/${eventId}/assets/holding-slate`, {
+          contentType: "image/png",
+          sizeBytes: png().length,
+        }),
+      ),
+    );
+    try {
+      await block.waitForWaiters(3);
+    } finally {
+      await block.release();
+    }
+    const responses = await Promise.all(uploads);
+
+    expect(responses.map(({ status }) => status).sort()).toEqual([
+      201, 403, 403,
+    ]);
+    for (const response of responses.filter(({ status }) => status === 403)) {
+      expect(ProblemDetails.parse(response.body).code).toBe("DEMO_RESTRICTED");
+    }
+    const [row] = await database.query<{ count: number }>(
+      "SELECT count(*)::int AS count FROM assets WHERE event_id = $1",
+      [eventId],
+    );
+    expect(row?.count).toBe(DEMO_ASSET_LIMIT);
+  });
+
+  it("limits how many changes one address makes to the demo", async () => {
+    const address = newAddress();
+    const visitor = await demoSession(app);
+    const fromAddress = new ApiClient(app, address);
+    // Refused requests count too: the budget is spent before any work.
+    const invalid = () =>
+      fromAddress.send(visitor, "post", "/events", { title: "" });
+    for (let index = 0; index < RATE_LIMITS.demoWritesPerIp.limit; index += 1) {
+      expect((await invalid()).status).toBe(400);
+    }
+
+    const over = await invalid();
+
+    expect(over.status).toBe(429);
+    expect(ProblemDetails.parse(over.body).code).toBe("RATE_LIMITED");
+    // Reading goes on.
+    expect((await fromAddress.get(visitor, "/events")).status).toBe(200);
+  });
+
+  it("lets nobody point the demo's stream checks at an address", async () => {
+    const visitor = await demoSession(app);
+    await app.get(DemoSeeder).reset();
+    const launch = EventPage.parse(
+      (await api.get(visitor, "/events?q=Autumn")).body,
+    ).items[0];
+
+    const response = await api.send(
+      visitor,
+      "put",
+      `/events/${launch?.id ?? ""}/stream`,
+      { url: "https://streams.example.com/live/index.m3u8" },
+    );
+
+    expect(response.status).toBe(403);
+    expect(ProblemDetails.parse(response.body).code).toBe("DEMO_RESTRICTED");
+    const rows = await database.query<{ count: number }>(
+      `SELECT count(*)::int AS count FROM events
+       WHERE workspace_id = $1 AND stream_url IS NOT NULL`,
+      [DEMO_WORKSPACE.id],
+    );
+    expect(rows[0]?.count).toBe(0);
+    const requested = await database.query<{ count: number }>(
+      `SELECT count(*)::int AS count FROM outbox_messages
+       WHERE type = 'stream.check_requested'`,
+    );
+    expect(requested[0]?.count).toBe(0);
+  });
+
+  it("keeps a bounded number of visitor sessions, ending the oldest and those already over", async () => {
+    await demoSession(app);
+    const visitorId = DEMO_PEOPLE.manager.id;
+    await database.query("DELETE FROM sessions WHERE user_id = $1", [
+      visitorId,
+    ]);
+    // A full house of live sessions, oldest first, and two that are over.
+    await database.query(
+      `INSERT INTO sessions
+         (user_id, active_workspace_id, refresh_token_hash, refresh_expires_at, created_at)
+       SELECT $1, $2, 'live-' || n, now() + interval '1 day',
+              now() - interval '1 hour' + n * interval '1 millisecond'
+       FROM generate_series(1, $3::int) AS n`,
+      [visitorId, DEMO_WORKSPACE.id, DEMO_SESSION_LIMIT],
+    );
+    await database.query(
+      `INSERT INTO sessions
+         (user_id, active_workspace_id, refresh_token_hash, refresh_expires_at, revoked_at)
+       VALUES ($1, $2, 'expired', now() - interval '1 minute', NULL),
+              ($1, $2, 'revoked', now() + interval '1 day', now())`,
+      [visitorId, DEMO_WORKSPACE.id],
+    );
+
+    const visitor = await demoSession(app);
+
+    const sessions = await database.query<{ refresh_token_hash: string }>(
+      "SELECT refresh_token_hash FROM sessions WHERE user_id = $1",
+      [visitorId],
+    );
+    expect(sessions).toHaveLength(DEMO_SESSION_LIMIT);
+    const hashes = new Set(sessions.map((row) => row.refresh_token_hash));
+    expect(hashes.has("live-1")).toBe(false);
+    expect(hashes.has("live-2")).toBe(true);
+    expect(hashes.has("expired")).toBe(false);
+    expect(hashes.has("revoked")).toBe(false);
+    expect((await api.me(visitor)).activeWorkspace.workspaceId).toBe(
+      DEMO_WORKSPACE.id,
+    );
+  });
+
+  it("keeps the session limit exact when visitors sign in at the same moment", async () => {
+    await demoSession(app);
+    const visitorId = DEMO_PEOPLE.manager.id;
+    await database.query("DELETE FROM sessions WHERE user_id = $1", [
+      visitorId,
+    ]);
+    await database.query(
+      `INSERT INTO sessions
+         (user_id, active_workspace_id, refresh_token_hash, refresh_expires_at, created_at)
+       SELECT $1, $2, 'live-' || n, now() + interval '1 day',
+              now() - interval '1 hour' + n * interval '1 millisecond'
+       FROM generate_series(1, $3::int) AS n`,
+      [visitorId, DEMO_WORKSPACE.id, DEMO_SESSION_LIMIT],
+    );
+    // Both sign-ins store their session; the first then waits to delete the
+    // oldest, which this holds, and the second waits for the first.
+    const block = await holdLock(
+      database.url,
+      "SELECT id FROM sessions WHERE refresh_token_hash = 'live-1' FOR SHARE",
+    );
+    const signIns = [demoSignIn(app), demoSignIn(app)].map((call) =>
+      Promise.resolve(call),
+    );
+    try {
+      await block.waitForWaiters(2);
+    } finally {
+      await block.release();
+    }
+
+    expect((await Promise.all(signIns)).map(({ status }) => status)).toEqual([
+      204, 204,
+    ]);
+    const [row] = await database.query<{ count: number }>(
+      "SELECT count(*)::int AS count FROM sessions WHERE user_id = $1",
+      [visitorId],
+    );
+    expect(row?.count).toBe(DEMO_SESSION_LIMIT);
   });
 });
 

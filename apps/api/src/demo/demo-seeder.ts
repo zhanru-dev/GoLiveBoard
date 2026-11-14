@@ -1,6 +1,10 @@
 import { randomBytes } from "node:crypto";
 
 import { Inject, Injectable } from "@nestjs/common";
+import type {
+  DemoEventsDeletedPayload,
+  OutboxMessageType,
+} from "@opspilot/contracts";
 import { InjectPinoLogger, PinoLogger } from "nestjs-pino";
 
 import { eventFilesPrefix, uploadKeyFor } from "../assets/assets.service.js";
@@ -9,13 +13,14 @@ import { PRISMA } from "../database/prisma.js";
 import { eventSlug } from "../events/domain/slug.js";
 import { randomSlugSuffix } from "../events/slug-suffix.js";
 import type { Prisma, PrismaClient } from "../generated/prisma/client.js";
+import { writeOutbox } from "../outbox/outbox.js";
 import { CLOCK, type Clock } from "../shared/clock.js";
 import { ObjectStorage } from "../storage/object-storage.js";
 import { DEMO_PEOPLE, DEMO_WORKSPACE } from "./demo-accounts.js";
+import { lockDemoWorkspace } from "./demo-workspace.js";
 import { demoSeed } from "./domain/demo-seed.js";
 
-/** Seeding and resetting take turns, in every process. */
-const DEMO_LOCK_KEY = "demo-workspace";
+const EVENTS_DELETED = "demo.events_deleted" satisfies OutboxMessageType;
 
 /** Generous: the reset deletes and writes a few hundred rows at most. */
 const TRANSACTION_TIMEOUT_MS = 30_000;
@@ -53,7 +58,7 @@ export class DemoSeeder {
     const passwordHash = await this.unusablePasswordHash();
     await this.prisma.$transaction(
       async (tx) => {
-        await lockDemo(tx);
+        await lockDemoWorkspace(tx);
         const existing = await tx.workspace.findUnique({
           where: { id: DEMO_WORKSPACE.id },
           select: { id: true },
@@ -71,9 +76,15 @@ export class DemoSeeder {
   /**
    * Puts the demo workspace back to its seed: everything visitors created or
    * changed is deleted and the seed events are written again, dated from now.
-   * Visitors stay signed in. Once the deletion has committed, every stored
-   * file of the deleted events goes too: everything under their storage
-   * prefixes, so a slate uploaded while the reset ran is not left behind.
+   * Visitors stay signed in.
+   *
+   * Once the deletion has committed, every stored file of the deleted events
+   * goes too: everything under their storage prefixes, so a slate uploaded
+   * while the reset ran is not left behind. An upload link handed out before
+   * the reset still works for a few minutes, though, and storage may be
+   * down, so the same transaction also records the deleted events in the
+   * outbox: the worker deletes their files again once every such link has
+   * expired, retrying until storage answers (purgeEventFiles).
    *
    * @returns how many events were replaced
    */
@@ -81,7 +92,7 @@ export class DemoSeeder {
     const passwordHash = await this.unusablePasswordHash();
     const deletedEventIds = await this.prisma.$transaction(
       async (tx) => {
-        await lockDemo(tx);
+        await lockDemoWorkspace(tx);
         // Runbooks, policies, checks, incidents and assets go with their
         // events (ON DELETE CASCADE).
         const deleted = await tx.$queryRaw<{ id: string }[]>`
@@ -93,8 +104,12 @@ export class DemoSeeder {
         await tx.auditEntry.deleteMany({
           where: { workspaceId: DEMO_WORKSPACE.id },
         });
+        // Except the file purges of earlier resets still waiting to be relayed.
         await tx.outboxMessage.deleteMany({
-          where: { workspaceId: DEMO_WORKSPACE.id },
+          where: {
+            workspaceId: DEMO_WORKSPACE.id,
+            NOT: { type: EVENTS_DELETED, dispatchedAt: null },
+          },
         });
         // Stored responses of creates, which would replay deleted events.
         await tx.idempotencyRecord.deleteMany({
@@ -102,7 +117,15 @@ export class DemoSeeder {
         });
         await this.restoreAccounts(tx, passwordHash);
         await this.writeEvents(tx);
-        return deleted.map(({ id }) => id);
+        const eventIds = deleted.map(({ id }) => id);
+        if (eventIds.length > 0) {
+          await writeOutbox(tx, {
+            workspaceId: DEMO_WORKSPACE.id,
+            type: EVENTS_DELETED,
+            payload: { eventIds } satisfies DemoEventsDeletedPayload,
+          });
+        }
+        return eventIds;
       },
       { timeout: TRANSACTION_TIMEOUT_MS },
     );
@@ -221,14 +244,33 @@ export class DemoSeeder {
   }
 
   /**
-   * Best effort: a file left behind costs a few kilobytes, while failing the
-   * reset would leave the demo as visitors left it.
+   * Deletes every stored file of these events: their slates and whatever was
+   * uploaded for them.
+   *
+   * @throws when storage fails, so the job is retried
+   */
+  async purgeEventFiles(eventIds: readonly string[]): Promise<void> {
+    for (const eventId of eventIds) {
+      const prefix = eventFilesPrefix(eventId);
+      await this.removeAll(prefix);
+      await this.removeAll(uploadKeyFor(prefix));
+    }
+  }
+
+  private async removeAll(prefix: string): Promise<void> {
+    for (const key of await this.storage.listKeys(prefix)) {
+      await this.storage.remove(key);
+    }
+  }
+
+  /**
+   * At once, best effort: the purge recorded in the outbox runs later and
+   * retries, while failing the reset here would leave the demo as visitors
+   * left it.
    */
   private async removeAllQuietly(prefix: string): Promise<void> {
     try {
-      for (const key of await this.storage.listKeys(prefix)) {
-        await this.storage.remove(key);
-      }
+      await this.removeAll(prefix);
     } catch (error) {
       this.logger.warn(
         { err: error, prefix },
@@ -236,8 +278,4 @@ export class DemoSeeder {
       );
     }
   }
-}
-
-async function lockDemo(tx: Prisma.TransactionClient): Promise<void> {
-  await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${DEMO_LOCK_KEY}, 0))`;
 }

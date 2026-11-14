@@ -12,6 +12,7 @@ import { recordAudit } from "../audit/audit.js";
 import type { Actor } from "../auth/actor.js";
 import { PRISMA } from "../database/prisma.js";
 import { lockWritableEvent } from "../events/event-lock.queries.js";
+import { assertNotDemoStream } from "../demo/demo-workspace.js";
 import { EventsService } from "../events/events.service.js";
 import type { Prisma, PrismaClient } from "../generated/prisma/client.js";
 import { decodeCursor, encodeCursor } from "../http/cursor.js";
@@ -45,6 +46,7 @@ export class StreamsService {
     eventId: string,
     url: string,
   ): Promise<EventDetail> {
+    assertNotDemoStream(actor.workspaceId);
     await this.assertFetchable(url);
     return this.prisma.$transaction(async (tx) => {
       await lockWritableEvent(tx, actor.workspaceId, eventId);

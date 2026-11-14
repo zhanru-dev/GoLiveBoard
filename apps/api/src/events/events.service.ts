@@ -14,6 +14,7 @@ import type { Actor } from "../auth/actor.js";
 import { PRISMA } from "../database/prisma.js";
 import type { Prisma, PrismaClient } from "../generated/prisma/client.js";
 import { decodeCursor, encodeCursor } from "../http/cursor.js";
+import { claimDemoEventSlot } from "../demo/demo-workspace.js";
 import { Idempotency } from "../idempotency/idempotency.js";
 import { CLOCK, type Clock } from "../shared/clock.js";
 import { assertWorkspaceMember } from "../workspaces/membership-check.js";
@@ -133,10 +134,10 @@ export class EventsService {
       );
     }
     return this.prisma.$transaction(async (tx) => {
-      const work = async () => ({
-        status: 201,
-        body: await this.insert(tx, actor, input),
-      });
+      const work = async () => {
+        await claimDemoEventSlot(tx, actor.workspaceId);
+        return { status: 201, body: await this.insert(tx, actor, input) };
+      };
       if (idempotencyKey === undefined) {
         return { event: (await work()).body, replayed: false };
       }

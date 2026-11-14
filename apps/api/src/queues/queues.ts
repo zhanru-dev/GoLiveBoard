@@ -18,6 +18,8 @@ export const MAINTENANCE_QUEUE = "maintenance";
 export const MAINTENANCE_JOBS = {
   /** Restores the demo workspace to its seed (FR-AUTH-5). */
   demoReset: "demo-reset",
+  /** Deletes the files of events a demo reset deleted (DemoEventsDeletedPayload). */
+  demoPurgeFiles: "demo-purge-files",
 } as const;
 
 /** Every queue the worker consumes. */

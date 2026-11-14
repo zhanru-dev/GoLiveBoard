@@ -6,6 +6,7 @@ import { APP_CONFIG, type AppConfig } from "../config/app-config.js";
 import { PRISMA } from "../database/prisma.js";
 import { DEMO_PEOPLE, DEMO_WORKSPACE } from "../demo/demo-accounts.js";
 import { DemoSeeder } from "../demo/demo-seeder.js";
+import { limitDemoSessions } from "../demo/demo-workspace.js";
 import { Prisma, type PrismaClient } from "../generated/prisma/client.js";
 import { Mailer, type MailMessage } from "../mail/mailer.js";
 import { RATE_LIMITS, RateLimiter } from "../rate-limit/rate-limiter.js";
@@ -154,6 +155,7 @@ export class AuthService {
       DEMO_PEOPLE.manager.id,
       DEMO_WORKSPACE.id,
       visitor.passwordHash,
+      (tx, now) => limitDemoSessions(tx, now),
     );
   }
 
@@ -226,10 +228,15 @@ export class AuthService {
    * If the reset committed first, the hash no longer matches and the
    * sign-in fails like a wrong password.
    */
+  /**
+   * @param afterCreate runs in the same transaction, after the session is
+   * created
+   */
   private async startSession(
     userId: string,
     workspaceId: string,
     verifiedPasswordHash: string,
+    afterCreate?: (tx: Prisma.TransactionClient, now: Date) => Promise<void>,
   ): Promise<SessionTokens> {
     const now = this.clock.now();
     const refreshToken = generateToken();
@@ -246,7 +253,7 @@ export class AuthService {
       ) {
         throw new DomainError("CREDENTIALS_INVALID");
       }
-      return tx.session.create({
+      const created = await tx.session.create({
         data: {
           userId,
           activeWorkspaceId: workspaceId,
@@ -255,6 +262,8 @@ export class AuthService {
         },
         select: { id: true },
       });
+      await afterCreate?.(tx, now);
+      return created;
     });
     return {
       accessToken: await signAccessToken(session.id, this.tokenKeys, now),

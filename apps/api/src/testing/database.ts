@@ -113,10 +113,22 @@ export async function blockWrites(
   databaseUrl: string,
   table: string,
 ): Promise<WriteBlock> {
+  return holdLock(databaseUrl, `LOCK TABLE "${table}" IN SHARE MODE`);
+}
+
+/**
+ * Like blockWrites, for a lock taken by any statement: a row's lock, say,
+ * when a table lock would stop the code under test too early.
+ */
+export async function holdLock(
+  databaseUrl: string,
+  statement: string,
+  values: readonly unknown[] = [],
+): Promise<WriteBlock> {
   const client = new Client({ connectionString: databaseUrl });
   await client.connect();
   await client.query("BEGIN");
-  await client.query(`LOCK TABLE "${table}" IN SHARE MODE`);
+  await client.query(statement, [...values]);
   return {
     async waitForWaiters(count) {
       const deadline = Date.now() + WAITER_TIMEOUT_MS;

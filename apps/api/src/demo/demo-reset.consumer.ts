@@ -4,6 +4,7 @@ import {
   type OnApplicationBootstrap,
   type OnApplicationShutdown,
 } from "@nestjs/common";
+import { DemoEventsDeletedPayload } from "@opspilot/contracts";
 import { type Job, type Queue, Worker } from "bullmq";
 import { InjectPinoLogger, PinoLogger } from "nestjs-pino";
 
@@ -101,7 +102,7 @@ export class DemoResetConsumer
   }
 
   /** Exposed for tests, which run jobs without a BullMQ worker. */
-  async process(job: Pick<Job, "name">): Promise<void> {
+  async process(job: Pick<Job, "name" | "data">): Promise<void> {
     switch (job.name) {
       case MAINTENANCE_JOBS.demoReset: {
         // A reset queued before demo mode was switched off must not run.
@@ -110,6 +111,12 @@ export class DemoResetConsumer
         }
         const removedEvents = await this.seeder.reset();
         this.logger.info({ removedEvents }, "Demo workspace reset");
+        return;
+      }
+      case MAINTENANCE_JOBS.demoPurgeFiles: {
+        // Also with demo mode switched off since: the files are still there.
+        const { eventIds } = DemoEventsDeletedPayload.parse(job.data);
+        await this.seeder.purgeEventFiles(eventIds);
         return;
       }
       default:

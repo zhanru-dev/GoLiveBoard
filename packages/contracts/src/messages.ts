@@ -9,6 +9,7 @@ import { EventStatus } from "./events.js";
 export const OutboxMessageType = z.enum([
   "event.transitioned",
   "stream.check_requested",
+  "demo.events_deleted",
 ]);
 export type OutboxMessageType = z.infer<typeof OutboxMessageType>;
 
@@ -29,6 +30,15 @@ export const StreamCheckRequestedPayload = z.object({
 export type StreamCheckRequestedPayload = z.infer<
   typeof StreamCheckRequestedPayload
 >;
+
+/**
+ * The nightly demo reset deleted these events (FR-AUTH-5). Their files are
+ * deleted again once every upload link handed out for them has expired.
+ */
+export const DemoEventsDeletedPayload = z.object({
+  eventIds: z.array(z.uuid()).max(10_000),
+});
+export type DemoEventsDeletedPayload = z.infer<typeof DemoEventsDeletedPayload>;
 
 /**
  * Data of a `check` job on the stream-checks queue. `slot` is the time the
