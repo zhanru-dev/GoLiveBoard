@@ -21,13 +21,27 @@ import {
   WORKER_OPTIONS,
   type WorkerOptions,
 } from "../worker/worker-options.js";
-import { DemoSeeder } from "./demo-seeder.js";
+import { ReminderSender } from "../attendees/reminder-sender.js";
+import { RetentionJob } from "../attendees/retention-job.js";
+import { DemoSeeder } from "../demo/demo-seeder.js";
 
 export const DEMO_RESET_SCHEDULER_ID = "demo-reset";
 export const FILE_PURGE_SCHEDULER_ID = "file-purge";
 
+export const REMINDERS_SCHEDULER_ID = "reminders";
+export const RETENTION_SCHEDULER_ID = "retention";
+
 /** How often recorded file purges are swept. */
 export const FILE_PURGE_EVERY_MS = 5 * 60 * 1000;
+
+/** How often due reminders are looked for (FR-AD-5). */
+export const REMINDERS_EVERY_MS = 60 * 1000;
+
+/** The daily retention job (FR-AD-6), after the demo reset. */
+export const RETENTION_SCHEDULE = {
+  pattern: "0 4 * * *",
+  tz: "Europe/London",
+} as const;
 
 /**
  * Every night at 03:00 UK time (docs/06, section 10). The time zone makes
@@ -42,11 +56,12 @@ export const DEMO_RESET_SCHEDULE = {
  * Keeps the nightly demo reset scheduled while demo mode is on, and runs it.
  * BullMQ's job scheduler fires once per night however many workers run; with
  * demo mode off the schedule is removed, so a later deployment without demo
- * mode never resets anything. It also keeps the sweep of recorded file
- * purges scheduled, every 5 minutes, demo mode or not.
+ * mode never resets anything. In every deployment it also keeps scheduled
+ * the sweep of recorded file purges (every 5 minutes), reminders (every
+ * minute) and the daily retention job.
  */
 @Injectable()
-export class DemoResetConsumer
+export class MaintenanceConsumer
   implements OnApplicationBootstrap, OnApplicationShutdown
 {
   private worker: Worker | undefined;
@@ -56,7 +71,9 @@ export class DemoResetConsumer
     @Inject(QUEUES) private readonly queues: ReadonlyMap<QueueName, Queue>,
     @Inject(WORKER_OPTIONS) private readonly options: WorkerOptions,
     private readonly seeder: DemoSeeder,
-    @InjectPinoLogger(DemoResetConsumer.name)
+    private readonly reminders: ReminderSender,
+    private readonly retention: RetentionJob,
+    @InjectPinoLogger(MaintenanceConsumer.name)
     private readonly logger: PinoLogger,
   ) {}
 
@@ -71,6 +88,18 @@ export class DemoResetConsumer
       FILE_PURGE_SCHEDULER_ID,
       { every: FILE_PURGE_EVERY_MS },
       { name: MAINTENANCE_JOBS.filePurge },
+    );
+    await queue?.upsertJobScheduler(
+      REMINDERS_SCHEDULER_ID,
+      { every: REMINDERS_EVERY_MS },
+      { name: MAINTENANCE_JOBS.reminders },
+    );
+    await queue?.upsertJobScheduler(
+      RETENTION_SCHEDULER_ID,
+      RETENTION_SCHEDULE,
+      {
+        name: MAINTENANCE_JOBS.retention,
+      },
     );
     if (this.config.demo.enabled) {
       await queue?.upsertJobScheduler(
@@ -132,6 +161,18 @@ export class DemoResetConsumer
         if (purged > 0 || failed) {
           this.logger.info({ purged, failed }, "Swept recorded file purges");
         }
+        return;
+      }
+      case MAINTENANCE_JOBS.reminders: {
+        const sent = await this.reminders.sendDue();
+        if (sent > 0) {
+          this.logger.info({ sent }, "Reminders sent");
+        }
+        return;
+      }
+      case MAINTENANCE_JOBS.retention: {
+        const outcome = await this.retention.run();
+        this.logger.info(outcome, "Retention job finished");
         return;
       }
       case MAINTENANCE_JOBS.legacyDemoPurgeFiles: {

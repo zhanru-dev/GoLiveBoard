@@ -2,13 +2,17 @@ import { type DynamicModule, Module } from "@nestjs/common";
 import { LoggerModule } from "nestjs-pino";
 import type { DestinationStream } from "pino";
 
+import { AttendeeMail } from "../attendees/attendee-mail.js";
+import { ReminderSender } from "../attendees/reminder-sender.js";
+import { RetentionJob } from "../attendees/retention-job.js";
 import type { AppConfig } from "../config/app-config.js";
 import { ConfigModule } from "../config/config.module.js";
 import { DatabaseModule } from "../database/database.module.js";
-import { DemoResetConsumer } from "../demo/demo-reset.consumer.js";
+import { MaintenanceConsumer } from "./maintenance.consumer.js";
 import { DemoModule } from "../demo/demo.module.js";
 import { NetModule } from "../net/net.module.js";
 import type { SafeHttpOptions } from "../net/safe-http.js";
+import { MailModule } from "../mail/mail.module.js";
 import { createLogger } from "../observability/logger.js";
 import { ObservabilityModule } from "../observability/observability.module.js";
 import { OutboxRelay } from "../outbox/outbox-relay.js";
@@ -49,6 +53,7 @@ export class WorkerModule {
         NetModule.forRoot(options.safeHttp),
         DatabaseModule,
         DemoModule,
+        MailModule,
         QueuesModule,
       ],
       providers: [
@@ -61,7 +66,10 @@ export class WorkerModule {
         StreamMonitor,
         StreamCheckScheduler,
         StreamChecksConsumer,
-        DemoResetConsumer,
+        AttendeeMail,
+        ReminderSender,
+        RetentionJob,
+        MaintenanceConsumer,
       ],
     };
   }

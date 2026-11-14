@@ -139,6 +139,8 @@ export interface TestWorkerOptions {
   readonly safeHttp?: SafeHttpOptions;
   /** Run the relay loop and queue consumers; off by default. */
   readonly consume?: boolean;
+  /** Receives the mail the worker sends; discarded by default. */
+  readonly mailer?: Mailer;
 }
 
 /**
@@ -158,7 +160,10 @@ export async function createTestWorker(
         worker: { consume: options.consume ?? false },
       }),
     ],
-  }).compile();
+  })
+    .overrideProvider(Mailer)
+    .useValue(options.mailer ?? new DiscardingMailer())
+    .compile();
   await moduleRef.init();
   return moduleRef;
 }

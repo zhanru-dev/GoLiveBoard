@@ -388,16 +388,18 @@ Every foreign key is indexed. Additional indexes follow the main queries:
 
 ## 8. Data retention
 
-| Data                          | Kept for                                                          | Then                                                                                                             |
-| ----------------------------- | ----------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
-| Attendee name and email       | Workspace retention period after the event ends (default 90 days) | Anonymised: name becomes "Former attendee", email replaced by a non-reversible hash, sessions and tokens deleted |
-| Attendee erased on request    | —                                                                 | Anonymised immediately, the same way                                                                             |
-| Verification and reset tokens | Until used or expired                                             | Deleted by the daily retention job                                                                               |
-| Stream checks                 | 30 days                                                           | Deleted                                                                                                          |
-| Attendance minutes            | Until the report is generated, plus 30 days                       | Deleted; the report keeps aggregates only                                                                        |
-| Chat messages and questions   | Lifetime of the event                                             | Deleted with the event; authorship anonymised with the attendee                                                  |
-| Audit entries                 | 2 years                                                           | Deleted                                                                                                          |
-| Idempotency records           | 24 hours                                                          | Deleted                                                                                                          |
-| Webhook delivery attempts     | 30 days                                                           | Deleted                                                                                                          |
+| Data                          | Kept for                                                          | Then                                                                                                                                             |
+| ----------------------------- | ----------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Attendee name and email       | Workspace retention period after the event ends (default 90 days) | Anonymised: name becomes "Former attendee", email replaced by a random placeholder under `.invalid`, sessions, links and demo inbox mail deleted |
+| Attendee invitations          | Workspace retention period after the event ends                   | Deleted (also at once with an erased attendee's address)                                                                                         |
+| Attendee erased on request    | —                                                                 | Anonymised immediately, the same way                                                                                                             |
+| Verification and reset tokens | Until used or expired                                             | Deleted by the daily retention job                                                                                                               |
+| Attendee sessions             | Until they expire (a day after the event ends)                    | Deleted by the daily retention job                                                                                                               |
+| Stream checks                 | 30 days                                                           | Deleted                                                                                                                                          |
+| Attendance minutes            | Until the report is generated, plus 30 days                       | Deleted; the report keeps aggregates only                                                                                                        |
+| Chat messages and questions   | Lifetime of the event                                             | Deleted with the event; authorship anonymised with the attendee                                                                                  |
+| Audit entries                 | 2 years                                                           | Deleted                                                                                                                                          |
+| Idempotency records           | 24 hours                                                          | Deleted                                                                                                                                          |
+| Webhook delivery attempts     | 30 days                                                           | Deleted                                                                                                                                          |
 
-The daily retention job is idempotent and audited as `SYSTEM`.
+The daily retention job (`src/attendees/retention-job.ts`, 04:00 UK time) is idempotent: a second run finds nothing to do. Each anonymisation is audited as `SYSTEM` (`attendee.anonymised`), and takes the event's row lock and then the attendee's, like an erasure on request.

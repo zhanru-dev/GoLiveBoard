@@ -227,14 +227,15 @@ flowchart LR
   outbox -->|"relay polls with FOR UPDATE SKIP LOCKED"| q["BullMQ queues"]
   q --> email["email"]
   q --> wh["webhooks"]
-  q --> rem["reminders (delayed)"]
   q --> triage["ai-triage"]
   sched["Repeatable jobs"] --> sc["stream-checks · 30 s"]
-  sched --> ret["retention · daily"]
-  sched --> demo["demo-reset · nightly"]
+  sched --> rem["reminders · every minute"]
+  sched --> purge["file-purge · 5 min"]
+  sched --> ret["retention · daily 04:00 UK"]
+  sched --> demo["demo-reset · nightly 03:00 UK"]
 ```
 
-Every job is **idempotent**: it checks whether its effect already happened (e.g. a reminder's `sentAt`) before acting. Failed jobs retry with exponential backoff; jobs that exhaust their retries are kept and visible to operators.
+Every job is **idempotent**: it checks whether its effect already happened before acting. A reminder, for example, is recorded in `reminder_deliveries` (one row per attendee and kind) in the transaction that decides to send it, before it is sent, so a job that runs twice, or on two workers, sends it at most once. Failed jobs retry with exponential backoff; jobs that exhaust their retries are kept and visible to operators.
 
 No wait on a dependency is unbounded, because a frozen dependency (one that accepts connections but never answers) would otherwise hold a request, a database lock or the process forever:
 

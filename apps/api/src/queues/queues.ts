@@ -12,7 +12,7 @@ export const STREAM_CHECK_JOBS = {
   schedule: "schedule",
 } as const;
 
-/** Housekeeping on a schedule, such as the nightly demo reset. */
+/** Work on a schedule: reminders, retention, the nightly demo reset. */
 export const MAINTENANCE_QUEUE = "maintenance";
 
 export const MAINTENANCE_JOBS = {
@@ -28,6 +28,10 @@ export const MAINTENANCE_JOBS = {
    * only records the events' prefixes for the sweep.
    */
   legacyDemoPurgeFiles: "demo-purge-files",
+  /** Every minute: sends the reminders that are due (FR-AD-5). */
+  reminders: "reminders",
+  /** Daily: anonymises and deletes what is past retention (FR-AD-6). */
+  retention: "retention",
 } as const;
 
 /** Every queue the worker consumes. */

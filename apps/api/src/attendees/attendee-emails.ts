@@ -78,3 +78,41 @@ export function invitationEmail(
     ].join("\n"),
   };
 }
+
+interface ReminderEvent extends EventSummary {
+  readonly startsAt: Date;
+  readonly timeZone: string;
+}
+
+/**
+ * FR-AD-5: the reminder 24 hours or 1 hour before the start, with a link to
+ * the event and one to stop reminders.
+ */
+export function reminderEmail(
+  to: string,
+  event: ReminderEvent,
+  kind: "DAY_BEFORE" | "HOUR_BEFORE",
+  unsubscribeToken: string,
+  appOrigin: string,
+): MailMessage {
+  const when = new Intl.DateTimeFormat("en-GB", {
+    dateStyle: "full",
+    timeStyle: "long",
+    timeZone: event.timeZone,
+  }).format(event.startsAt);
+  return {
+    to,
+    subject:
+      kind === "DAY_BEFORE"
+        ? `Tomorrow: ${event.title}`
+        : `Starting in an hour: ${event.title}`,
+    text: [
+      `${event.title} starts ${when}.`,
+      "Join here:",
+      eventPageUrl(appOrigin, event.slug),
+      "",
+      "Don't want reminders? Stop them here:",
+      linkWithToken(appOrigin, "/reminders/unsubscribe", unsubscribeToken),
+    ].join("\n"),
+  };
+}

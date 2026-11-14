@@ -96,6 +96,11 @@ export async function createTestDatabase(): Promise<TestDatabase> {
 export interface WriteBlock {
   /** Resolves once `count` sessions are waiting for a lock in this database. */
   waitForWaiters(count: number): Promise<void>;
+  /**
+   * Runs a statement in the holding transaction: a change made there commits
+   * with the release, just before the waiters go on.
+   */
+  run(statement: string, values?: readonly unknown[]): Promise<void>;
   release(): Promise<void>;
 }
 
@@ -150,6 +155,9 @@ export async function holdLock(
         }
         await new Promise((resolve) => setTimeout(resolve, WAITER_POLL_MS));
       }
+    },
+    async run(statement, values = []) {
+      await client.query(statement, [...values]);
     },
     async release() {
       await client.query("COMMIT");

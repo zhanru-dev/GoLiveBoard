@@ -22,15 +22,15 @@ describe("unsubscribe tokens", () => {
 
   it("refuse a token for another attendee, another secret or a broken one", () => {
     const genuine = unsubscribeToken(SECRET, ATTENDEE);
-    const mac = genuine.slice(genuine.indexOf(".") + 1);
+    const mac = genuine.slice(genuine.indexOf("_") + 1);
 
     for (const token of [
-      `${OTHER}.${mac}`,
+      `${OTHER}_${mac}`,
       unsubscribeToken(OTHER_SECRET, ATTENDEE),
       ATTENDEE,
-      `.${mac}`,
-      `${ATTENDEE}.`,
-      `${ATTENDEE}.${mac.slice(0, -2)}`,
+      `_${mac}`,
+      `${ATTENDEE}_`,
+      `${ATTENDEE}_${mac.slice(0, -2)}`,
     ]) {
       expect(attendeeOfUnsubscribeToken(SECRET, token), token).toBeUndefined();
     }

@@ -40,3 +40,26 @@ export async function recordAudit(
     },
   });
 }
+
+/**
+ * Records something the system did on its own, such as the retention job
+ * anonymising an attendee (docs/03, section 8): actor kind SYSTEM, no user.
+ */
+export async function recordSystemAudit(
+  tx: Prisma.TransactionClient,
+  workspaceId: string,
+  record: AuditRecord,
+): Promise<void> {
+  await tx.auditEntry.create({
+    data: {
+      workspaceId,
+      actorKind: "SYSTEM",
+      action: record.action,
+      targetType: record.targetType,
+      targetId: record.targetId,
+      eventId: record.eventId ?? null,
+      ...(record.before !== undefined && { before: record.before }),
+      ...(record.after !== undefined && { after: record.after }),
+    },
+  });
+}

@@ -9,6 +9,12 @@ import { createHmac, timingSafeEqual } from "node:crypto";
  */
 const PURPOSE = "opspilot:reminder-unsubscribe:";
 
+/**
+ * Between the ID and the MAC. A UUID never contains it, so the first one
+ * splits the token, and every character stays URL-safe (base64url).
+ */
+const SEPARATOR = "_";
+
 function mac(secret: string, attendeeId: string): Buffer {
   return createHmac("sha256", secret)
     .update(PURPOSE + attendeeId)
@@ -16,7 +22,7 @@ function mac(secret: string, attendeeId: string): Buffer {
 }
 
 export function unsubscribeToken(secret: string, attendeeId: string): string {
-  return `${attendeeId}.${mac(secret, attendeeId).toString("base64url")}`;
+  return `${attendeeId}${SEPARATOR}${mac(secret, attendeeId).toString("base64url")}`;
 }
 
 /** The attendee the token names, or `undefined` when it is not genuine. */
@@ -24,7 +30,7 @@ export function attendeeOfUnsubscribeToken(
   secret: string,
   token: string,
 ): string | undefined {
-  const separator = token.indexOf(".");
+  const separator = token.indexOf(SEPARATOR);
   if (separator <= 0) {
     return undefined;
   }

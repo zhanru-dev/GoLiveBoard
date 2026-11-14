@@ -34,14 +34,17 @@ import {
   type TestDatabase,
 } from "../testing/database.js";
 import { createTestWorker } from "../testing/test-app.js";
-import { DEMO_WORKSPACE } from "./demo-accounts.js";
+import { DEMO_WORKSPACE } from "../demo/demo-accounts.js";
 import {
   DEMO_RESET_SCHEDULER_ID,
-  DemoResetConsumer,
   FILE_PURGE_EVERY_MS,
   FILE_PURGE_SCHEDULER_ID,
-} from "./demo-reset.consumer.js";
-import { DemoSeeder, PURGE_DELAY_MS } from "./demo-seeder.js";
+  MaintenanceConsumer,
+  REMINDERS_EVERY_MS,
+  REMINDERS_SCHEDULER_ID,
+  RETENTION_SCHEDULER_ID,
+} from "./maintenance.consumer.js";
+import { DemoSeeder, PURGE_DELAY_MS } from "../demo/demo-seeder.js";
 
 /** A PNG signature followed by filler. */
 const png = () =>
@@ -127,6 +130,20 @@ describe("the nightly demo reset (FR-AUTH-5)", () => {
     expect(
       await maintenanceQueue(off)?.getJobScheduler(DEMO_RESET_SCHEDULER_ID),
     ).toBeUndefined();
+    // Reminders and retention run in every deployment.
+    expect(
+      await maintenanceQueue(off)?.getJobScheduler(REMINDERS_SCHEDULER_ID),
+    ).toMatchObject({
+      every: REMINDERS_EVERY_MS,
+      name: MAINTENANCE_JOBS.reminders,
+    });
+    expect(
+      await maintenanceQueue(off)?.getJobScheduler(RETENTION_SCHEDULER_ID),
+    ).toMatchObject({
+      pattern: "0 4 * * *",
+      tz: "Europe/London",
+      name: MAINTENANCE_JOBS.retention,
+    });
     // Purges recorded while demo mode was on are still swept.
     expect(
       await maintenanceQueue(off)?.getJobScheduler(FILE_PURGE_SCHEDULER_ID),
@@ -159,7 +176,12 @@ describe("the nightly demo reset (FR-AUTH-5)", () => {
 
     const schedulers = (await queue?.getJobSchedulers()) ?? [];
     expect(schedulers.map(({ key }) => key).sort()).toEqual(
-      [DEMO_RESET_SCHEDULER_ID, FILE_PURGE_SCHEDULER_ID].sort(),
+      [
+        DEMO_RESET_SCHEDULER_ID,
+        FILE_PURGE_SCHEDULER_ID,
+        REMINDERS_SCHEDULER_ID,
+        RETENTION_SCHEDULER_ID,
+      ].sort(),
     );
     // One next run is waiting, not one per worker.
     const waiting = (await queue?.getDelayed()) ?? [];
@@ -172,7 +194,7 @@ describe("the nightly demo reset (FR-AUTH-5)", () => {
     const worker = await startWorker(false, false);
 
     await worker
-      .get(DemoResetConsumer)
+      .get(MaintenanceConsumer)
       .process({ name: MAINTENANCE_JOBS.demoReset });
 
     expect(await demoWorkspaces()).toBe(0);
@@ -182,7 +204,7 @@ describe("the nightly demo reset (FR-AUTH-5)", () => {
     const worker = await startWorker(true, false);
 
     await worker
-      .get(DemoResetConsumer)
+      .get(MaintenanceConsumer)
       .process({ name: MAINTENANCE_JOBS.demoReset });
 
     expect(await demoWorkspaces()).toBe(1);
@@ -196,7 +218,9 @@ describe("the nightly demo reset (FR-AUTH-5)", () => {
       const seeder = worker.get(DemoSeeder);
       const storage = worker.get(ObjectStorage);
       const sweep = (on: INestApplicationContext) =>
-        on.get(DemoResetConsumer).process({ name: MAINTENANCE_JOBS.filePurge });
+        on
+          .get(MaintenanceConsumer)
+          .process({ name: MAINTENANCE_JOBS.filePurge });
       await seeder.reset();
       const [event] = await database.query<{ id: string }>(
         "SELECT id FROM events WHERE workspace_id = $1 LIMIT 1",
@@ -339,7 +363,7 @@ describe("the nightly demo reset (FR-AUTH-5)", () => {
       );
 
       await worker.get(OutboxRelay).relayOnce();
-      const consumer = worker.get(DemoResetConsumer);
+      const consumer = worker.get(MaintenanceConsumer);
       for (const id of [`outbox-${message?.id ?? ""}`, `legacy-${queued}`]) {
         const job = await queue?.getJob(id);
         expect(job?.name, id).toBe(MAINTENANCE_JOBS.legacyDemoPurgeFiles);
