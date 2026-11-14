@@ -21,4 +21,8 @@ export const eventKeys = {
     [...eventKeys.detail(workspaceId, eventId), "incidents"] as const,
   holdingSlate: (workspaceId: string, eventId: string) =>
     [...eventKeys.detail(workspaceId, eventId), "holding-slate"] as const,
+  attendees: (workspaceId: string, eventId: string, status: string) =>
+    [...eventKeys.detail(workspaceId, eventId), "attendees", status] as const,
+  invitations: (workspaceId: string, eventId: string) =>
+    [...eventKeys.detail(workspaceId, eventId), "invitations"] as const,
 };

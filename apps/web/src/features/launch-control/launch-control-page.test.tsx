@@ -56,6 +56,12 @@ function serveEvent(
       HttpResponse.json(problem(404, "NOT_FOUND"), { status: 404 }),
     ),
     http.get("*/api/v1/workspace/members", () => HttpResponse.json([])),
+    http.get(`*/api/v1/events/${EVENT_ID}/attendees`, () =>
+      HttpResponse.json({ items: [], nextCursor: null }),
+    ),
+    http.get(`*/api/v1/events/${EVENT_ID}/invitations`, () =>
+      HttpResponse.json([]),
+    ),
   );
 }
 
@@ -620,5 +626,77 @@ describe("LaunchControlPage", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent(
       "This event was not found.",
     );
+  });
+
+  describe("the audience (docs/04, section 3.4)", () => {
+    const ATTENDEE = {
+      id: "0195f0a0-0000-7000-8000-0000000000b1",
+      name: "Grace Hopper",
+      email: "grace@example.com",
+      status: "VERIFIED" as const,
+      remindersOptIn: true,
+      registeredAt: "2026-11-10T09:00:00.000Z",
+      verifiedAt: "2026-11-10T09:05:00.000Z",
+    };
+
+    it("lists who registered and revokes after the Manager confirms", async () => {
+      serveEvent();
+      const revoked: string[] = [];
+      server.use(
+        http.get(`*/api/v1/events/${EVENT_ID}/attendees`, () =>
+          HttpResponse.json({ items: [ATTENDEE], nextCursor: null }),
+        ),
+        http.post(
+          `*/api/v1/events/${EVENT_ID}/attendees/:attendeeId/revoke`,
+          ({ params }) => {
+            revoked.push(String(params.attendeeId));
+            return HttpResponse.json({ ...ATTENDEE, status: "REVOKED" });
+          },
+        ),
+      );
+      renderScreen(<LaunchControlPage eventId={EVENT_ID} />, OWNER);
+      const user = userEvent.setup();
+
+      const audience = await screen.findByRole("region", { name: "Audience" });
+      const row = (await within(audience).findByText("Grace Hopper")).closest(
+        "tr",
+      );
+      expect(row).toHaveTextContent("grace@example.com");
+      await user.click(
+        within(row as HTMLElement).getByRole("button", { name: "Revoke" }),
+      );
+      expect(revoked).toEqual([]);
+      await user.click(
+        within(await screen.findByRole("alertdialog")).getByRole("button", {
+          name: "Revoke",
+        }),
+      );
+
+      await vi.waitFor(() => {
+        expect(revoked).toEqual([ATTENDEE.id]);
+      });
+    });
+
+    it("shows Analysts the list without any action or invitations", async () => {
+      serveEvent();
+      server.use(
+        http.get(`*/api/v1/events/${EVENT_ID}/attendees`, () =>
+          HttpResponse.json({
+            items: [{ ...ATTENDEE, email: "g***@example.com" }],
+            nextCursor: null,
+          }),
+        ),
+      );
+      renderScreen(<LaunchControlPage eventId={EVENT_ID} />, ANALYST);
+
+      const audience = await screen.findByRole("region", { name: "Audience" });
+      expect(
+        await within(audience).findByText("g***@example.com"),
+      ).toBeInTheDocument();
+      expect(
+        within(audience).queryByRole("button", { name: /Revoke|Erase/ }),
+      ).toBeNull();
+      expect(within(audience).queryByText("Invitations")).toBeNull();
+    });
   });
 });

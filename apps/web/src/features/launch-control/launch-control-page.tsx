@@ -3,6 +3,7 @@
 import { ApiError } from "@/lib/api";
 
 import { AccessPolicySection } from "./access-policy-section";
+import { AudienceSection } from "./audience-section";
 import { DetailsSection } from "./details-section";
 import { EventHeader } from "./event-header";
 import { HoldingSlateSection } from "./holding-slate-section";
@@ -40,6 +41,7 @@ export function LaunchControlPage({ eventId }: Readonly<{ eventId: string }>) {
           <AccessPolicySection control={control} eventId={eventId} />
           <StreamSection control={control} event={event.data} />
           <HoldingSlateSection control={control} eventId={eventId} />
+          <AudienceSection control={control} event={event.data} />
           <DetailsSection control={control} event={event.data} />
         </div>
         <ReadinessPanel control={control} eventId={eventId} />

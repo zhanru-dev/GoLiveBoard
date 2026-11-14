@@ -123,6 +123,7 @@ describe("registration and verification (FR-AD-1 to FR-AD-3)", () => {
           mode: "EMAIL_DOMAIN",
           allowedDomains: ["example.com"],
           privacyNoticeVersion: NOTICE,
+          retentionDays: 90,
         },
       });
       const text = JSON.stringify(response.body);

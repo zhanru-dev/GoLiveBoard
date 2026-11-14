@@ -33,6 +33,8 @@ export const PublicEvent = z.object({
     allowedDomains: z.array(z.string()),
     /** The privacy notice the form shows and the registration records. */
     privacyNoticeVersion: z.string().nullable(),
+    /** Days after the event that attendees' personal data is kept (FR-AD-6). */
+    retentionDays: z.number().int().positive(),
   }),
 });
 export type PublicEvent = z.infer<typeof PublicEvent>;

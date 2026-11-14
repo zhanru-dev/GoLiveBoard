@@ -54,6 +54,7 @@ const PUBLIC_EVENT_SELECT = {
   accessPolicy: {
     select: { mode: true, allowedDomains: true, privacyNoticeVersion: true },
   },
+  workspace: { select: { retentionDays: true } },
 } as const satisfies Prisma.EventSelect;
 
 type PublicEventRow = Prisma.EventGetPayload<{
@@ -340,6 +341,7 @@ function toPublicEvent(event: PublicEventRow): PublicEvent {
           ? [...policy.allowedDomains]
           : [],
       privacyNoticeVersion: open ? policy.privacyNoticeVersion : null,
+      retentionDays: event.workspace.retentionDays,
     },
   };
 }
