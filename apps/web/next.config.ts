@@ -1,4 +1,5 @@
 import { existsSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 
 import type { NextConfig } from "next";
 
@@ -26,6 +27,11 @@ export const SECURITY_HEADERS = [
 const nextConfig: NextConfig = {
   // The header only advertises the framework to attackers.
   poweredByHeader: false,
+  // The production image runs the standalone server, which carries only the
+  // files the build traced as used. Tracing starts at the repository root so
+  // the workspace packages are included.
+  output: "standalone",
+  outputFileTracingRoot: fileURLToPath(new URL("../..", import.meta.url)),
   // `next dev` writes an AGENTS.md when it detects an AI coding agent. A file
   // that appears for some developers and not others makes `git status` differ
   // from machine to machine, so the project opts out.

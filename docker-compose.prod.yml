@@ -1,0 +1,236 @@
+# The production-like stack: the production images behind Caddy over HTTPS,
+# with every dependency in a container. CI runs its smoke and end-to-end tests
+# against it, and you can try the production build locally:
+#
+#   npm run stack:up      build the images, migrate, start, wait until healthy
+#   npm run stack:down    stop the stack; data (and the local certificate
+#                         authority) is kept in named volumes
+#
+# Open https://opspilot.localhost:3443 (browsers resolve *.localhost to this
+# machine). The certificate comes from Caddy's local authority: trust it as
+# described in docs/06, section 1.4, or accept the browser's warning.
+#
+# This stack is separate from the development services (docker-compose.yml):
+# its own project, network, volumes and ports, so both can run at once. The
+# credentials below are for this local stack only; in AWS they come from
+# Parameter Store (docs/06, section 6).
+name: opspilot-stack
+
+x-app-environment: &app-environment
+  LOG_LEVEL: info
+  LOG_FORMAT: json
+  # Caddy is the one proxy in front of the API.
+  TRUST_PROXY_HOPS: "1"
+  DATABASE_URL: postgres://opspilot:${STACK_POSTGRES_PASSWORD:-stack-local-only}@postgres:5432/opspilot
+  VALKEY_URL: redis://valkey:6379
+  APP_ORIGIN: https://${STACK_SITE_HOST:-opspilot.localhost}:${STACK_HTTPS_PORT:-3443}
+  JWT_SECRET: ${STACK_JWT_SECRET:-stack-local-only-signing-key-not-a-secret}
+  SMTP_URL: smtp://mailpit:1025
+  MAIL_FROM: OpsPilot <no-reply@opspilot.localhost>
+  S3_ENDPOINT: http://s3:8333
+  S3_PUBLIC_ENDPOINT: https://${STACK_STORAGE_HOST:-storage.opspilot.localhost}:${STACK_HTTPS_PORT:-3443}
+  S3_BUCKET: opspilot-assets
+  S3_ACCESS_KEY_ID: opspilot
+  S3_SECRET_ACCESS_KEY: opspilot-local-only
+  S3_FORCE_PATH_STYLE: "true"
+  S3_CREATE_BUCKET: "true"
+
+# Containers that run our code: no privileges, no writable image.
+x-hardened: &hardened
+  read_only: true
+  cap_drop: [ALL]
+  security_opt: ["no-new-privileges:true"]
+  tmpfs: ["/tmp"]
+  restart: unless-stopped
+
+x-api-image: &api-image
+  image: ${STACK_API_IMAGE:-opspilot-api:local}
+  build:
+    context: .
+    dockerfile: infra/docker/Dockerfile
+    target: api
+
+services:
+  proxy:
+    image: caddy:2.11.9-alpine
+    ports:
+      - "127.0.0.1:${STACK_HTTPS_PORT:-3443}:${STACK_HTTPS_PORT:-3443}"
+      - "127.0.0.1:${STACK_HTTP_PORT:-3380}:${STACK_HTTP_PORT:-3380}"
+    environment:
+      HTTPS_PORT: ${STACK_HTTPS_PORT:-3443}
+      HTTP_PORT: ${STACK_HTTP_PORT:-3380}
+      SITE_HOST: ${STACK_SITE_HOST:-opspilot.localhost}
+      STORAGE_HOST: ${STACK_STORAGE_HOST:-storage.opspilot.localhost}
+      API_UPSTREAM: api:4301
+      WEB_UPSTREAM: web:3301
+      STORAGE_UPSTREAM: s3:8333
+    volumes:
+      - ./infra/docker/Caddyfile.prod:/etc/caddy/Caddyfile:ro
+      # Caddy's local certificate authority and certificates.
+      - caddy-data:/data
+    depends_on:
+      api:
+        condition: service_healthy
+      web:
+        condition: service_healthy
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    restart: unless-stopped
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "wget",
+          "-q",
+          "-O",
+          "/dev/null",
+          "http://127.0.0.1:2019/config/",
+        ]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # Applies pending migrations, then exits. The API and the worker start only
+  # after it succeeded, so new code never runs against an old schema.
+  migrate:
+    <<: [*api-image, *hardened]
+    command:
+      ["node", "../../node_modules/prisma/build/index.js", "migrate", "deploy"]
+    environment:
+      DATABASE_URL: postgres://opspilot:${STACK_POSTGRES_PASSWORD:-stack-local-only}@postgres:5432/opspilot
+      # The CLI would otherwise ask prisma.io for updates.
+      CHECKPOINT_DISABLE: "1"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  api:
+    <<: [*api-image, *hardened]
+    environment: *app-environment
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      valkey:
+        condition: service_healthy
+      mailpit:
+        condition: service_healthy
+      s3:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:4301/api/v1/health/ready').then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))",
+        ]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  worker:
+    <<: [*api-image, *hardened]
+    command: ["node", "--enable-source-maps", "dist/worker.js"]
+    environment: *app-environment
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      valkey:
+        condition: service_healthy
+      mailpit:
+        condition: service_healthy
+      s3:
+        condition: service_healthy
+
+  web:
+    <<: *hardened
+    image: ${STACK_WEB_IMAGE:-opspilot-web:local}
+    build:
+      context: .
+      dockerfile: infra/docker/Dockerfile
+      target: web
+    environment:
+      # Server-side requests go straight to the API over the stack's network.
+      API_INTERNAL_URL: http://api:4301
+      # The storage origin the Content Security Policy allows.
+      S3_PUBLIC_ENDPOINT: https://${STACK_STORAGE_HOST:-storage.opspilot.localhost}:${STACK_HTTPS_PORT:-3443}
+    tmpfs:
+      - /tmp
+      # Next.js caches optimised images and fetches here.
+      - /app/apps/web/.next/cache:uid=1000,gid=1000
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3301/sign-in').then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))",
+        ]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  postgres:
+    image: postgres:18.6-alpine
+    environment:
+      POSTGRES_USER: opspilot
+      POSTGRES_PASSWORD: ${STACK_POSTGRES_PASSWORD:-stack-local-only}
+      POSTGRES_DB: opspilot
+    volumes:
+      - postgres-data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U opspilot -d opspilot"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  valkey:
+    image: valkey/valkey:9.1.3-alpine
+    healthcheck:
+      test: ["CMD", "valkey-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # Catches email. Its inbox (http://127.0.0.1:8037) is published so the
+  # end-to-end tests can read invitation links.
+  mailpit:
+    image: axllent/mailpit:v1.33.1
+    ports:
+      - "127.0.0.1:${STACK_MAILPIT_UI_PORT:-8037}:8025"
+    healthcheck:
+      test: ["CMD", "/mailpit", "readyz"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  s3:
+    image: chrislusf/seaweedfs:4.53
+    command:
+      - server
+      - -s3
+      - -s3.config=/etc/seaweedfs/s3.json
+      - -dir=/data
+      - -ip.bind=0.0.0.0
+    volumes:
+      - ./infra/docker/seaweedfs-s3.json:/etc/seaweedfs/s3.json:ro
+      - s3-data:/data
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "wget",
+          "-q",
+          "-O",
+          "/dev/null",
+          "http://127.0.0.1:8333/healthz",
+        ]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+volumes:
+  caddy-data:
+  postgres-data:
+  s3-data:

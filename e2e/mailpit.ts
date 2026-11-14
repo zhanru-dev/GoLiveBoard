@@ -1,6 +1,8 @@
 import { expect } from "@playwright/test";
 
-const MAILPIT_URL = process.env.MAILPIT_URL ?? "http://127.0.0.1:8036";
+import { target } from "./target.js";
+
+const MAILPIT_URL = target.mailpitURL;
 
 interface MessageSummary {
   readonly ID: string;

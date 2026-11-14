@@ -102,51 +102,25 @@ jobs:
       - name: Scan the history for secrets
         run: ./gitleaks git --redact --verbose .
 
-  build:
-    name: Build
+  # The production images, built natively for each platform the demo host
+  # may run (it is ARM), scanned, then tested as they will run: the stack in
+  # docker-compose.prod.yml over HTTPS, with every browser test and the smoke
+  # tests (docs/06, section 1.4).
+  images:
+    name: Images (${{ matrix.platform }})
     needs: [quality, unit, integration]
-    runs-on: ubuntu-24.04
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        with:
-          node-version-file: .nvmrc
-          cache: npm
-      - name: Restore the Next.js build cache
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: apps/web/.next/cache
-          key: next-${{ hashFiles('package-lock.json') }}-${{ hashFiles('apps/web/src/**') }}
-          restore-keys: next-${{ hashFiles('package-lock.json') }}-
-      - run: npm ci
-      - run: npm run build
-
-  e2e:
-    name: End-to-end tests
-    needs: [quality, unit, integration]
-    runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux/amd64
+            runner: ubuntu-24.04
+          - platform: linux/arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
     env:
-      # The apps run on the runner and the proxy in a container, which on
-      # Linux reaches the host only on 0.0.0.0 (docs/06, section 1.2).
-      API_HOST: 0.0.0.0
-      WEB_HOST: 0.0.0.0
-      TRUST_PROXY_HOPS: "1"
-      DATABASE_URL: postgres://opspilot:opspilot@127.0.0.1:5443/opspilot
-      VALKEY_URL: redis://127.0.0.1:6392
-      APP_ORIGIN: http://localhost:3300
-      JWT_SECRET: ci-only-signing-key-that-is-long-enough
-      SMTP_URL: smtp://127.0.0.1:1036
-      MAIL_FROM: OpsPilot <no-reply@opspilot.test>
-      S3_ENDPOINT: http://127.0.0.1:8333
-      S3_PUBLIC_ENDPOINT: http://localhost:8333
-      S3_ACCESS_KEY_ID: opspilot
-      S3_SECRET_ACCESS_KEY: opspilot-local-only
-      S3_FORCE_PATH_STYLE: "true"
-      S3_CREATE_BUCKET: "true"
+      TRIVY_IMAGE: aquasec/trivy:0.76.2@sha256:8f6bb947dbc528902e11f2f5be52f7b519f6a39d5d148f41166f2040499768fb
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -155,26 +129,40 @@ jobs:
         with:
           node-version-file: .nvmrc
           cache: npm
+      - name: Build the api and web images
+        run: docker compose --file docker-compose.prod.yml build
+      # Fixable HIGH and CRITICAL vulnerabilities fail the build, and so does
+      # any secret found in an image. Unfixed ones are reported by Dependabot
+      # and Trivy runs once a fix exists.
+      - name: Scan the images (Trivy)
+        run: |
+          for image in opspilot-api:local opspilot-web:local; do
+            docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
+              "$TRIVY_IMAGE" image --no-progress --scanners vuln,secret \
+              --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 "$image"
+          done
+      - name: Start the production-like stack
+        run: npm run stack:up
       - run: npm ci
-      - name: Start PostgreSQL, Valkey, Mailpit, SeaweedFS and the proxy
-        run: npm run services:up
-      - run: npm run db:deploy
-      - run: npm run build
       - name: Install Chromium for Playwright
         run: npx playwright install --with-deps chromium
-      - run: npm run test:e2e
+      - name: Browser and smoke tests against the stack, over HTTPS
+        run: npm run test:e2e:stack
+      - name: Show the stack's logs after a failure
+        if: failure()
+        run: docker compose --file docker-compose.prod.yml logs --no-color --timestamps
       - name: Keep the Playwright report of a failed run
         if: failure()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: playwright-report
+          name: playwright-report-${{ matrix.runner }}
           path: playwright-report
           retention-days: 7
 
   result:
     name: CI result
     if: always()
-    needs: [quality, unit, integration, security, build, e2e]
+    needs: [quality, unit, integration, security, images]
     runs-on: ubuntu-24.04
     timeout-minutes: 2
     steps:

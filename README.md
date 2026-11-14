@@ -41,3 +41,7 @@ Open <http://localhost:3300> and create a workspace. Emails the app sends (invit
 | `npm run test:int`      | API integration tests (starts its own containers; needs `openssl` on the PATH)      |
 | `npm run test:e2e`      | Playwright against production builds (needs `services:up`, `db:deploy` and `build`) |
 | `npm run services:down` | Stop the local services                                                             |
+
+### The production build
+
+`npm run stack:up` builds the production images and runs them with every dependency behind Caddy over HTTPS, as in production. Open <https://opspilot.localhost:3443>; the certificate comes from a local authority that your browser does not trust until you add it ([how](docs/06-infrastructure-and-operations.md#14-production-like-stack)). `npm run test:e2e:stack` runs the browser tests against it, and `npm run stack:down` stops it.

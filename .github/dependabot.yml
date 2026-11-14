@@ -21,3 +21,23 @@ updates:
     groups:
       actions:
         patterns: ["*"]
+
+  # The Node.js base image in infra/docker/Dockerfile, pinned by digest.
+  - package-ecosystem: docker
+    directory: /infra/docker
+    schedule:
+      interval: weekly
+      day: monday
+    groups:
+      base-images:
+        patterns: ["*"]
+
+  # The service images in docker-compose.yml and docker-compose.prod.yml.
+  - package-ecosystem: docker-compose
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    groups:
+      service-images:
+        update-types: [minor, patch]

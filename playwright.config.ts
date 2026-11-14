@@ -1,9 +1,14 @@
 import { defineConfig, devices } from "@playwright/test";
 
+import { E2E_TARGET, target } from "./e2e/target.js";
+
 /**
- * End-to-end tests against production builds, through the Caddy proxy on
- * port 3300, exactly as a browser uses OpsPilot. Before running:
- * `npm run services:up`, `npm run db:deploy` and `npm run build`.
+ * Browser tests, through the proxy exactly as a browser uses OpsPilot.
+ *
+ * - `npm run test:e2e`: against production builds on this machine. Before
+ *   running: `npm run services:up`, `npm run db:deploy` and `npm run build`.
+ * - `npm run test:e2e:stack`: against the production images over HTTPS.
+ *   Before running: `npm run stack:up`.
  */
 export default defineConfig({
   testDir: "./e2e",
@@ -13,22 +18,30 @@ export default defineConfig({
   retries: 0,
   reporter: process.env.CI ? [["github"], ["html", { open: "never" }]] : "list",
   use: {
-    baseURL: process.env.E2E_BASE_URL ?? "http://localhost:3300",
+    baseURL: target.baseURL,
+    // The stack's certificate comes from Caddy's local authority, which the
+    // test browser does not trust; the smoke tests check the certificate
+    // against that authority themselves.
+    ignoreHTTPSErrors: E2E_TARGET === "stack",
     trace: "retain-on-failure",
   },
   projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
-  webServer: [
-    {
-      command: "npm run start -w @opspilot/api",
-      url: "http://127.0.0.1:4301/api/v1/health/ready",
-      reuseExistingServer: !process.env.CI,
-      stdout: "ignore",
-    },
-    {
-      command: "npm run start -w @opspilot/web",
-      url: "http://127.0.0.1:3301",
-      reuseExistingServer: !process.env.CI,
-      stdout: "ignore",
-    },
-  ],
+  // The stack runs its own servers.
+  webServer:
+    E2E_TARGET === "stack"
+      ? []
+      : [
+          {
+            command: "npm run start -w @opspilot/api",
+            url: "http://127.0.0.1:4301/api/v1/health/ready",
+            reuseExistingServer: !process.env.CI,
+            stdout: "ignore",
+          },
+          {
+            command: "npm run start -w @opspilot/web",
+            url: "http://127.0.0.1:3301",
+            reuseExistingServer: !process.env.CI,
+            stdout: "ignore",
+          },
+        ],
 });

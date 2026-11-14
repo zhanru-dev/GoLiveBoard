@@ -1,16 +1,21 @@
 import { execFileSync } from "node:child_process";
 
+import { target } from "./target.js";
+
 /**
  * Starts every run with fresh rate-limit windows. All browser traffic reaches
  * the API from the proxy's one address, so a few local runs within an hour
  * would otherwise exhaust the per-address sign-up limit. Only rate-limit keys
- * are removed, through the Compose Valkey that the tests run against.
+ * are removed, through the Valkey of the Compose project the tests run
+ * against.
  */
 export default function globalSetup(): void {
   execFileSync(
     "docker",
     [
       "compose",
+      "--file",
+      target.composeFile,
       "exec",
       "-T",
       "valkey",

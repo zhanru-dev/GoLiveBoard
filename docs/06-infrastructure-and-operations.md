@@ -28,17 +28,53 @@ On Linux, containers reach the applications on the host through `host.docker.int
 
 ### 1.3 Everyday commands
 
-| Command                 | What it does                                                                             |
-| ----------------------- | ---------------------------------------------------------------------------------------- |
-| `npm run services:up`   | Start the services and wait until all health checks pass                                 |
-| `npm run services:down` | Stop the services; database data is kept in a named volume                               |
-| `npm run db:migrate`    | Apply migrations to the development database                                             |
-| `npm run db:seed`       | Load the demo workspace and sample events                                                |
-| `npm run dev`           | Start web, api and worker with hot reload                                                |
-| `npm test`              | Unit and component tests in every workspace                                              |
-| `npm run test:int`      | API integration tests (starts its own containers)                                        |
-| `npm run test:e2e`      | Production builds plus Playwright                                                        |
-| `npm run check`         | Everything CI's quality job runs: format, lint, types, architecture rules, OpenAPI drift |
+| Command                  | What it does                                                                             |
+| ------------------------ | ---------------------------------------------------------------------------------------- |
+| `npm run services:up`    | Start the services and wait until all health checks pass                                 |
+| `npm run services:down`  | Stop the services; database data is kept in a named volume                               |
+| `npm run db:migrate`     | Apply migrations to the development database                                             |
+| `npm run db:seed`        | Load the demo workspace and sample events                                                |
+| `npm run dev`            | Start web, api and worker with hot reload                                                |
+| `npm test`               | Unit and component tests in every workspace                                              |
+| `npm run test:int`       | API integration tests (starts its own containers)                                        |
+| `npm run test:e2e`       | Production builds plus Playwright                                                        |
+| `npm run check`          | Everything CI's quality job runs: format, lint, types, architecture rules, OpenAPI drift |
+| `npm run stack:up`       | Build the production images and start the production-like stack (section 1.4)            |
+| `npm run test:e2e:stack` | Playwright, including the smoke tests, against that stack over HTTPS                     |
+| `npm run stack:down`     | Stop the stack; its data and certificate authority are kept in named volumes             |
+
+### 1.4 Production-like stack
+
+`docker-compose.prod.yml` runs the **production images** with every dependency in a container, behind Caddy over **HTTPS**. Secure cookies, HSTS and mixed-content rules therefore behave exactly as they will in AWS, and CI runs its browser tests against it (section 3). It is its own Compose project (`opspilot-stack`), with its own network, volumes and ports, so it can run beside the development services.
+
+| Address                                   | What                                                                     |
+| ----------------------------------------- | ------------------------------------------------------------------------ |
+| `https://opspilot.localhost:3443`         | The application (`/api/*` to the API, everything else to the web app)    |
+| `https://storage.opspilot.localhost:3443` | Object storage, which browsers upload to with presigned URLs, as with S3 |
+| `http://…:3380`                           | Redirects to HTTPS, keeping the path and query                           |
+| `http://127.0.0.1:8037`                   | Mailpit's inbox                                                          |
+
+Browsers resolve every `*.localhost` name to this machine. A host name of its own, rather than `localhost`, matters: cookies and HSTS belong to a host, not a port, so the stack's cookies and its one-year HSTS policy never touch development on `localhost:3300`.
+
+**Images.** `infra/docker/Dockerfile` builds two targets for `linux/amd64` and `linux/arm64` (the AWS host is ARM), from a Node.js Alpine base pinned by digest:
+
+- `api`: the compiled API and its production dependencies. The same image runs the API (default command), the worker (`node dist/worker.js`) and the migrations (`node ../../node_modules/prisma/build/index.js migrate deploy`), so what is migrated, served and worked on is always one build. The Prisma CLI is in it because `@prisma/client` declares it as an optional peer, which npm installs.
+- `web`: the Next.js standalone server, with only the files the build traced as used.
+
+Both run as the unprivileged `node` user, own none of their files, carry no package manager (npm is removed: nothing installs packages at run time) and start through `tini`, which passes `SIGTERM` on so Node.js shuts down gracefully. In the stack each application container also has a read-only file system (with `/tmp` and the Next.js cache in memory), no Linux capabilities and `no-new-privileges`.
+
+Building for arm64 on an x86 machine works under QEMU, with one catch: QEMU's default CPU model makes Prisma's WebAssembly schema parser panic, so the Dockerfile passes a Graviton model (`QEMU_CPU=neoverse-n1`) to its build steps. CI builds each platform natively.
+
+**Order of start-up.** A one-off `migrate` container applies pending migrations; the API and the worker start only after it exits successfully, so new code never runs against an old schema. If a migration fails, `stack:up` fails and the API and worker are not started.
+
+**Trusting the certificate.** Caddy signs the stack's certificates with its own local authority (`tls internal`). Browsers warn until you trust that authority; the browser tests check the certificate against it themselves. To trust it on macOS:
+
+```bash
+docker compose --file docker-compose.prod.yml cp proxy:/data/caddy/pki/authorities/local/root.crt opspilot-stack-root.crt
+sudo security add-trusted-cert -d -r trustRoot -k /Library/Keychains/System.keychain opspilot-stack-root.crt
+```
+
+On Linux, copy it to `/usr/local/share/ca-certificates/` and run `sudo update-ca-certificates` (Firefox and Chromium keep their own trust store and need it imported there). The authority lives in the `caddy-data` volume, so it survives `stack:down`; `docker compose --file docker-compose.prod.yml down --volumes` removes it with all the stack's data.
 
 ## 2. Environments
 
@@ -73,7 +109,7 @@ flowchart LR
 - `main` requires every job to pass. A final **CI result** job depends on all the others and fails if any did not succeed, so branch protection requires that one check and never needs updating when jobs are added.
 - Actions are pinned to full commit SHAs, and Dependabot proposes weekly updates for npm packages and actions.
 
-**What runs today.** [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) runs quality, unit (with the 90% coverage gate on `domain/` folders), integration, security, build (compiling every workspace) and end-to-end (Playwright against production builds behind the Caddy proxy, with real PostgreSQL, Valkey and Mailpit). The other jobs in the diagram join with the milestones that introduce what they check: Playwright in M2 (sign-up and invitation flow), container images, Trivy and smoke tests against the production images in M4, axe and Lighthouse CI in M5, AI evaluation in M8, OpenAPI drift with the first generated document.
+**What runs today.** [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) runs quality, unit (with the 90% coverage gate on `domain/` folders), integration, security, and **images**. The images job runs once per platform on a native runner (`linux/amd64`, and `linux/arm64` because the AWS host is ARM): it builds the production images, scans them with Trivy, starts the production-like stack (section 1.4) and runs every Playwright test against it over HTTPS, the smoke tests included. Trivy fails the job on any fixable vulnerability of high or critical severity, and on any secret found in an image; a vulnerability without a fix cannot be acted on, so it is left to Dependabot and the next scan. The other jobs in the diagram join with the milestones that introduce what they check: axe and Lighthouse CI in M5, AI evaluation in M8, OpenAPI drift with the first generated document.
 
 **Dependency audit.** CI fails on any known vulnerability of moderate severity or above in **production** dependencies. Development tools (linters, test runners, build tools) never reach users and run only on our own inputs, so their advisories are reviewed when Dependabot proposes an update rather than blocking every pull request.
 

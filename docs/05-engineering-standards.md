@@ -138,6 +138,7 @@ Lighthouse CI runs on the public event page in every pull request that touches `
 ## 11. Dependencies
 
 - Versions are locked by `package-lock.json`; CI installs with `npm ci`.
+- Install scripts of dependencies run only when `allowScripts` in the root `package.json` approves them (npm 12 blocks the rest). Only Prisma's are approved, pinned to the reviewed version, because they fetch the migration engine; the others are denied, because each has a prebuilt or pure-JavaScript fallback. An update to an approved package needs a new approval (`npm install-scripts approve <package>`) after reviewing its scripts.
 - Dependabot opens weekly grouped updates; major upgrades get their own pull request and, if they change behaviour, an ADR.
 - `npm audit --omit=dev` must report no high or critical vulnerabilities in production dependencies.
 - Only permissive licences (MIT, Apache-2.0, BSD, ISC) in production dependencies.
