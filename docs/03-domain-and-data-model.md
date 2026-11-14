@@ -37,7 +37,7 @@ The transition table lives in `apps/api/src/events/domain/lifecycle.ts` as data,
 
 Because step 1 serialises concurrent requests for the same event, two simultaneous "go live" requests produce one success and one `409`.
 
-Every write to something that belongs to an event (runbook tasks, access policy, stream, assets) takes the same row lock first, and so does the worker before it records a stream check (a check is evidence for readiness: it waits for a transition that has already judged readiness, and lands after it) (`lockWritableEvent` in `apps/api/src/events/event-lock.queries.ts`). That gives three guarantees with one rule: a transition's readiness check sees no half-finished change and none can commit before it; an archived event cannot receive a write that started just before it was archived; and runbook positions stay `1, 2, 3…` under concurrent adds and moves.
+Every write to something that belongs to an event (runbook tasks, access policy, stream, assets) takes the same row lock first, and so does the worker before it records a stream check (a check is evidence for readiness: it waits for a transition that has already judged readiness, and lands after it; under the lock it re-reads the status and drops the result if the event was archived meanwhile) (`lockWritableEvent` in `apps/api/src/events/event-lock.queries.ts`). That gives three guarantees with one rule: a transition's readiness check sees no half-finished change and none can commit before it; an archived event cannot receive a write that started just before it was archived; and runbook positions stay `1, 2, 3…` under concurrent adds and moves.
 
 ## 3. Readiness rules
 

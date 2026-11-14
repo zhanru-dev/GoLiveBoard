@@ -64,17 +64,23 @@ export async function lockWritableEvent(
 
 /**
  * The same row lock, for the worker, which acts for no workspace. Returns
- * the stream URL as it is under the lock, so a check can tell whether the
- * URL it fetched is still the event's.
+ * the status and stream URL as they are under the lock, so a check can tell
+ * whether the event was archived (FR-EV-4: nothing more may be recorded for
+ * it) or its URL replaced while the stream was being fetched.
  *
  * @returns `undefined` when the event no longer exists
  */
 export async function lockEventForStreamCheck(
   tx: Prisma.TransactionClient,
   eventId: string,
-): Promise<{ readonly streamUrl: string | null } | undefined> {
-  const rows = await tx.$queryRaw<{ streamUrl: string | null }[]>`
-    SELECT stream_url AS "streamUrl"
+): Promise<
+  | { readonly status: EventStatus; readonly streamUrl: string | null }
+  | undefined
+> {
+  const rows = await tx.$queryRaw<
+    { status: EventStatus; streamUrl: string | null }[]
+  >`
+    SELECT status::text AS status, stream_url AS "streamUrl"
     FROM events
     WHERE id = ${eventId}::uuid
     FOR NO KEY UPDATE`;

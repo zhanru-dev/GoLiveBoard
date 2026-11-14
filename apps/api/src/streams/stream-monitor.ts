@@ -5,6 +5,7 @@ import { InjectPinoLogger, PinoLogger } from "nestjs-pino";
 
 import { PRISMA } from "../database/prisma.js";
 import type { Prisma, PrismaClient } from "../generated/prisma/client.js";
+import { isReadOnly } from "../events/domain/lifecycle.js";
 import { lockEventForStreamCheck } from "../events/event-lock.queries.js";
 import { SafeHttpClient } from "../net/safe-http.js";
 import { CLOCK, type Clock } from "../shared/clock.js";
@@ -41,14 +42,17 @@ export class StreamMonitor {
    * slot, unique per event, so a job that runs twice (a retry after a crash,
    * or a scheduler tick and a relay both enqueuing it) records one check and
    * judges the incident once.
+   *
+   * Nothing is recorded for an archived event (FR-EV-4), including a check
+   * that was already queued or running when the event was archived.
    */
   async check(eventId: string, slot: Date): Promise<CheckOutcome> {
     const event = await this.prisma.event.findUnique({
       where: { id: eventId },
-      select: { streamUrl: true },
+      select: { status: true, streamUrl: true },
     });
     const url = event?.streamUrl ?? null;
-    if (url === null) {
+    if (event === null || url === null || isReadOnly(event.status)) {
       return SKIPPED;
     }
     const started = performance.now();
@@ -64,9 +68,13 @@ export class StreamMonitor {
       // lock judges one event's checks one at a time, so two checks that
       // finish together cannot both miss the second failure in a row.
       const locked = await lockEventForStreamCheck(tx, eventId);
-      // The URL may have changed while it was fetched: that result says
-      // nothing about the new URL.
-      if (locked?.streamUrl !== url) {
+      // The event may have been archived, or its URL replaced, while the
+      // stream was fetched: the result must then not be stored.
+      if (
+        locked === undefined ||
+        isReadOnly(locked.status) ||
+        locked.streamUrl !== url
+      ) {
         return SKIPPED;
       }
       const { count } = await tx.streamCheck.createMany({

@@ -31,6 +31,7 @@ import { StreamMonitor } from "./stream-monitor.js";
 
 const Incidents = z.array(Incident);
 const SECOND = 1_000;
+const SKIPPED = { recorded: false, incident: "NONE" };
 
 describe("stream checks and incidents (FR-ST-2)", () => {
   let database: TestDatabase;
@@ -104,6 +105,14 @@ describe("stream checks and incidents (FR-ST-2)", () => {
       (await api.get(owner, `/events/${eventId}/stream/checks`)).body,
     ).items;
 
+  const storedChecks = async (eventId: string) =>
+    (
+      await database.query<{ count: number }>(
+        "SELECT count(*)::int AS count FROM stream_checks WHERE event_id = $1",
+        [eventId],
+      )
+    )[0]?.count;
+
   const streamCriterion = async (eventId: string) =>
     Readiness.parse(
       (await api.get(owner, `/events/${eventId}/readiness`)).body,
@@ -159,29 +168,45 @@ describe("stream checks and incidents (FR-ST-2)", () => {
     stream.behaviour = "OK";
     const slot = new Date("2026-12-01T17:00:00.000Z");
     const monitor = worker.get(StreamMonitor);
+    const block = await blockWrites(database.url, "stream_checks");
 
-    const outcomes = await Promise.all([
-      monitor.check(event.id, slot),
-      monitor.check(event.id, slot),
-      monitor.check(event.id, slot),
-    ]);
+    // All three fetch, then hold at the event lock or the insert, so they
+    // really overlap when released.
+    const running = [1, 2, 3].map(() => monitor.check(event.id, slot));
+    await block.waitForWaiters(running.length);
+    await block.release();
+    const outcomes = await Promise.all(running);
 
     expect(outcomes.filter((outcome) => outcome.recorded)).toHaveLength(1);
     expect(await checks(event.id)).toHaveLength(1);
   });
 
-  it("opens one incident even when failing checks finish together", async () => {
+  it("opens one incident when failing checks finish together", async () => {
     const event = await monitoredEvent();
     stream.behaviour = "NOT_FOUND";
+    // One failure is already recorded, so each next failure is the second
+    // in a row and wants to open the incident.
+    expect((await checkNow(event.id)).incident).toBe("NONE");
     const monitor = worker.get(StreamMonitor);
+    const block = await blockWrites(database.url, "incidents");
 
-    await Promise.all(
-      [1, 2, 3, 4].map((second) =>
-        monitor.check(event.id, new Date(Date.UTC(2026, 11, 1, 1, 0, second))),
-      ),
+    // The first check opens the incident and holds at that write; the second
+    // must wait for the event lock, not judge in parallel. Without the lock
+    // both would see two failures and no open incident, and both would try
+    // to open one.
+    const running = [1, 2].map((second) =>
+      monitor.check(event.id, new Date(Date.UTC(2026, 11, 1, 1, 0, second))),
     );
+    await block.waitForWaiters(running.length);
+    await block.release();
+    const outcomes = await Promise.all(running);
 
+    expect(outcomes.map((outcome) => outcome.incident).sort()).toEqual([
+      "NONE",
+      "OPEN",
+    ]);
     expect(await incidents(event.id)).toHaveLength(1);
+    expect(await storedChecks(event.id)).toBe(3);
   });
 
   it.each([
@@ -275,6 +300,53 @@ describe("stream checks and incidents (FR-ST-2)", () => {
     expect(await pending).toEqual({ recorded: false, incident: "NONE" });
     expect(await checks(event.id)).toEqual([]);
     stream.behaviour = "OK";
+  });
+
+  const transition = async (eventId: string, to: string) => {
+    const response = await api.send(
+      owner,
+      "post",
+      `/events/${eventId}/transitions`,
+      { to },
+    );
+    expect(response.status, response.text).toBe(200);
+  };
+
+  it("records nothing for an archived event (FR-EV-4)", async () => {
+    const event = await monitoredEvent();
+    stream.behaviour = "OK";
+    await transition(event.id, "CANCELLED");
+    await transition(event.id, "ARCHIVED");
+    const requestsBefore = stream.requests;
+
+    expect(await checkNow(event.id)).toEqual(SKIPPED);
+    expect(await storedChecks(event.id)).toBe(0);
+    // It does not even fetch the stream.
+    expect(stream.requests).toBe(requestsBefore);
+  });
+
+  it("drops a check that was running while the event was archived", async () => {
+    const event = await monitoredEvent();
+    stream.behaviour = "OK";
+    await transition(event.id, "CANCELLED");
+    const block = await blockWrites(database.url, "events");
+
+    // Archiving locks the event and waits to write…
+    const archive = Promise.resolve(
+      api.send(owner, "post", `/events/${event.id}/transitions`, {
+        to: "ARCHIVED",
+      }),
+    );
+    await block.waitForWaiters(1);
+    // …while a check, which read the event before that, fetches the stream
+    // and then waits for the same lock.
+    const check = checkNow(event.id);
+    await block.waitForWaiters(2);
+    await block.release();
+
+    expect((await archive).status).toBe(200);
+    expect(await check).toEqual(SKIPPED);
+    expect(await storedChecks(event.id)).toBe(0);
   });
 
   it("skips an event without a stream URL", async () => {
