@@ -1,5 +1,6 @@
 import { Module } from "@nestjs/common";
 
+import { AssetsModule } from "../assets/assets.module.js";
 import { AttendeesModule } from "../attendees/attendees.module.js";
 import { AuthModule } from "../auth/auth.module.js";
 import { DatabaseModule } from "../database/database.module.js";
@@ -16,10 +17,13 @@ import {
 import { QuestionsService } from "./questions.service.js";
 import { RealtimeGateway } from "./realtime.gateway.js";
 import { RealtimeSignalsModule } from "./realtime-signals.js";
+import { WatchController } from "./watch.controller.js";
+import { WatchService } from "./watch.service.js";
 
 /** Live interaction (FR-RN-1 to FR-RN-5): the real-time gateway, chat and Q&A. */
 @Module({
   imports: [
+    AssetsModule,
     AuthModule,
     AttendeesModule,
     DatabaseModule,
@@ -30,6 +34,7 @@ import { RealtimeSignalsModule } from "./realtime-signals.js";
     ChatController,
     QuestionsController,
     AttendeeQuestionsController,
+    WatchController,
   ],
   providers: [
     Participants,
@@ -38,6 +43,7 @@ import { RealtimeSignalsModule } from "./realtime-signals.js";
     ChatService,
     QuestionsService,
     Idempotency,
+    WatchService,
   ],
   exports: [RealtimeGateway],
 })

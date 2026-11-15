@@ -9,5 +9,6 @@ import { AssetsService } from "./assets.service.js";
   imports: [DatabaseModule, StorageModule],
   controllers: [AssetsController],
   providers: [AssetsService],
+  exports: [AssetsService],
 })
 export class AssetsModule {}

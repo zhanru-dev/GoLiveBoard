@@ -40,6 +40,7 @@ import { RATE_LIMITS, RateLimiter } from "../rate-limit/rate-limiter.js";
 import { ChatService } from "./chat.service.js";
 import { clientIp } from "./client-ip.js";
 import { Fanout } from "./fanout.js";
+import { WatchService } from "./watch.service.js";
 import { replayPlan } from "./domain/replay.js";
 import { catchRejections } from "./valkey-guard.js";
 import { chatReplay, latestSequence, questionsReplay } from "./journal.js";
@@ -109,6 +110,10 @@ export interface ClientToServer {
     ack?: (result: { ok: true } | RealtimeFailure) => void,
   ) => void;
   "chat.send": (payload: unknown, ack: (result: ChatSendAck) => void) => void;
+  "watch.heartbeat": (
+    payload: unknown,
+    ack: (result: { ok: true } | RealtimeFailure) => void,
+  ) => void;
 }
 
 type RealtimeServer = Server<
@@ -170,6 +175,7 @@ export class RealtimeGateway
     private readonly rateLimiter: RateLimiter,
     private readonly chat: ChatService,
     private readonly fanout: Fanout,
+    private readonly watch: WatchService,
   ) {
     this.logger = rootLogger.child({ context: RealtimeGateway.name });
   }
@@ -334,6 +340,15 @@ export class RealtimeGateway
       const { identity, connectionId, ip } = socket.data;
       this.handle(socket, ack, () =>
         this.chat.send({ identity, connectionId, ip }, payload),
+      );
+    });
+    socket.on("watch.heartbeat", (payload, ack) => {
+      if (typeof ack !== "function") {
+        return;
+      }
+      const { identity, connectionId, ip } = socket.data;
+      this.handle(socket, ack, () =>
+        this.watch.heartbeat({ identity, connectionId, ip }, payload),
       );
     });
     socket.on("channel.leave", (payload, ack) => {

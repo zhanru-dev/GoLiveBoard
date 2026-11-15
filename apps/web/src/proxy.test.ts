@@ -3,9 +3,9 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { proxy } from "./proxy";
 
-function directives(): Map<string, string> {
+function directives(path = "/events"): Map<string, string> {
   const policy =
-    proxy(new NextRequest("http://localhost:3300/events")).headers.get(
+    proxy(new NextRequest(`http://localhost:3300${path}`)).headers.get(
       "Content-Security-Policy",
     ) ?? "";
   return new Map(
@@ -65,5 +65,16 @@ describe("proxy (Content Security Policy)", () => {
 
     expect(first).toMatch(/'nonce-[^']+'/);
     expect(first).not.toBe(second);
+  });
+
+  it("lets only the watch page play a stream from another origin", () => {
+    const watch = directives("/e/product-launch-k3x9/watch");
+    const page = directives("/e/product-launch-k3x9");
+
+    expect(watch.get("connect-src")).toBe("'self' https:");
+    expect(watch.get("media-src")).toBe("'self' blob: https:");
+    expect(page.get("connect-src")).toBe("'self'");
+    expect(page.get("media-src")).toBe("'self'");
+    expect(directives("/e/x/watch/more").get("media-src")).toBe("'self'");
   });
 });

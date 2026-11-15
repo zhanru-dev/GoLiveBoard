@@ -229,6 +229,27 @@ export const EventStatusChanged = z.object({
 });
 export type EventStatusChanged = z.infer<typeof EventStatusChanged>;
 
+/**
+ * `GET /public/events/:slug/watch`: what the watch page shows (FR-RN-1).
+ * The stream's address is given only while the event is live.
+ */
+export const WatchInfo = z.object({
+  slug: Slug,
+  title: z.string(),
+  status: PublicEventStatus,
+  streamUrl: z.string().nullable(),
+  /** The holding slate, with a short-lived link. */
+  slate: z.object({ url: z.url(), expiresAt: z.iso.datetime() }).nullable(),
+});
+export type WatchInfo = z.infer<typeof WatchInfo>;
+
+/**
+ * client → server `watch.heartbeat`, every 30 seconds while an attendee
+ * watches a live event: the operations room's audience (FR-RN-7).
+ */
+export const WatchHeartbeat = z.object({ slug: Slug });
+export type WatchHeartbeat = z.infer<typeof WatchHeartbeat>;
+
 /** server → client `session.revoked`, sent just before the server disconnects. */
 export const SessionRevoked = z.object({
   reason: z.enum([

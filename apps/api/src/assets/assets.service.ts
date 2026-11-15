@@ -249,6 +249,32 @@ export class AssetsService {
     );
   }
 
+  /**
+   * The link to show an event's slate on its watch page, or null when it has
+   * none. The caller has decided the viewer may watch the event.
+   */
+  async slateLinkFor(
+    eventId: string,
+  ): Promise<{ url: string; expiresAt: string } | null> {
+    const row = await this.prisma.asset.findFirst({
+      where: { eventId, kind: "HOLDING_SLATE", status: "READY" },
+      orderBy: [{ updatedAt: "desc" }, { id: "desc" }],
+      select: { storageKey: true },
+    });
+    if (row === null) {
+      return null;
+    }
+    return {
+      url: await this.storage.presignDownload(
+        row.storageKey,
+        DOWNLOAD_URL_TTL_SECONDS,
+      ),
+      expiresAt: new Date(
+        this.clock.now().getTime() + DOWNLOAD_URL_TTL_SECONDS * 1000,
+      ).toISOString(),
+    };
+  }
+
   /** The most recently verified slate, with a short-lived link to view it. */
   async getHoldingSlate(actor: Actor, eventId: string): Promise<HoldingSlate> {
     const row = await this.prisma.asset.findFirst({

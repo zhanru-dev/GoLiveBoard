@@ -17,6 +17,12 @@ export function proxy(request: NextRequest) {
   const storage = storageOrigin();
   const errors = errorReportingOrigin(errorReportingSettings());
   const reporting = errors === null ? "" : ` ${errors}`;
+  // The watch page plays the event's stream, from wherever its Manager
+  // hosts it (any HTTPS origin): hls.js fetches the playlist and segments
+  // and hands them to the video element as a blob. Every other page keeps
+  // the narrow policy.
+  const watching = WATCH_PAGE.test(request.nextUrl.pathname);
+  const streams = watching ? " https:" : "";
   const policy = [
     "default-src 'self'",
     // 'strict-dynamic' lets the trusted scripts load the chunks they need.
@@ -29,7 +35,8 @@ export function proxy(request: NextRequest) {
     "font-src 'self'",
     // …and uploaded straight to it. Errors are reported to Sentry when it is
     // configured. Development adds the WebSocket used for hot reloading.
-    `connect-src 'self'${storage}${reporting}${development ? " ws:" : ""}`,
+    `connect-src 'self'${storage}${reporting}${streams}${development ? " ws:" : ""}`,
+    `media-src 'self'${watching ? " blob: https:" : ""}`,
     "frame-ancestors 'none'",
     "base-uri 'self'",
     "form-action 'self'",
@@ -43,6 +50,9 @@ export function proxy(request: NextRequest) {
   response.headers.set("Content-Security-Policy", policy);
   return response;
 }
+
+/** `/e/<slug>/watch`, the only page that plays a stream. */
+const WATCH_PAGE = /^\/e\/[^/]+\/watch\/?$/;
 
 /**
  * The object store browsers upload to and download from (the API's

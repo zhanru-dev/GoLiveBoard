@@ -147,4 +147,6 @@ export {
   Sequence,
   SessionRevoked,
   Slug,
+  WatchHeartbeat,
+  WatchInfo,
 } from "./realtime.js";

@@ -134,6 +134,11 @@ export class RealtimeClient {
     }) as Promise<ChatSendAck>;
   }
 
+  /** Says this client is watching (every 30 s in the browser). */
+  heartbeat(slug: string): Promise<unknown> {
+    return this.socket.timeout(5_000).emitWithAck("watch.heartbeat", { slug });
+  }
+
   /** Sends anything, for tests of what the server refuses. */
   emit(name: string, payload: unknown): Promise<unknown> {
     return this.socket.timeout(5_000).emitWithAck(name, payload);
