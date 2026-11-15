@@ -44,6 +44,9 @@ model User {
   ownedTasks          RunbookTask[]        @relation("TaskOwner")
   completedTasks      RunbookTask[]        @relation("TaskCompletedBy")
   attendeeInvitations AttendeeInvitation[]
+  chatMessages        ChatMessage[]        @relation("ChatAuthor")
+  deletedMessages     ChatMessage[]        @relation("ChatDeletedBy")
+  questions           Question[]
 
   @@map("users")
 }
@@ -161,25 +164,31 @@ enum EventStatus {
 /// An online event a workspace prepares and runs (FR-EV-1).
 /// The migration adds CHECK (ends_at > starts_at), which Prisma cannot express.
 model Event {
-  id                 String      @id @default(dbgenerated("uuidv7()")) @db.Uuid
-  workspaceId        String      @map("workspace_id") @db.Uuid
+  id                    String      @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  workspaceId           String      @map("workspace_id") @db.Uuid
   /// Used in public URLs instead of the ID: readable title plus a random suffix.
-  slug               String      @unique
-  title              String
-  description        String      @default("")
-  startsAt           DateTime    @map("starts_at") @db.Timestamptz(3)
-  endsAt             DateTime    @map("ends_at") @db.Timestamptz(3)
+  slug                  String      @unique
+  title                 String
+  description           String      @default("")
+  startsAt              DateTime    @map("starts_at") @db.Timestamptz(3)
+  endsAt                DateTime    @map("ends_at") @db.Timestamptz(3)
   /// IANA time zone the event is shown in, e.g. "Europe/London".
-  timeZone           String      @map("time_zone")
-  ownerUserId        String?     @map("owner_user_id") @db.Uuid
-  expectedAttendance Int?        @map("expected_attendance")
-  status             EventStatus @default(DRAFT)
+  timeZone              String      @map("time_zone")
+  ownerUserId           String?     @map("owner_user_id") @db.Uuid
+  expectedAttendance    Int?        @map("expected_attendance")
+  status                EventStatus @default(DRAFT)
   /// The HLS playback URL from the customer's streaming provider (FR-ST-1).
-  streamUrl          String?     @map("stream_url")
+  streamUrl             String?     @map("stream_url")
   /// Incremented by every change; clients send it back in If-Match.
-  version            Int         @default(1)
-  createdAt          DateTime    @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt          DateTime    @default(now()) @map("updated_at") @db.Timestamptz(3)
+  version               Int         @default(1)
+  /// The last sequence number given out on each real-time channel. Taking
+  /// the next one locks the event's row, so numbers are gapless and unique.
+  chatSequence          BigInt      @default(0) @map("chat_sequence")
+  questionsSequence     BigInt      @default(0) @map("questions_sequence")
+  /// FR-RN-4: new questions wait for a moderator before others see them.
+  questionsPreModerated Boolean     @default(false) @map("questions_pre_moderated")
+  createdAt             DateTime    @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt             DateTime    @default(now()) @map("updated_at") @db.Timestamptz(3)
 
   workspace    Workspace            @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   owner        User?                @relation(fields: [ownerUserId], references: [id], onDelete: SetNull)
@@ -191,6 +200,10 @@ model Event {
   assets       Asset[]
   attendees    Attendee[]
   invitations  AttendeeInvitation[]
+  chatMessages ChatMessage[]
+  questions    Question[]
+  journal      RealtimeJournal[]
+  attendance   AttendanceMinute[]
 
   // The event list: one workspace, newest start first, ID as tie-breaker.
   @@index([workspaceId, startsAt(sort: Desc), id(sort: Desc)])
@@ -439,6 +452,10 @@ model Attendee {
   sessions           AttendeeSession[]
   reminders          ReminderDelivery[]
   demoInboxMessages  DemoInboxMessage[]
+  chatMessages       ChatMessage[]
+  questions          Question[]
+  votes              QuestionVote[]
+  attendance         AttendanceMinute[]
 
   /// One registration per address and event.
   @@unique([eventId, email])
@@ -543,6 +560,141 @@ model DemoInboxMessage {
   @@index([attendeeId])
   @@index([inboxKeyHash, createdAt])
   @@map("demo_inbox_messages")
+}
+
+/// The real-time channels of an event (docs/04, section 4).
+enum RealtimeChannel {
+  CHAT
+  QUESTIONS
+
+  @@map("realtime_channel")
+}
+
+/// A chat message (FR-RN-2). Written by an attendee or a staff member, never
+/// both (CHECK in the migration). A deleted message keeps its row as a
+/// tombstone with its text removed (FR-RN-3).
+model ChatMessage {
+  id               String    @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  eventId          String    @map("event_id") @db.Uuid
+  /// Its place on the event's chat channel.
+  sequence         BigInt
+  authorAttendeeId String?   @map("author_attendee_id") @db.Uuid
+  authorUserId     String?   @map("author_user_id") @db.Uuid
+  /// Chosen by the client; a retried send with the same ID and author
+  /// returns the stored message (unique index in the migration).
+  clientMessageId  String    @map("client_message_id") @db.Uuid
+  /// Empty once deleted.
+  body             String
+  deletedAt        DateTime? @map("deleted_at") @db.Timestamptz(3)
+  deletedById      String?   @map("deleted_by_id") @db.Uuid
+  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  event          Event     @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  authorAttendee Attendee? @relation(fields: [authorAttendeeId], references: [id], onDelete: Cascade)
+  authorUser     User?     @relation("ChatAuthor", fields: [authorUserId], references: [id], onDelete: SetNull)
+  deletedBy      User?     @relation("ChatDeletedBy", fields: [deletedById], references: [id], onDelete: SetNull)
+
+  @@unique([eventId, sequence])
+  @@index([authorAttendeeId])
+  @@index([authorUserId])
+  @@index([deletedById])
+  @@map("chat_messages")
+}
+
+enum QuestionStatus {
+  /// Waiting for a moderator (pre-moderation): only its author and
+  /// moderators see it.
+  PENDING
+  PUBLISHED
+  HIDDEN
+  ANSWERED
+
+  @@map("question_status")
+}
+
+/// A question for the speakers (FR-RN-4, FR-RN-5).
+model Question {
+  id               String         @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  eventId          String         @map("event_id") @db.Uuid
+  authorAttendeeId String?        @map("author_attendee_id") @db.Uuid
+  authorUserId     String?        @map("author_user_id") @db.Uuid
+  body             String
+  status           QuestionStatus
+  /// 1 to 3 while pinned; unique per event (FR-RN-5, enforced by the
+  /// database: CHECK and a partial unique index in the migration).
+  pinSlot          Int?           @map("pin_slot") @db.SmallInt
+  /// Set when AI triage merges it into another question (milestone 8).
+  mergedIntoId     String?        @map("merged_into_id") @db.Uuid
+  /// Kept equal to the number of votes in the same transaction as each vote.
+  voteCount        Int            @default(0) @map("vote_count")
+  version          Int            @default(1)
+  createdAt        DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt        DateTime       @default(now()) @map("updated_at") @db.Timestamptz(3)
+
+  event          Event          @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  authorAttendee Attendee?      @relation(fields: [authorAttendeeId], references: [id], onDelete: Cascade)
+  authorUser     User?          @relation(fields: [authorUserId], references: [id], onDelete: SetNull)
+  mergedInto     Question?      @relation("QuestionMerge", fields: [mergedIntoId], references: [id], onDelete: SetNull)
+  merged         Question[]     @relation("QuestionMerge")
+  votes          QuestionVote[]
+
+  /// FR-RN-5: one question per pin slot and event (with the 1–3 CHECK).
+  @@unique([eventId, pinSlot], map: "questions_pin_slot_key", where: { pinSlot: { not: null } })
+  @@index([eventId, status, voteCount(sort: Desc)])
+  @@index([authorAttendeeId])
+  @@index([authorUserId])
+  @@index([mergedIntoId])
+  @@map("questions")
+}
+
+/// One attendee's vote for one question (FR-RN-4): the primary key allows
+/// one each.
+model QuestionVote {
+  questionId String   @map("question_id") @db.Uuid
+  attendeeId String   @map("attendee_id") @db.Uuid
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  question Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  attendee Attendee @relation(fields: [attendeeId], references: [id], onDelete: Cascade)
+
+  @@id([questionId, attendeeId])
+  @@index([attendeeId])
+  @@map("question_votes")
+}
+
+/// Everything that happened on an event's real-time channels, in order: a
+/// client that reconnects asks for what came after the last sequence it
+/// applied (docs/04, section 4). Written in the transaction that makes the
+/// change, with the sequence it took from the event's row.
+model RealtimeJournal {
+  eventId   String          @map("event_id") @db.Uuid
+  channel   RealtimeChannel
+  sequence  BigInt
+  /// What happened, e.g. MESSAGE_CREATED.
+  kind      String
+  /// The message or question it happened to.
+  entityId  String          @map("entity_id") @db.Uuid
+  createdAt DateTime        @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@id([eventId, channel, sequence])
+  @@map("realtime_journal")
+}
+
+/// An attendee watched during this minute (heartbeats every 30 seconds):
+/// the audience figures of the operations room and the report (milestone 7).
+model AttendanceMinute {
+  eventId    String   @map("event_id") @db.Uuid
+  attendeeId String   @map("attendee_id") @db.Uuid
+  minute     DateTime @db.Timestamptz(3)
+
+  event    Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  attendee Attendee @relation(fields: [attendeeId], references: [id], onDelete: Cascade)
+
+  @@id([eventId, attendeeId, minute])
+  @@index([attendeeId])
+  @@map("attendance_minutes")
 }
 
 /// Stored files to delete once nothing can write to them any more: the
