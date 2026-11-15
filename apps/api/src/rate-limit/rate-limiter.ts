@@ -84,6 +84,12 @@ export const RATE_LIMITS = {
     limit: 60,
     windowMs: MINUTE_MS,
   },
+  /** Chat messages from one author, whatever connection they use (FR-RN-2). */
+  chatMessagesPerAuthor: {
+    name: "chat:author",
+    limit: 20,
+    windowMs: MINUTE_MS,
+  },
   /** "Check now" on one event's stream; checks already run every 30 s. */
   streamCheckPerEvent: {
     name: "stream-check:event",

@@ -68,22 +68,27 @@ describe("rate limits", () => {
     expect((await api.signIn(owner.email)).status).toBe(429);
   });
 
-  it("does not count successful sign-ins against an address", async () => {
-    // Twelve colleagues, more than the limit, sign up elsewhere and then
-    // all sign in from the same office address.
-    const owners = [];
-    for (let index = 0; index < 12; index += 1) {
-      owners.push(await clientFromNewAddress().newOwner());
-    }
-    const office = clientFromNewAddress();
+  // Twelve password hashes: about 2 s alone, more beside a busy suite.
+  it(
+    "does not count successful sign-ins against an address",
+    { timeout: 15_000 },
+    async () => {
+      // Twelve colleagues, more than the limit, sign up elsewhere and then
+      // all sign in from the same office address.
+      const owners = [];
+      for (let index = 0; index < 12; index += 1) {
+        owners.push(await clientFromNewAddress().newOwner());
+      }
+      const office = clientFromNewAddress();
 
-    const statuses = [];
-    for (const owner of owners) {
-      statuses.push((await office.signIn(owner.email)).status);
-    }
+      const statuses = [];
+      for (const owner of owners) {
+        statuses.push((await office.signIn(owner.email)).status);
+      }
 
-    expect(statuses.every((status) => status === 204)).toBe(true);
-  });
+      expect(statuses.every((status) => status === 204)).toBe(true);
+    },
+  );
 
   it("clears an account's failures after a successful sign-in", async () => {
     const api = clientFromNewAddress();

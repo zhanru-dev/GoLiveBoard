@@ -49,11 +49,16 @@ describe("database schema", () => {
     });
   }
 
-  it("matches schema.prisma exactly after the migrations run", async () => {
-    await expect(diffDatabaseAgainstSchema(database.url)).resolves.not.toMatch(
-      /CREATE|ALTER|DROP/,
-    );
-  });
+  // Runs the Prisma CLI in a process of its own: seconds, not milliseconds.
+  it(
+    "matches schema.prisma exactly after the migrations run",
+    { timeout: 15_000 },
+    async () => {
+      await expect(
+        diffDatabaseAgainstSchema(database.url),
+      ).resolves.not.toMatch(/CREATE|ALTER|DROP/);
+    },
+  );
 
   it("generates time-ordered UUID v7 identifiers in the database", async () => {
     const first = await createUser();

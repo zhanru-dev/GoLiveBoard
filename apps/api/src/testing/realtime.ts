@@ -1,7 +1,10 @@
+import { randomUUID } from "node:crypto";
+
 import type { NestExpressApplication } from "@nestjs/platform-express";
 import {
   type ChannelJoinAck,
   type ChatEvent,
+  type ChatSendAck,
   type EventStatusChanged,
   REALTIME_PATH,
   type SessionRevoked,
@@ -110,6 +113,19 @@ export class RealtimeClient {
       channel,
       afterSequence,
     }) as Promise<ChannelJoinAck>;
+  }
+
+  /** Sends a chat message; a retry passes the same client message ID. */
+  send(
+    slug: string,
+    body: string,
+    clientMessageId: string = randomUUID(),
+  ): Promise<ChatSendAck> {
+    return this.socket.timeout(5_000).emitWithAck("chat.send", {
+      slug,
+      clientMessageId,
+      body,
+    }) as Promise<ChatSendAck>;
   }
 
   /** Sends anything, for tests of what the server refuses. */

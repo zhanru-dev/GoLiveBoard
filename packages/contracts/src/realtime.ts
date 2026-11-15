@@ -70,6 +70,45 @@ export const ChatEvent = z.object({
 });
 export type ChatEvent = z.infer<typeof ChatEvent>;
 
+/** What a chat message may say. */
+export const ChatBody = z.string().trim().min(1).max(1000);
+
+/**
+ * client → server `chat.send`. A retry with the same `clientMessageId`
+ * returns the stored message and sends nothing twice (FR-RN-2).
+ */
+export const ChatSend = z.object({
+  slug: Slug,
+  clientMessageId: z.uuid(),
+  body: ChatBody,
+});
+export type ChatSend = z.infer<typeof ChatSend>;
+
+export const ChatSendAck = z.discriminatedUnion("ok", [
+  z.object({ ok: z.literal(true), message: ChatMessage }),
+  RealtimeFailure,
+]);
+export type ChatSendAck = z.infer<typeof ChatSendAck>;
+
+/** `GET …/chat/messages`: older pages with `before`. */
+export const ChatPageQuery = z.object({
+  before: z.coerce.number().int().positive().optional(),
+  limit: z.coerce.number().int().min(1).max(100).default(50),
+});
+export type ChatPageQuery = z.infer<typeof ChatPageQuery>;
+
+/**
+ * Chat history, oldest first. With no `before`, the newest messages and the
+ * channel's latest sequence: the snapshot a client loads, then joins after.
+ */
+export const ChatPage = z.object({
+  items: z.array(ChatMessage),
+  latestSequence: Sequence,
+  /** Pass as `before` for the page before this one; null at the start. */
+  nextBefore: Sequence.nullable(),
+});
+export type ChatPage = z.infer<typeof ChatPage>;
+
 /** client → server `channel.join`. */
 export const ChannelJoin = z.object({
   slug: Slug,

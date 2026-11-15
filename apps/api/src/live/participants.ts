@@ -1,11 +1,11 @@
 import { Inject, Injectable } from "@nestjs/common";
-import type { EventStatus } from "@opspilot/contracts";
+import type { EventStatus, Role } from "@opspilot/contracts";
 
 import { AttendeeSessions } from "../attendees/attendee-sessions.js";
 import { hasRole } from "../auth/actor.js";
 import { ActorLoader } from "../auth/actor-loader.js";
 import { PRISMA } from "../database/prisma.js";
-import type { PrismaClient } from "../generated/prisma/client.js";
+import type { Prisma, PrismaClient } from "../generated/prisma/client.js";
 import {
   isInteractionOpen,
   isInteractionReadable,
@@ -41,12 +41,24 @@ export interface Participant {
   readonly status: EventStatus;
   /** Set for staff. */
   readonly userId?: string;
+  readonly role?: Role;
   /** Set for attendees. */
   readonly attendeeId?: string;
   /** Managers and Owners moderate chat and Q&A (FR-RN-3, FR-RN-5). */
   readonly moderator: boolean;
   /** Whether the event takes new messages, questions and votes. */
   readonly open: boolean;
+}
+
+/**
+ * Whether a participant may write: attendees, Managers and Owners. Analysts
+ * only read, here as everywhere.
+ */
+export function canWrite(participant: Participant): boolean {
+  return (
+    participant.kind === "ATTENDEE" ||
+    (participant.role !== undefined && hasRole(participant.role, "MANAGER"))
+  );
 }
 
 export type Authorization =
@@ -125,19 +137,25 @@ export class Participants {
     identity: Identity,
     ref: EventRef,
     requestId: string,
+    client: Prisma.TransactionClient = this.prisma,
   ): Promise<Authorization> {
-    const [event, actor, check] = await Promise.all([
-      this.prisma.event.findFirst({
-        where: "slug" in ref ? { slug: ref.slug } : { id: ref.id },
-        select: { id: true, workspaceId: true, slug: true, status: true },
-      }),
+    // One after the other: a transaction runs one statement at a time.
+    const event = await client.event.findFirst({
+      where: "slug" in ref ? { slug: ref.slug } : { id: ref.id },
+      select: { id: true, workspaceId: true, slug: true, status: true },
+    });
+    const actor =
       identity.staffSessionId === undefined
         ? undefined
-        : this.actors.loadSession(identity.staffSessionId, requestId),
+        : await this.actors.loadSession(
+            identity.staffSessionId,
+            requestId,
+            client,
+          );
+    const check =
       identity.attendeeSessionId === undefined
         ? undefined
-        : this.attendeeSessions.byId(identity.attendeeSessionId),
-    ]);
+        : await this.attendeeSessions.byId(identity.attendeeSessionId, client);
     if (actor === undefined && check?.admitted !== true) {
       // Signed out, or only an attendee session the event no longer admits.
       return check === undefined
@@ -164,6 +182,7 @@ export class Participants {
           ...base,
           kind: "STAFF",
           userId: actor.userId,
+          role: actor.role,
           moderator: hasRole(actor.role, "MANAGER"),
         },
       };

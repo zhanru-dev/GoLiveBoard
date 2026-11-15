@@ -2,7 +2,7 @@ import { Inject, Injectable } from "@nestjs/common";
 
 import { APP_CONFIG, type AppConfig } from "../config/app-config.js";
 import { PRISMA } from "../database/prisma.js";
-import type { PrismaClient } from "../generated/prisma/client.js";
+import type { Prisma, PrismaClient } from "../generated/prisma/client.js";
 import { CLOCK, type Clock } from "../shared/clock.js";
 import { verifyAccessToken } from "./access-token.js";
 import type { Actor } from "./actor.js";
@@ -49,15 +49,17 @@ export class ActorLoader {
    * connection that showed an access token when it connected: the token
    * expires after 15 minutes, the connection is held to its session.
    *
+   * @param client - a transaction, to decide under its locks
    * @returns undefined for an unknown, expired or revoked session, a disabled
    * user, or one no longer a member of the session's active workspace
    */
   async loadSession(
     sessionId: string,
     requestId: string,
+    client: Prisma.TransactionClient = this.prisma,
   ): Promise<Actor | undefined> {
     const now = this.clock.now();
-    const session = await this.prisma.session.findUnique({
+    const session = await client.session.findUnique({
       where: { id: sessionId },
       include: { user: { include: { memberships: true } } },
     });

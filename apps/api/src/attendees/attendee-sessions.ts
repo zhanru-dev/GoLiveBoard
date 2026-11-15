@@ -40,15 +40,23 @@ export class AttendeeSessions {
     return this.load({ tokenHash: hashToken(token) });
   }
 
-  /** For a session already authenticated, e.g. by a real-time connection. */
-  byId(sessionId: string): Promise<AttendeeSessionCheck | undefined> {
-    return this.load({ id: sessionId });
+  /**
+   * For a session already authenticated, e.g. by a real-time connection.
+   *
+   * @param client - a transaction, to decide under its locks
+   */
+  byId(
+    sessionId: string,
+    client: Prisma.TransactionClient = this.prisma,
+  ): Promise<AttendeeSessionCheck | undefined> {
+    return this.load({ id: sessionId }, client);
   }
 
   private async load(
     where: Prisma.AttendeeSessionWhereUniqueInput,
+    client: Prisma.TransactionClient = this.prisma,
   ): Promise<AttendeeSessionCheck | undefined> {
-    const session = await this.prisma.attendeeSession.findUnique({
+    const session = await client.attendeeSession.findUnique({
       where,
       select: {
         id: true,
@@ -81,7 +89,7 @@ export class AttendeeSessions {
       eventStatus: event.status,
       policy: event.accessPolicy,
       email: attendee.email,
-      invited: await hasLiveInvitation(this.prisma, event.id, attendee.email),
+      invited: await hasLiveInvitation(client, event.id, attendee.email),
     });
     return {
       attendee: {

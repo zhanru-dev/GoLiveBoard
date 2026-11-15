@@ -28,6 +28,11 @@ export const DEMO_ATTENDEE_LIMIT = 200;
  * this way clicks Try the demo again).
  */
 export const DEMO_SESSION_LIMIT = 1_000;
+/**
+ * Chat messages per demo event. Anyone can chat in the demo; with the event
+ * limit this bounds what it stores between resets.
+ */
+export const DEMO_CHAT_MESSAGE_LIMIT = 1_000;
 
 /** Seeding, resetting and creating demo events take turns, in every process. */
 const DEMO_LOCK_KEY = "demo-workspace";
@@ -123,6 +128,23 @@ export async function demoHasRoomForAttendee(
     where: { event: { workspaceId } },
   });
   return attendees < DEMO_ATTENDEE_LIMIT;
+}
+
+/**
+ * Whether a demo event takes one more chat message. The caller holds the
+ * event's row lock, which every message of the event takes, so the count
+ * cannot move under it.
+ */
+export async function demoHasRoomForChatMessage(
+  tx: Prisma.TransactionClient,
+  workspaceId: string,
+  eventId: string,
+): Promise<boolean> {
+  if (!isDemoWorkspace(workspaceId)) {
+    return true;
+  }
+  const messages = await tx.chatMessage.count({ where: { eventId } });
+  return messages < DEMO_CHAT_MESSAGE_LIMIT;
 }
 
 /**

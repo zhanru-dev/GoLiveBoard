@@ -12,6 +12,7 @@ import {
   type ChannelJoinAck,
   ChannelLeave,
   type ChatEvent,
+  type ChatSendAck,
   type EventStatus,
   type EventStatusChanged,
   REALTIME_PATH,
@@ -35,7 +36,9 @@ import { PRISMA } from "../database/prisma.js";
 import type { PrismaClient } from "../generated/prisma/client.js";
 import { ROOT_LOGGER } from "../observability/logger.js";
 import { RATE_LIMITS, RateLimiter } from "../rate-limit/rate-limiter.js";
+import { ChatService } from "./chat.service.js";
 import { clientIp } from "./client-ip.js";
+import { Fanout } from "./fanout.js";
 import { replayPlan } from "./domain/replay.js";
 import { catchRejections } from "./valkey-guard.js";
 import { chatReplay, latestSequence } from "./journal.js";
@@ -62,6 +65,11 @@ interface JoinedEvent {
   /** Undefined while the join is being decided. */
   participant?: Participant;
   readonly channels: Set<RealtimeChannel>;
+  /**
+   * Set when a re-check refused the event while its join was being decided:
+   * the join's own decision may predate the change, so it decides again.
+   */
+  stale?: boolean;
 }
 
 /** What the gateway keeps about each connection. */
@@ -91,6 +99,7 @@ export interface ClientToServer {
     payload: unknown,
     ack?: (result: { ok: true } | RealtimeFailure) => void,
   ) => void;
+  "chat.send": (payload: unknown, ack: (result: ChatSendAck) => void) => void;
 }
 
 type RealtimeServer = Server<
@@ -142,6 +151,8 @@ export class RealtimeGateway
     private readonly attendeeSessions: AttendeeSessions,
     private readonly participants: Participants,
     private readonly rateLimiter: RateLimiter,
+    private readonly chat: ChatService,
+    private readonly fanout: Fanout,
   ) {
     this.logger = rootLogger.child({ context: RealtimeGateway.name });
   }
@@ -177,6 +188,7 @@ export class RealtimeGateway
       this.onConnection(socket);
     });
     this.io = io;
+    this.fanout.attach(io);
     this.listenForSignals();
     this.sweepTimer = setInterval(() => {
       void this.sweep();
@@ -298,6 +310,15 @@ export class RealtimeGateway
       }
       this.handle(socket, ack, () => this.join(socket, payload));
     });
+    socket.on("chat.send", (payload, ack) => {
+      if (typeof ack !== "function") {
+        return;
+      }
+      const { identity, connectionId, ip } = socket.data;
+      this.handle(socket, ack, () =>
+        this.chat.send({ identity, connectionId, ip }, payload),
+      );
+    });
     socket.on("channel.leave", (payload, ack) => {
       const respond = typeof ack === "function" ? ack : () => undefined;
       this.handle(socket, respond, () => this.leave(socket, payload));
@@ -368,11 +389,19 @@ export class RealtimeGateway
     const joined = existing ?? { channels: new Set<RealtimeChannel>() };
     state.joined.set(event.id, joined);
     await socket.join(rooms);
-    const access = await this.participants.authorize(
+    let access = await this.participants.authorize(
       state.identity,
       { id: event.id },
       state.connectionId,
     );
+    if (access.ok && joined.stale === true) {
+      joined.stale = false;
+      access = await this.participants.authorize(
+        state.identity,
+        { id: event.id },
+        state.connectionId,
+      );
+    }
     if (!access.ok) {
       if (existing === undefined) {
         state.joined.delete(event.id);
@@ -541,13 +570,21 @@ export class RealtimeGateway
         state.connectionId,
       );
       if (!access.ok) {
+        if (joined.participant === undefined) {
+          // A join still being decided: refusing it is the join's answer,
+          // not a reason to end the connection.
+          joined.stale = true;
+          continue;
+        }
         this.revoke(
           socket,
           access.error === "UNAUTHENTICATED" ? "SIGNED_OUT" : "ACCESS_REVOKED",
         );
         return;
       }
-      joined.participant = access.participant;
+      if (joined.participant !== undefined) {
+        joined.participant = access.participant;
+      }
     }
   }
 

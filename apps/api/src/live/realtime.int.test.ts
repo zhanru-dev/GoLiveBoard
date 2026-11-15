@@ -40,6 +40,7 @@ import { DEMO_PEOPLE, DEMO_WORKSPACE } from "../demo/demo-accounts.js";
 import { DemoSeeder } from "../demo/demo-seeder.js";
 import { DEMO_SESSION_LIMIT } from "../demo/demo-workspace.js";
 import { Participants } from "./participants.js";
+import { RealtimeSignals } from "./realtime-signals.js";
 import {
   CONNECTIONS_PER_SESSION,
   MESSAGES_PER_WINDOW,
@@ -854,23 +855,58 @@ describe(
         await raced.close();
       });
 
-      it("ends a join whose event is cancelled after the decision was read", async () => {
+      /** Lets the paused call go on, and the code after it run. */
+      async function releaseAndSettle(release: () => void) {
+        release();
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      }
+
+      it("refuses a join whose event is cancelled after the decision was read", async () => {
         const { api: client, owner, event } = await setUp();
         const live = await connect(staffCookie(owner), { at: racedUrl });
-        const gate = joinGate.arm();
-        const joining = live.join(event.slug).catch(() => undefined);
-        await gate.reached;
+        const join = joinGate.arm();
+        const joining = live.join(event.slug);
+        await join.reached;
+        // The re-check the cancellation causes decides too; hold it as well.
+        const recheck = joinGate.arm();
 
         await client.send(owner, "post", `/events/${event.id}/transitions`, {
           to: "CANCELLED",
         });
+        await recheck.reached;
+        await releaseAndSettle(recheck.release);
+        join.release();
 
-        try {
-          await expectEnded(live, "ACCESS_REVOKED");
-        } finally {
-          gate.release();
-          await joining;
-        }
+        await expect(joining).resolves.toEqual({ ok: false, error: "CLOSED" });
+        expect(live.connected).toBe(true);
+      });
+
+      it("only refuses a join it may not make, also while the connection is re-checked", async () => {
+        const client = api();
+        const owner = await client.newOwner();
+        const draft = await client.send(owner, "post", "/events", {
+          title: "Draft",
+          startsAt: "2027-03-01T18:00:00Z",
+          endsAt: "2027-03-01T19:00:00Z",
+          timeZone: "Europe/London",
+        });
+        const slug = z.object({ slug: z.string() }).parse(draft.body).slug;
+        const live = await connect(staffCookie(owner), { at: racedUrl });
+        const join = joinGate.arm();
+        const joining = live.join(slug);
+        await join.reached;
+        const recheck = joinGate.arm();
+
+        await raced
+          .get(RealtimeSignals)
+          .recheck("user", [(await client.me(owner)).user.id]);
+        await recheck.reached;
+        await releaseAndSettle(recheck.release);
+        join.release();
+
+        await expect(joining).resolves.toEqual({ ok: false, error: "CLOSED" });
+        expect(live.connected).toBe(true);
+        expect(live.revoked).toEqual([]);
       });
 
       it("ends a connection whose attendee is revoked during the handshake", async () => {

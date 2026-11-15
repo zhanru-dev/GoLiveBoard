@@ -32,7 +32,9 @@ export function toChatMessage(row: ChatMessageRow): ChatMessage {
       row.authorAttendee === null
         ? { kind: "STAFF", name: row.authorUser?.name ?? FORMER_STAFF_NAME }
         : { kind: "ATTENDEE", name: row.authorAttendee.name },
-    body: row.deletedAt === null ? row.body : "",
+    // A deleted message has no text left: the database requires it
+    // (chat_messages_tombstone_has_no_text).
+    body: row.body,
     deleted: row.deletedAt !== null,
     createdAt: row.createdAt.toISOString(),
   };
