@@ -72,8 +72,13 @@ RUN npm run build -w @opspilot/contracts \
 # `@prisma/client` declares as an optional peer, so the image can migrate.
 FROM manifests AS api-deps
 ARG QEMU_CPU
+# npm installs a dependency under apps/api/node_modules when its version
+# differs from the one hoisted to the root (`cookie`: the API's 2.x beside
+# Express's 0.7). Both directories go into the image; mkdir keeps the COPY
+# below valid when nothing needs nesting.
 RUN --mount=type=cache,target=/root/.npm \
-    npm ci --omit=dev --workspace @opspilot/api --no-audit --no-fund
+    npm ci --omit=dev --workspace @opspilot/api --no-audit --no-fund \
+ && mkdir -p apps/api/node_modules
 
 FROM runtime AS api
 ENV NODE_ENV=production \
@@ -83,6 +88,7 @@ ENV NODE_ENV=production \
 # machine (a umask of 077 makes them unreadable to `node`). The runtime stages
 # set them: readable by everyone, writable by no one but root.
 COPY --from=api-deps --chmod=a+rX,go-w /app/node_modules node_modules
+COPY --from=api-deps --chmod=a+rX,go-w /app/apps/api/node_modules apps/api/node_modules
 COPY --chmod=a+rX,go-w package.json ./
 COPY --chmod=a+rX,go-w packages/contracts/package.json packages/contracts/
 COPY --from=build --chmod=a+rX,go-w /app/packages/contracts/dist packages/contracts/dist
