@@ -524,6 +524,64 @@ describe("registration and verification (FR-AD-1 to FR-AD-3)", () => {
       );
     });
 
+    it.each([
+      [
+        "a Manager makes the policy stricter",
+        "PUBLIC",
+        `UPDATE access_policies SET mode = 'EMAIL_DOMAIN',
+           allowed_domains = ARRAY['partner.org'] WHERE event_id = $1`,
+      ],
+      [
+        "a Manager cancels the event",
+        "PUBLIC",
+        "UPDATE events SET status = 'CANCELLED' WHERE id = $1",
+      ],
+      [
+        "a Manager revokes the invitation",
+        "INVITE_ONLY",
+        "UPDATE attendee_invitations SET revoked_at = now() WHERE event_id = $1",
+      ],
+    ] as const)(
+      "refuses a link used while %s, and starts no session",
+      async (_label, mode, change) => {
+        const owner = await newOwner();
+        const event = await openEvent(api, owner, { mode });
+        const email = uniqueEmail("verify-race");
+        if (mode === "INVITE_ONLY") {
+          await database.query(
+            "INSERT INTO attendee_invitations (event_id, email) VALUES ($1, $2)",
+            [event.id, email],
+          );
+        }
+        await visitor().register(event.slug, registration(email));
+        const token = tokenFromEmail(mailer.to(email).at(-1)?.text ?? "");
+        // The Manager's change holds the event's row; the verification
+        // waits for it, then decides under the change.
+        const block = await holdLock(
+          database.url,
+          "SELECT id FROM events WHERE id = $1 FOR NO KEY UPDATE",
+          [event.id],
+        );
+        const verification = visitor().verify(token);
+        try {
+          await block.waitForWaiters(1);
+          await block.run(change, [event.id]);
+        } finally {
+          await block.release();
+        }
+
+        const { response, attendee } = await verification;
+        expect(response.status, response.text).toBe(403);
+        expect(attendee).toBeUndefined();
+        const sessions = await database.query(
+          `SELECT 1 FROM attendee_sessions WHERE attendee_id =
+             (SELECT id FROM attendees WHERE email = $1)`,
+          [email],
+        );
+        expect(sessions).toEqual([]);
+      },
+    );
+
     it("works once when two browsers use the link at the same moment", async () => {
       const owner = await newOwner();
       const event = await openEvent(api, owner);
