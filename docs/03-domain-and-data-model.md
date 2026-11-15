@@ -145,6 +145,7 @@ erDiagram
     int version
     bigint chatSequence
     bigint questionsSequence
+    boolean questionsPreModerated
     timestamptz createdAt
     timestamptz updatedAt
   }
@@ -267,14 +268,18 @@ erDiagram
     uuid id PK
     uuid eventId FK
     bigint sequence
-    text authorKey
-    text clientMessageId
+    uuid authorAttendeeId FK
+    uuid authorUserId FK
+    uuid clientMessageId
     text body
     timestamptz deletedAt
+    uuid deletedById FK
   }
   Question {
     uuid id PK
     uuid eventId FK
+    uuid authorAttendeeId FK
+    uuid authorUserId FK
     text body
     enum status "PENDING | PUBLISHED | HIDDEN | ANSWERED"
     smallint pinSlot
@@ -389,8 +394,10 @@ The rule of thumb: **if a rule must hold under concurrency, the database enforce
 | A stream-check job that runs twice records one check         | Unique `(eventId, slot)` on `StreamCheck`; inserted with `ON CONFLICT DO NOTHING`, and the incident is judged only when a row was inserted                                                                                                                                                                                                                                                                                                                                                                                             |
 | At most one open incident of a kind per event                | Partial unique index `(eventId, kind) WHERE resolvedAt IS NULL`                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
 | At most 3 pinned questions per event                         | `pinSlot` in 1–3 (check constraint) + partial unique index `(eventId, pinSlot) WHERE pinSlot IS NOT NULL`                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| Only published or answered questions are pinned              | CHECK `questions_pinned_are_visible`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| A deleted chat message keeps no text (FR-RN-3)               | CHECK `chat_messages_tombstone_has_no_text`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
 | One vote per attendee per question                           | Primary key `(questionId, attendeeId)`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
-| A retried chat send never duplicates                         | Unique `(eventId, authorKey, clientMessageId)`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| A retried chat send never duplicates                         | Unique `(eventId, COALESCE(authorAttendeeId, authorUserId), clientMessageId)`                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
 | Real-time sequences have no gaps or duplicates               | Sequence allocated by `UPDATE event SET chatSequence = chatSequence + 1 … RETURNING` in the same transaction as the journal insert; primary key `(eventId, channel, sequence)`                                                                                                                                                                                                                                                                                                                                                         |
 | An attendee registers once per event                         | Unique `(eventId, email)` on `Attendee` (citext); a registration inserts with `ON CONFLICT DO NOTHING` and otherwise updates the row it locked                                                                                                                                                                                                                                                                                                                                                                                         |
 | A revoked or erased attendee loses access at once            | Every attendee request reloads session, attendee, event and policy and decides again; revoking and erasing also delete their sessions and unused links. Every path takes its locks in one order: the demo workspace lock (demo events), the event's row, the attendee's row, then links and sessions. Registration, verification and reminders decide under the event's lock, so a policy change, a cancellation or a revoked invitation that commits first is the one they see, and none of them can deadlock with a Manager's change |

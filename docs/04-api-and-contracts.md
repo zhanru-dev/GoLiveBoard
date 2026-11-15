@@ -145,26 +145,27 @@ Every write locks the event row and then the attendee's, the order every path th
 | `POST /public/attendee-verifications`     | Pub  | `{ "token": "…" }`, from the link: single-use, 15 minutes. `200 { slug }` and sets the attendee session cookie; `400 TOKEN_INVALID`; `403` if the event no longer admits them. 30 per hour per address                                            |
 | `GET /public/events/:slug/me`             | Att  | The attendee's own registration                                                                                                                                                                                                                   |
 | `POST /public/events/:slug/sign-out`      | Att  | `204`; ends this browser's attendee session                                                                                                                                                                                                       |
-| `POST /public/events/:slug/heartbeat`     | Att  | Every 30 s while watching; records attendance (milestone 6)                                                                                                                                                                                       |
+| `GET /public/events/:slug/watch`          | Att  | The watch page's data: public status, the stream's address while `LIVE` only, and a short-lived link to the holding slate (verified slates only)                                                                                                  |
 | `POST /public/reminders/unsubscribe`      | Pub  | `{ "token": "…" }` from the reminder email (an HMAC of the attendee ID; nothing stored). `204`, also when repeated; `400 TOKEN_INVALID`                                                                                                           |
 | `GET /public/demo-inbox`                  | Pub  | Demo mode only, otherwise `404`. The mail for the attendees this browser registered in the demo workspace (by its `__Host-opspilot_demo_inbox` cookie), newest first                                                                              |
 
 ### 3.6 Live interaction
 
-Both staff and attendee sessions are accepted; permissions differ by role.
+Staff reach an event by its ID, attendees by its slug (their pages carry no internal IDs). Chat is written over the real-time connection (section 4); everything else here is HTTP. Writes are decided again under the event's row lock, which every change to who may take part also takes. Whether questions wait for approval is the event's `questionsPreModerated`, changed with `PATCH /events/:id`.
 
-| Method and path                           | Role      | Notes                                                        |
-| ----------------------------------------- | --------- | ------------------------------------------------------------ |
-| `GET /events/:id/chat/messages`           | O M A Att | History; `before=<sequence>` for older pages                 |
-| `GET /events/:id/questions`               | O M A Att | Attendees see published questions and their own pending ones |
-| `POST /events/:id/questions`              | Att M     | `Idempotency-Key`; rate-limited                              |
-| `PUT /questions/:id/vote` · `DELETE …`    | Att       | Idempotent by design                                         |
-| `PATCH /questions/:id`                    | M         | Status, pin slot, answered; `If-Match`                       |
-| `POST /events/:id/question-triage-runs`   | M         | Starts a triage run; returns `202` and the run ID            |
-| `GET /question-triage-runs/:id`           | M         | Suggestions or the failure reason                            |
-| `POST /question-triage-runs/:id/decision` | M         | Which groups to merge; applied in one transaction            |
-| `GET /events/:id/live-ops`                | O M A     | Snapshot for the operations room                             |
-| `GET /events/:id/live-ops/stream`         | O M A     | Server-sent events (section 5)                               |
+| Method and path                                                            | Role        | Notes                                                                                                                                                                                                                                                               |
+| -------------------------------------------------------------------------- | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /events/:id/chat/messages` · `GET /public/events/:slug/chat/messages` | O M A · Att | History, oldest first, with `latestSequence` to join after; `before=<sequence>` for older pages, `limit` up to 100                                                                                                                                                  |
+| `DELETE /events/:id/chat/messages/:messageId`                              | M           | FR-RN-3: the text goes for everyone, a tombstone stays (`MESSAGE_DELETED` on the journal), audited. `200` with the tombstone; again, nothing changes                                                                                                                |
+| `GET /events/:id/questions` · `GET /public/events/:slug/questions`         | O M A · Att | What the viewer may see (moderators: everything; others: published, answered and their own), pinned first, then by votes, with `mine`, `votedByMe` and `latestSequence`                                                                                             |
+| `POST /events/:id/questions` · `POST /public/events/:slug/questions`       | M · Att     | `{ body }`, `Idempotency-Key`. `201`. An attendee's question is `PENDING` while pre-moderation is on; 5 per author per minute; `409 INTERACTION_CLOSED` once the event has ended                                                                                    |
+| `PUT /public/events/:slug/questions/:id/vote` · `DELETE …`                 | Att         | One vote per attendee (primary key); idempotent. Published questions only (`409 QUESTION_NOT_VOTABLE`); votes leave the question's version alone. 60 per attendee per minute                                                                                        |
+| `PATCH /questions/:id`                                                     | M           | `{ status?, pinned? }` with `If-Match`: approve, hide, mark answered, reopen, pin (lowest free slot), unpin. `412` on a stale version; `409 QUESTION_STATUS_INVALID`, `QUESTION_NOT_PINNABLE`, `PIN_LIMIT_REACHED` (three at most, also under concurrency). Audited |
+| `POST /events/:id/question-triage-runs`                                    | M           | Starts a triage run; returns `202` and the run ID                                                                                                                                                                                                                   |
+| `GET /question-triage-runs/:id`                                            | M           | Suggestions or the failure reason                                                                                                                                                                                                                                   |
+| `POST /question-triage-runs/:id/decision`                                  | M           | Which groups to merge; applied in one transaction                                                                                                                                                                                                                   |
+| `GET /events/:id/live-ops`                                                 | O M A       | Snapshot for the operations room                                                                                                                                                                                                                                    |
+| `GET /events/:id/live-ops/stream`                                          | O M A       | Server-sent events (section 5)                                                                                                                                                                                                                                      |
 
 ### 3.7 Record
 
@@ -181,7 +182,9 @@ Both staff and attendee sessions are accepted; permissions differ by role.
 
 ## 4. Real-time protocol (Socket.IO)
 
-Namespace `/realtime`. The handshake is authenticated by the browser's cookies (staff or attendee session). Message names and payloads are Zod schemas in `packages/contracts/src/realtime.ts`.
+Path `/realtime` on the site's own origin, **WebSocket only**: browsers always send `Origin` on a WebSocket handshake, so the server refuses other sites outright, and without long-polling no instance needs sticky sessions. The handshake is authenticated by the browser's cookies (a staff session, an attendee session, or both). Events are named by their **slug**. Message names and payloads are Zod schemas in `packages/contracts/src/realtime.ts`.
+
+Access is decided again on every join and message, and whenever something that decides it changes: the change publishes a signal through Valkey after its commit (from the API or the worker), and every instance re-checks the connections it concerns, telling them `session.revoked` and disconnecting those no longer allowed, within seconds (FR-AD-4). Every connection is also re-checked every 30 seconds (`REALTIME_SWEEP_MS`), for a lost signal and for expired sessions. Limits: 60 connections per address per minute, 10 per session across instances, 30 messages per connection per 10 seconds, 20 chat messages per author per minute.
 
 ```mermaid
 sequenceDiagram
@@ -191,28 +194,33 @@ sequenceDiagram
   participant D as PostgreSQL
   C->>S: connect (cookies)
   S->>S: authenticate session
-  C->>S: channel.join { eventId, channel: "CHAT", afterSequence: 41 }
+  C->>S: channel.join { slug, channel: "CHAT", afterSequence: 41 }
   S->>D: check eligibility · read journal after 41 (limit 500)
   S-->>C: ack { replay: [42..57], latestSequence: 57 }
   Note over C: apply replay, then live events
-  C->>S: chat.send { eventId, clientMessageId, body }
+  C->>S: chat.send { slug, clientMessageId, body }
   S->>D: BEGIN · next sequence · insert message + journal · COMMIT
   S-->>C: ack { message (sequence 58) }
   S-->>C: chat.event { sequence: 58, kind: "MESSAGE_CREATED", message }
   Note over C: duplicates ignored by sequence
 ```
 
-| Direction       | Name              | Payload                               | Notes                                                                                                   |
-| --------------- | ----------------- | ------------------------------------- | ------------------------------------------------------------------------------------------------------- |
-| client → server | `channel.join`    | `{ eventId, channel, afterSequence }` | Ack returns the replay (at most 500) and the latest sequence, or `RESYNC_REQUIRED` if the gap is larger |
-| client → server | `channel.leave`   | `{ eventId, channel }`                |                                                                                                         |
-| client → server | `chat.send`       | `{ eventId, clientMessageId, body }`  | Ack returns the stored message; retrying with the same `clientMessageId` returns the same message       |
-| server → client | `chat.event`      | `{ sequence, kind, message }`         | `kind`: `MESSAGE_CREATED`, `MESSAGE_DELETED`                                                            |
-| server → client | `questions.event` | `{ sequence, kind, question }`        | `kind`: `CREATED`, `UPDATED`, `VOTED`, `MERGED`                                                         |
-| server → client | `event.status`    | `{ eventId, status }`                 | Switches the watch page from holding slate to stream                                                    |
-| server → client | `session.revoked` | `{ reason }`                          | Sent before the server disconnects a revoked client                                                     |
+| Direction       | Name              | Payload                                        | Notes                                                                                                                                                                                            |
+| --------------- | ----------------- | ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Direction       | Name              | Payload                                        | Notes                                                                                                                                                                                            |
+| --------------- | ----------------- | -------------------------------------------    | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------                      |
+| client → server | `channel.join`    | `{ slug, channel, afterSequence }`             | Ack returns the replay (at most 500) and the latest sequence, or `RESYNC_REQUIRED` if the gap is larger or the client is ahead (the demo was reset)                                              |
+| client → server | `channel.leave`   | `{ slug, channel }`                            |                                                                                                                                                                                                  |
+| client → server | `chat.send`       | `{ slug, clientMessageId, body }`              | Ack returns the stored message; retrying with the same `clientMessageId` returns the same message and sends nothing again. Attendees, Managers and Owners; not Analysts                          |
+| client → server | `watch.heartbeat` | `{ slug }`                                     | Every 30 s while an attendee watches a `LIVE` event: one attendance row per attendee and minute (FR-RN-7)                                                                                        |
+| server → client | `chat.event`      | `{ sequence, kind, message }`                  | `kind`: `MESSAGE_CREATED`, `MESSAGE_DELETED`                                                                                                                                                     |
+| server → client | `questions.event` | `{ sequence, kind, question }`                 | `kind`: `CREATED`, `UPDATED`, `VOTED`, `MERGED`. A change to a question the viewer may not see (pending, hidden) comes as `{ sequence, kind: "WITHDRAWN", questionId }`, so no viewer sees a gap |
+| server → client | `event.status`    | `{ slug, status }`                             | The public status; switches the watch page from holding slate to stream                                                                                                                          |
+| server → client | `session.revoked` | `{ reason: "SIGNED_OUT" \| "ACCESS_REVOKED" }` | Sent before the server disconnects a client whose session ended, or whose access or role on Q&A changed                                                                                          |
 
-**Client rules.** Keep the highest applied sequence per channel; ignore events at or below it; on reconnect join with `afterSequence` = that value; on `RESYNC_REQUIRED`, reload the snapshot over HTTP and continue from its sequence. Reconnect with exponential backoff and jitter (1 s doubling to 30 s).
+A refused message is acked `{ ok: false, error }`, with `error` one of `UNAUTHENTICATED`, `FORBIDDEN`, `NOT_FOUND`, `CLOSED`, `INVALID`, `RESYNC_REQUIRED`, `RATE_LIMITED`, `UNAVAILABLE`. A refused handshake carries the same codes as its message.
+
+**Client rules.** Load the snapshot over HTTP, then join after its sequence. Hold live events while a join is in flight; apply the replay, then them. Keep the highest applied sequence per channel; ignore events at or below it. Events committed close together can arrive out of order: hold one that is ahead until the gap fills, and if it has not after 2 seconds, join again after the last applied sequence. On reconnect, join with `afterSequence` = that value, and send unacknowledged chat messages again with their `clientMessageId`. On `RESYNC_REQUIRED`, reload the snapshot and continue from its sequence. Reconnect with exponential backoff and jitter (1 s doubling to 30 s).
 
 ## 5. Server-sent events (operations room)
 

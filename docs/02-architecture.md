@@ -245,9 +245,9 @@ No wait on a dependency is unbounded, because a frozen dependency (one that acce
 
 ### 7.6 Real-time
 
-- **Chat and Q&A** use Socket.IO on `/realtime`. The browser's cookies authenticate the connection. Each event has rooms per channel. Every change gets a per-event sequence number and a journal row in the same transaction; after a reconnect the client sends its last sequence and receives what it missed before live updates resume.
+- **Chat and Q&A** use Socket.IO on `/realtime`, WebSocket only (so `Origin` is always checked and no instance needs sticky sessions). The browser's cookies authenticate the connection, with the same session loaders as HTTP. Each event has rooms per channel, and Q&A adds rooms for moderators and for each author, who see pending and hidden questions. Every change gets a per-event sequence number and a journal row in the same transaction; after a reconnect the client sends its last sequence and receives what it missed before live updates resume (docs/04, section 4).
 - **Operations room** uses server-sent events with `Last-Event-ID`, because data only flows from server to browser.
-- With more than one API instance, the Socket.IO Valkey adapter fans messages out, and revocations are broadcast so every instance disconnects affected clients.
+- With more than one API instance, the Socket.IO Valkey adapter fans messages out. Changes to who may take part (revocation, erasure, policy, status, sign-out, membership, role, workspace switch, the demo reset) publish a signal on a Valkey channel after their commit, from the API or the worker; every instance re-checks the connections concerned and disconnects those no longer allowed. A sweep re-checks every connection every 30 seconds. Shutdown disconnects only the instance's own clients, which reconnect elsewhere. Channel names carry `REALTIME_CHANNEL_PREFIX`, so deployments sharing a Valkey do not hear each other.
 
 ### 7.7 Errors
 
