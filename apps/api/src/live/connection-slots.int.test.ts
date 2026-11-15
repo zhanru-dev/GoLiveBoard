@@ -59,12 +59,37 @@ describe("ConnectionSlots", () => {
     // Dropped, as after a Valkey outage longer than the lease.
     await valkey.zrem(slotsKey(room), "live");
 
-    await slots.refresh([[room, "live"]]);
+    await expect(slots.refresh([[room, "live"]], 10)).resolves.toEqual([]);
 
     expect(await valkey.zscore(slotsKey(room), "live")).not.toBeNull();
     const ttl = await valkey.pttl(slotsKey(room));
     expect(ttl).toBeGreaterThan(0);
     expect(ttl).toBeLessThanOrEqual(SLOT_STALE_MS);
+  });
+
+  it("takes a dropped slot back only under the limit, and names those that could not", async () => {
+    const room = `session:${randomUUID()}`;
+    const slots = new ConnectionSlots(valkey, config);
+    const old = Array.from(
+      { length: 10 },
+      (_, index) => `old-${String(index)}`,
+    );
+    for (const connection of old) {
+      await slots.claim(room, connection, 10);
+    }
+    // Valkey forgot them (an outage), and ten new connections came in.
+    await valkey.del(slotsKey(room));
+    for (let index = 0; index < 10; index += 1) {
+      expect(await slots.claim(room, `new-${String(index)}`, 10)).toBe(true);
+    }
+
+    const lost = await slots.refresh(
+      old.map((connection) => [room, connection] as const),
+      10,
+    );
+
+    expect(lost).toEqual(old.map((connection) => [room, connection]));
+    expect(await valkey.zcard(slotsKey(room))).toBe(10);
   });
 
   it("sets an expiry on a session's slots when it first claims one", async () => {

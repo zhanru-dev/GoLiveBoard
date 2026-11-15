@@ -33,12 +33,19 @@ redis.call("PEXPIRE", KEYS[1], tonumber(ARGV[1]))
 return 1`;
 
 /**
- * Marks a live connection's slot as taken now, adding it back if it was
- * dropped (after a Valkey outage longer than the lease, or a connection
- * let in while Valkey could not count).
+ * Keeps a live connection's slot: marks it as taken now if it is still
+ * there; if it was dropped (a Valkey outage longer than the lease, or a
+ * connection let in while Valkey could not count), takes it again only
+ * under the limit, like a claim. Returns 0 when there is no room: the
+ * connection must close.
  */
 const REFRESH_SCRIPT = `${NOW}
-redis.call("ZADD", KEYS[1], now, ARGV[2])
+redis.call("ZREMRANGEBYSCORE", KEYS[1], "-inf", now - tonumber(ARGV[1]))
+if not redis.call("ZSCORE", KEYS[1], ARGV[3]) and
+   redis.call("ZCARD", KEYS[1]) >= tonumber(ARGV[2]) then
+  return 0
+end
+redis.call("ZADD", KEYS[1], now, ARGV[3])
 redis.call("PEXPIRE", KEYS[1], tonumber(ARGV[1]))
 return 1`;
 
@@ -79,10 +86,19 @@ export class ConnectionSlots {
     }
   }
 
-  /** Keeps open connections' slots taken; best effort. */
-  async refresh(slots: readonly (readonly [string, string])[]): Promise<void> {
+  /**
+   * Keeps open connections' slots taken (best effort: if Valkey fails, the
+   * next refresh tries again).
+   *
+   * @returns the connections whose slot was gone and could not be taken
+   * again: more were let in meanwhile, and they must close
+   */
+  async refresh(
+    slots: readonly (readonly [string, string])[],
+    limit: number,
+  ): Promise<(readonly [string, string])[]> {
     if (slots.length === 0) {
-      return;
+      return [];
     }
     const pipeline = this.valkey.pipeline();
     for (const [room, connection] of slots) {
@@ -91,10 +107,17 @@ export class ConnectionSlots {
         1,
         this.key(room),
         SLOT_STALE_MS,
+        limit,
         connection,
       );
     }
-    await pipeline.exec().catch(() => undefined);
+    const results = await pipeline.exec().catch(() => null);
+    if (results === null) {
+      return [];
+    }
+    return slots.filter(
+      (_slot, index) => results[index]?.[0] === null && results[index][1] === 0,
+    );
   }
 
   /** Gives a closed connection's slot back; best effort (it goes stale). */

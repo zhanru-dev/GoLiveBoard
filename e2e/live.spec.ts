@@ -160,6 +160,9 @@ test("a dropped connection loses and duplicates no chat message (FR-RN-2)", asyn
   page,
   browser,
 }) => {
+  // Three browsers, an outage and a reconnect with backoff: more than the
+  // default 30 s on a busy machine.
+  test.setTimeout(60_000);
   const event = await openEvent(page.request);
   const ada = await attendee(browser, event, "Ada Lovelace");
   const grace = await attendee(browser, event, "Grace Hopper");

@@ -238,11 +238,7 @@ export class RealtimeGateway
     }, POLL_MS);
     this.pollTimer.unref();
     this.slotTimer = setInterval(() => {
-      void this.slots.refresh(
-        [...this.localSlots].flatMap(([room, connections]) =>
-          [...connections].map((connection) => [room, connection] as const),
-        ),
-      );
+      void this.refreshSlots();
     }, SLOT_REFRESH_MS);
     this.slotTimer.unref();
     this.sweepTimer = setInterval(() => {
@@ -368,6 +364,24 @@ export class RealtimeGateway
     local.add(connection);
     this.localSlots.set(room, local);
     return true;
+  }
+
+  /**
+   * Keeps this instance's connections' slots, and closes any whose slot was
+   * lost and is now taken by others (the limit would otherwise be passed
+   * once Valkey recovers). Runs every SLOT_REFRESH_MS; public for tests.
+   */
+  async refreshSlots(): Promise<void> {
+    const lost = await this.slots.refresh(
+      [...this.localSlots].flatMap(([room, connections]) =>
+        [...connections].map((connection) => [room, connection] as const),
+      ),
+      CONNECTIONS_PER_SESSION,
+    );
+    for (const [room, connection] of lost) {
+      this.localSlots.get(room)?.delete(connection);
+      this.io?.of("/").sockets.get(connection)?.disconnect(true);
+    }
   }
 
   private async releaseSlot(room: string, connection: string): Promise<void> {
@@ -618,11 +632,14 @@ export class RealtimeGateway
       // A change counts as done only once everything it asks for has
       // worked; until then the next read (a second later) tries it again.
       for (const { key, change } of fresh) {
+        // A status change re-checks only once its status is out: a
+        // connection the re-check ends must have been told first.
         const done =
           change.type === "status"
-            ? (await this.attempt(() =>
+            ? announced.get(change.eventId) === true &&
+              (await this.attempt(() =>
                 this.recheckScope("event", [change.eventId]),
-              )) && announced.get(change.eventId) === true
+              ))
             : await this.attempt(() =>
                 this.recheckScope(change.scope, change.ids),
               );
@@ -663,7 +680,7 @@ export class RealtimeGateway
   }
 
   /** Tells the event's connections here its current public status. */
-  private async announceStatus(eventId: string): Promise<void> {
+  protected async announceStatus(eventId: string): Promise<void> {
     const event = await this.prisma.event.findUnique({
       where: { id: eventId },
       select: { slug: true, status: true },

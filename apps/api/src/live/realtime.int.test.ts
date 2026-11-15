@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 
 import type { NestExpressApplication } from "@nestjs/platform-express";
 import { ChannelJoined, ChatEvent, Member } from "@opspilot/contracts";
+import { Redis } from "ioredis";
 import request from "supertest";
 import { afterAll, beforeAll, describe, expect, inject, it } from "vitest";
 import { z } from "zod";
@@ -12,6 +13,7 @@ import { ATTENDEE_SESSION_LIMIT } from "../attendees/registration.service.js";
 import { RetentionJob } from "../attendees/retention-job.js";
 import { ACCESS_COOKIE, REFRESH_COOKIE } from "../auth/cookies.js";
 import { hashToken } from "../auth/tokens.js";
+import { APP_CONFIG, type AppConfig } from "../config/app-config.js";
 import {
   openEvent,
   type PolicyBody,
@@ -47,6 +49,7 @@ import { Participants } from "./participants.js";
 import {
   CONNECTIONS_PER_SESSION,
   MESSAGES_PER_WINDOW,
+  RealtimeGateway,
 } from "./realtime.gateway.js";
 
 /** FR-AD-4: a revocation ends live interaction within this long. */
@@ -130,6 +133,19 @@ class FlakyParticipants extends Participants {
   }
 }
 
+/** Makes the next `remaining` status announcements fail. */
+const announceFailures = { remaining: 0 };
+
+class FlakyAnnouncer extends RealtimeGateway {
+  protected override async announceStatus(eventId: string): Promise<void> {
+    if (announceFailures.remaining > 0) {
+      announceFailures.remaining -= 1;
+      throw new Error("A transient failure");
+    }
+    await super.announceStatus(eventId);
+  }
+}
+
 async function expectEnded(
   client: RealtimeClient,
   reason: "SIGNED_OUT" | "ACCESS_REVOKED",
@@ -191,6 +207,25 @@ describe(
       });
       clients.push(client);
       return client;
+    }
+
+    async function sessionIdOf(session: TestSession): Promise<string> {
+      const [row] = await database.query<{ id: string }>(
+        "SELECT id FROM sessions WHERE refresh_token_hash = $1",
+        [hashToken(session.refresh)],
+      );
+      return row?.id ?? "";
+    }
+
+    /** Makes Valkey forget a session's connection slots. */
+    async function clearSlots(sessionId: string): Promise<void> {
+      const valkey = new Redis(inject("valkeyUrl"));
+      try {
+        const prefix = app.get<AppConfig>(APP_CONFIG).realtime.channelPrefix;
+        await valkey.del(`${prefix}:realtime:slots:session:${sessionId}`);
+      } finally {
+        await valkey.quit();
+      }
     }
 
     /** An Owner with an open event. */
@@ -877,6 +912,28 @@ describe(
         expect(accepted).toHaveLength(CONNECTIONS_PER_SESSION);
       });
 
+      it("closes connections whose slots were lost and taken by others, when Valkey recovers", async () => {
+        const { owner } = await setUp();
+        const old: RealtimeClient[] = [];
+        for (let tab = 0; tab < CONNECTIONS_PER_SESSION; tab += 1) {
+          old.push(await connect(staffCookie(owner)));
+        }
+        const sessionId = await sessionIdOf(owner);
+        // Valkey forgot them, and the session opened ten more meanwhile.
+        await clearSlots(sessionId);
+        const fresh: RealtimeClient[] = [];
+        for (let tab = 0; tab < CONNECTIONS_PER_SESSION; tab += 1) {
+          fresh.push(await connect(staffCookie(owner), { at: secondUrl }));
+        }
+
+        await app.get(RealtimeGateway).refreshSlots();
+
+        for (const client of old) {
+          await client.untilDisconnected(2_000);
+        }
+        expect(fresh.every((client) => client.connected)).toBe(true);
+      });
+
       it("gives a closed connection's slot back", async () => {
         const { owner } = await setUp();
         const open = [];
@@ -1024,6 +1081,53 @@ describe(
 
         await expectEnded(live, "SIGNED_OUT");
         expect(reloadFailures.remaining).toBe(0);
+      });
+    });
+
+    describe("when announcing a status fails once", () => {
+      let flaky: NestExpressApplication;
+      let flakyUrl: string;
+
+      beforeAll(async () => {
+        flaky = await createTestApp({
+          env: env(),
+          mailer,
+          replace: [[RealtimeGateway, FlakyAnnouncer]],
+        });
+        flakyUrl = await listen(flaky);
+      });
+
+      afterAll(async () => {
+        announceFailures.remaining = 0;
+        await flaky.close();
+      });
+
+      it("announces it again, so watchers who stay still learn the event went live (FR-RN-1)", async () => {
+        const { api: client, owner, event } = await setUp();
+        await prepareForLaunch(client, database, owner, event.id, new Date());
+        const visitor = await attendee(event.slug);
+        const live = await watching(visitor.cookie, event.slug, flakyUrl);
+        const moved = await client.send(
+          owner,
+          "post",
+          `/events/${event.id}/transitions`,
+          { to: "READY" },
+        );
+        expect(moved.status, moved.text).toBe(200);
+        await expect
+          .poll(() => live.statusChanges.at(-1)?.status, { timeout: 5_000 })
+          .toBe("UPCOMING");
+        announceFailures.remaining = 1;
+
+        await client.send(owner, "post", `/events/${event.id}/transitions`, {
+          to: "LIVE",
+        });
+
+        await expect
+          .poll(() => live.statusChanges.at(-1)?.status, { timeout: 5_000 })
+          .toBe("LIVE");
+        expect(announceFailures.remaining).toBe(0);
+        expect(live.connected).toBe(true);
       });
     });
 
