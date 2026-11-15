@@ -13,6 +13,7 @@ import {
   ChannelLeave,
   type ChatEvent,
   type ChatSendAck,
+  type QuestionsEvent,
   type EventStatus,
   type EventStatusChanged,
   REALTIME_PATH,
@@ -41,15 +42,22 @@ import { clientIp } from "./client-ip.js";
 import { Fanout } from "./fanout.js";
 import { replayPlan } from "./domain/replay.js";
 import { catchRejections } from "./valkey-guard.js";
-import { chatReplay, latestSequence } from "./journal.js";
+import { chatReplay, latestSequence, questionsReplay } from "./journal.js";
 import {
   type EventRef,
   type Identity,
   type Participant,
   Participants,
 } from "./participants.js";
+import { authorKey, viewerOf } from "./questions.service.js";
 import { RealtimeSignal, signalsChannel } from "./realtime-signals.js";
-import { channelRoom, type RecheckScope, scopeRoom } from "./rooms.js";
+import {
+  authorRoom,
+  channelRoom,
+  moderatorsRoom,
+  type RecheckScope,
+  scopeRoom,
+} from "./rooms.js";
 
 /** Messages one connection may send per window, whatever they are. */
 export const MESSAGES_PER_WINDOW = 30;
@@ -86,6 +94,7 @@ export interface ConnectionState {
 
 export interface ServerToClient {
   "chat.event": (event: ChatEvent) => void;
+  "questions.event": (event: QuestionsEvent) => void;
   "event.status": (event: EventStatusChanged) => void;
   "session.revoked": (event: SessionRevoked) => void;
 }
@@ -114,6 +123,14 @@ type RealtimeSocket = Socket<
   Record<string, never>,
   ConnectionState
 >;
+
+/** The Q&A rooms a participant's role adds to the channel's own. */
+function questionRooms(participant: Participant): string[] {
+  return [
+    authorRoom(participant.eventId, authorKey(participant)),
+    ...(participant.moderator ? [moderatorsRoom(participant.eventId)] : []),
+  ];
+}
 
 const failure = (error: RealtimeFailure["error"]): RealtimeFailure => ({
   ok: false,
@@ -365,10 +382,6 @@ export class RealtimeGateway
       return failure("INVALID");
     }
     const { slug, channel, afterSequence } = parsed.data;
-    if (channel === "QUESTIONS") {
-      // Q&A arrives with milestone 6, batch 4.
-      return failure("NOT_FOUND");
-    }
     const event = await this.prisma.event.findUnique({
       where: { slug },
       select: { id: true, workspaceId: true },
@@ -412,18 +425,33 @@ export class RealtimeGateway
       }
       return failure(access.error);
     }
-    joined.participant = access.participant;
+    const { participant } = access;
+    joined.participant = participant;
     joined.channels.add(channel);
+    if (channel === "QUESTIONS") {
+      // Before the latest sequence is read: a change committed after that
+      // read reaches this connection as its role may see it.
+      await socket.join(questionRooms(participant));
+    }
 
     const latest = await latestSequence(this.prisma, event.id, channel);
     const plan = replayPlan(afterSequence, latest);
     if (plan.kind === "RESYNC") {
       return failure("RESYNC_REQUIRED");
     }
+    if (plan.kind === "UP_TO_DATE") {
+      return { ok: true, latestSequence: latest, replay: [] };
+    }
     const replay =
-      plan.kind === "UP_TO_DATE"
-        ? []
-        : await chatReplay(this.prisma, event.id, afterSequence, latest);
+      channel === "CHAT"
+        ? await chatReplay(this.prisma, event.id, afterSequence, latest)
+        : await questionsReplay(
+            this.prisma,
+            event.id,
+            afterSequence,
+            latest,
+            viewerOf(participant),
+          );
     return { ok: true, latestSequence: latest, replay };
   }
 
@@ -440,6 +468,11 @@ export class RealtimeGateway
       if (joined.participant?.slug === slug && joined.channels.has(channel)) {
         joined.channels.delete(channel);
         await socket.leave(channelRoom(eventId, channel));
+        if (channel === "QUESTIONS") {
+          for (const room of questionRooms(joined.participant)) {
+            await socket.leave(room);
+          }
+        }
         if (joined.channels.size === 0) {
           socket.data.joined.delete(eventId);
           await socket.leave(scopeRoom("event", eventId));
@@ -582,7 +615,18 @@ export class RealtimeGateway
         );
         return;
       }
-      if (joined.participant !== undefined) {
+      const before = joined.participant;
+      if (before !== undefined) {
+        // On Q&A the role decides what the connection sees (pending and
+        // hidden questions, its author's room): a new role starts afresh.
+        if (
+          joined.channels.has("QUESTIONS") &&
+          (before.moderator !== access.participant.moderator ||
+            authorKey(before) !== authorKey(access.participant))
+        ) {
+          this.revoke(socket, "ACCESS_REVOKED");
+          return;
+        }
         joined.participant = access.participant;
       }
     }

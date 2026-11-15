@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 import { PublicEventStatus } from "./admission.js";
-import { RealtimeChannel } from "./live.js";
+import { QuestionStatus, RealtimeChannel } from "./live.js";
 
 /**
  * The real-time protocol (docs/04, section 4): Socket.IO on `/realtime`,
@@ -109,6 +109,84 @@ export const ChatPage = z.object({
 });
 export type ChatPage = z.infer<typeof ChatPage>;
 
+/** What a question may say. */
+export const QuestionBody = z.string().trim().min(1).max(1000);
+
+/** `POST …/questions`, with an `Idempotency-Key` to make retries safe. */
+export const AskQuestionRequest = z.object({ body: QuestionBody });
+export type AskQuestionRequest = z.infer<typeof AskQuestionRequest>;
+
+/** A question for the speakers (FR-RN-4, FR-RN-5). */
+export const Question = z.object({
+  id: z.uuid(),
+  body: z.string(),
+  status: QuestionStatus,
+  author: ChatAuthor,
+  /** 1 to 3 while pinned (FR-RN-5). */
+  pinSlot: z.int().min(1).max(3).nullable(),
+  voteCount: z.int().min(0),
+  /** Sent back in If-Match by moderators; votes do not change it. */
+  version: z.int().min(1),
+  createdAt: z.iso.datetime(),
+  /**
+   * Set in answers to the viewer's own requests and in lists; absent from
+   * real-time events, which everyone receives alike.
+   */
+  mine: z.boolean().optional(),
+  votedByMe: z.boolean().optional(),
+});
+export type Question = z.infer<typeof Question>;
+
+export const QuestionsEventKind = z.enum([
+  "CREATED",
+  "UPDATED",
+  "VOTED",
+  "MERGED",
+]);
+export type QuestionsEventKind = z.infer<typeof QuestionsEventKind>;
+
+/**
+ * server → client `questions.event`, and the entries of a QUESTIONS replay.
+ * A change to a question the viewer may not see (pending, or hidden) still
+ * takes its place in the sequence, as WITHDRAWN: the client drops the
+ * question if it has it, and sees no gap.
+ */
+export const QuestionsEvent = z.union([
+  z.object({
+    sequence: Sequence,
+    kind: QuestionsEventKind,
+    question: Question,
+  }),
+  z.object({
+    sequence: Sequence,
+    kind: z.literal("WITHDRAWN"),
+    questionId: z.uuid(),
+  }),
+]);
+export type QuestionsEvent = z.infer<typeof QuestionsEvent>;
+
+/**
+ * `GET …/questions`: the questions the viewer may see, pinned first, then by
+ * votes, with the latest sequence to join after.
+ */
+export const QuestionList = z.object({
+  items: z.array(Question),
+  latestSequence: Sequence,
+});
+export type QuestionList = z.infer<typeof QuestionList>;
+
+/** `PATCH /questions/:id` (Managers), with If-Match. */
+export const ModerateQuestionRequest = z
+  .object({ status: QuestionStatus, pinned: z.boolean() })
+  .partial()
+  .refine(
+    (change) => change.status !== undefined || change.pinned !== undefined,
+    {
+      error: "Change the status, the pin, or both",
+    },
+  );
+export type ModerateQuestionRequest = z.infer<typeof ModerateQuestionRequest>;
+
 /** client → server `channel.join`. */
 export const ChannelJoin = z.object({
   slug: Slug,
@@ -126,7 +204,8 @@ export type ChannelJoin = z.infer<typeof ChannelJoin>;
 export const ChannelJoined = z.object({
   ok: z.literal(true),
   latestSequence: Sequence,
-  replay: z.array(ChatEvent),
+  /** Chat events on CHAT, question events on QUESTIONS. */
+  replay: z.array(z.union([ChatEvent, QuestionsEvent])),
 });
 export type ChannelJoined = z.infer<typeof ChannelJoined>;
 

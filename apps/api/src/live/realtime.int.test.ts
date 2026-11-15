@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 
 import type { NestExpressApplication } from "@nestjs/platform-express";
-import { ChannelJoined, Member } from "@opspilot/contracts";
+import { ChannelJoined, ChatEvent, Member } from "@opspilot/contracts";
 import request from "supertest";
 import { afterAll, beforeAll, describe, expect, inject, it } from "vitest";
 import { z } from "zod";
@@ -376,17 +376,16 @@ describe(
         const client = await connect(staffCookie(owner));
 
         const joined = ChannelJoined.parse(await client.join(event.slug, 1));
+        const replay = joined.replay.map((entry) => ChatEvent.parse(entry));
 
         expect(joined.latestSequence).toBe(4);
         expect(
-          joined.replay.map(
-            ({ sequence, kind, message: { body, deleted } }) => ({
-              sequence,
-              kind,
-              body,
-              deleted,
-            }),
-          ),
+          replay.map(({ sequence, kind, message: { body, deleted } }) => ({
+            sequence,
+            kind,
+            body,
+            deleted,
+          })),
         ).toEqual([
           { sequence: 2, kind: "MESSAGE_CREATED", body: "", deleted: true },
           {
@@ -397,7 +396,7 @@ describe(
           },
           { sequence: 4, kind: "MESSAGE_DELETED", body: "", deleted: true },
         ]);
-        expect(joined.replay[1]?.message.author).toEqual({
+        expect(replay[1]?.message.author).toEqual({
           kind: "ATTENDEE",
           name: "Ada Lovelace",
         });

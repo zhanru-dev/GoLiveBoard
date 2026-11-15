@@ -120,6 +120,7 @@ export {
 } from "./workspace.js";
 export { QuestionStatus, RealtimeChannel } from "./live.js";
 export {
+  AskQuestionRequest,
   ChannelJoin,
   ChannelJoinAck,
   ChannelJoined,
@@ -134,6 +135,12 @@ export {
   ChatSend,
   ChatSendAck,
   EventStatusChanged,
+  ModerateQuestionRequest,
+  Question,
+  QuestionBody,
+  QuestionList,
+  QuestionsEvent,
+  QuestionsEventKind,
   REALTIME_PATH,
   RealtimeErrorCode,
   RealtimeFailure,

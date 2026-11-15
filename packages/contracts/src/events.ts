@@ -81,6 +81,8 @@ export const EventDetail = EventSummary.extend({
    */
   allowedTransitions: z.array(EventStatus),
   expectedAttendance: z.int().nullable(),
+  /** FR-RN-4: new questions wait for a moderator before others see them. */
+  questionsPreModerated: z.boolean(),
   version: z.int().min(1),
   createdAt: Instant,
   updatedAt: Instant,
@@ -116,6 +118,7 @@ export const UpdateEventRequest = z
     timeZone: TimeZone,
     ownerUserId: z.uuid().nullable(),
     expectedAttendance: ExpectedAttendance.nullable(),
+    questionsPreModerated: z.boolean(),
   })
   .partial()
   .refine((body) => Object.keys(body).length > 0, {

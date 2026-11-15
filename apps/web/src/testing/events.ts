@@ -19,6 +19,7 @@ export function anEvent(changes: Partial<EventDetail> = {}): EventDetail {
     streamUrl: null,
     allowedTransitions: ["READY", "CANCELLED"],
     expectedAttendance: null,
+    questionsPreModerated: false,
     version: 3,
     createdAt: "2026-11-13T09:00:00.000Z",
     updatedAt: "2026-11-13T09:00:00.000Z",

@@ -15,6 +15,7 @@ export const EVENT_SELECT = {
   timeZone: true,
   ownerUserId: true,
   expectedAttendance: true,
+  questionsPreModerated: true,
   streamUrl: true,
   version: true,
   createdAt: true,
@@ -47,6 +48,7 @@ export function toEventDetail(row: EventRow): EventDetail {
     streamUrl: row.streamUrl,
     allowedTransitions: allowedTransitions(row.status),
     expectedAttendance: row.expectedAttendance,
+    questionsPreModerated: row.questionsPreModerated,
     version: row.version,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
@@ -63,5 +65,6 @@ export function editableFields(row: EventRow) {
     timeZone: row.timeZone,
     ownerUserId: row.ownerUserId,
     expectedAttendance: row.expectedAttendance,
+    questionsPreModerated: row.questionsPreModerated,
   };
 }

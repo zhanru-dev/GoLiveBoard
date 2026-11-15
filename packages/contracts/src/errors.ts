@@ -30,6 +30,11 @@ export const ErrorCode = z.enum([
   "PAYLOAD_TOO_LARGE",
   "UNSUPPORTED_MEDIA_TYPE",
   "PRECONDITION_REQUIRED",
+  "INTERACTION_CLOSED",
+  "QUESTION_STATUS_INVALID",
+  "QUESTION_NOT_PINNABLE",
+  "PIN_LIMIT_REACHED",
+  "QUESTION_NOT_VOTABLE",
   "RATE_LIMITED",
   "INTERNAL_ERROR",
   "SERVICE_UNAVAILABLE",
@@ -123,6 +128,26 @@ export const ERROR_DEFINITIONS = {
   PRECONDITION_REQUIRED: {
     status: 428,
     title: "The If-Match header is required",
+  },
+  INTERACTION_CLOSED: {
+    status: 409,
+    title: "The event takes no questions or votes now",
+  },
+  QUESTION_STATUS_INVALID: {
+    status: 409,
+    title: "The question cannot move to that status from its current one",
+  },
+  QUESTION_NOT_PINNABLE: {
+    status: 409,
+    title: "Only published or answered questions can be pinned",
+  },
+  PIN_LIMIT_REACHED: {
+    status: 409,
+    title: "Three questions are pinned already; unpin one first",
+  },
+  QUESTION_NOT_VOTABLE: {
+    status: 409,
+    title: "Only published questions take votes",
   },
   RATE_LIMITED: { status: 429, title: "Too many requests" },
   INTERNAL_ERROR: { status: 500, title: "Something went wrong on our side" },

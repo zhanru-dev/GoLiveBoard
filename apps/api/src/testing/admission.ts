@@ -107,6 +107,22 @@ export class PublicClient {
     return body === undefined ? call : call.send(body);
   }
 
+  put(path: string) {
+    return request(this.app.getHttpServer())
+      .put(`/api/v1${path}`)
+      .set("Origin", TEST_ORIGIN)
+      .set("X-Forwarded-For", this.address)
+      .set("Cookie", this.cookieHeader());
+  }
+
+  delete(path: string) {
+    return request(this.app.getHttpServer())
+      .delete(`/api/v1${path}`)
+      .set("Origin", TEST_ORIGIN)
+      .set("X-Forwarded-For", this.address)
+      .set("Cookie", this.cookieHeader());
+  }
+
   register(slug: string, body: object) {
     return this.post(`/public/events/${slug}/registrations`, body);
   }

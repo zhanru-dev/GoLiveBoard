@@ -90,6 +90,18 @@ export const RATE_LIMITS = {
     limit: 20,
     windowMs: MINUTE_MS,
   },
+  /** Questions from one author (FR-RN-4). */
+  questionsPerAuthor: {
+    name: "questions:author",
+    limit: 5,
+    windowMs: MINUTE_MS,
+  },
+  /** Votes and unvotes from one attendee. */
+  votesPerAttendee: {
+    name: "votes:attendee",
+    limit: 60,
+    windowMs: MINUTE_MS,
+  },
   /** "Check now" on one event's stream; checks already run every 30 s. */
   streamCheckPerEvent: {
     name: "stream-check:event",

@@ -1,16 +1,26 @@
 import { Injectable } from "@nestjs/common";
-import type { ChatEvent, RealtimeChannel } from "@opspilot/contracts";
+import type {
+  ChatEvent,
+  QuestionsEvent,
+  RealtimeChannel,
+} from "@opspilot/contracts";
 
 import { channelRoom } from "./rooms.js";
 
 /** What services send to an event's channel. */
 interface ChannelEvents {
   "chat.event": ChatEvent;
+  "questions.event": QuestionsEvent;
+}
+
+interface Broadcast {
+  except(rooms: string[]): Broadcast;
+  emit(name: string, payload: unknown): boolean;
 }
 
 /** The part of the Socket.IO server that sends to rooms. */
 export interface RoomEmitter {
-  to(room: string): { emit(name: string, payload: unknown): boolean };
+  to(room: string | string[]): Broadcast;
 }
 
 /**
@@ -34,5 +44,15 @@ export class Fanout {
   ): void {
     // Without a server (the worker) nobody is connected here to tell.
     this.server?.to(channelRoom(eventId, channel)).emit(name, payload);
+  }
+
+  /** Sends to some rooms, leaving out connections also in `except`. */
+  toRooms<K extends keyof ChannelEvents>(
+    rooms: string[],
+    except: string[],
+    name: K,
+    payload: ChannelEvents[K],
+  ): void {
+    this.server?.to(rooms).except(except).emit(name, payload);
   }
 }

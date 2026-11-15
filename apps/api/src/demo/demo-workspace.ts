@@ -33,6 +33,8 @@ export const DEMO_SESSION_LIMIT = 1_000;
  * limit this bounds what it stores between resets.
  */
 export const DEMO_CHAT_MESSAGE_LIMIT = 1_000;
+/** Questions per demo event; votes are bounded by questions × attendees. */
+export const DEMO_QUESTION_LIMIT = 300;
 
 /** Seeding, resetting and creating demo events take turns, in every process. */
 const DEMO_LOCK_KEY = "demo-workspace";
@@ -145,6 +147,22 @@ export async function demoHasRoomForChatMessage(
   }
   const messages = await tx.chatMessage.count({ where: { eventId } });
   return messages < DEMO_CHAT_MESSAGE_LIMIT;
+}
+
+/**
+ * Whether a demo event takes one more question; the caller holds the
+ * event's row lock, as for chat messages.
+ */
+export async function demoHasRoomForQuestion(
+  tx: Prisma.TransactionClient,
+  workspaceId: string,
+  eventId: string,
+): Promise<boolean> {
+  if (!isDemoWorkspace(workspaceId)) {
+    return true;
+  }
+  const questions = await tx.question.count({ where: { eventId } });
+  return questions < DEMO_QUESTION_LIMIT;
 }
 
 /**

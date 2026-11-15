@@ -6,6 +6,7 @@ import {
   type ChatEvent,
   type ChatSendAck,
   type EventStatusChanged,
+  type QuestionsEvent,
   REALTIME_PATH,
   type SessionRevoked,
 } from "@opspilot/contracts";
@@ -92,6 +93,11 @@ export class RealtimeClient {
       });
     });
     return new RealtimeClient(socket);
+  }
+
+  /** Calls `listener` with every `questions.event` from now on. */
+  onQuestions(listener: (event: QuestionsEvent) => void): void {
+    this.socket.on("questions.event", listener);
   }
 
   get connected(): boolean {
