@@ -625,6 +625,12 @@ model Question {
   pinSlot          Int?           @map("pin_slot") @db.SmallInt
   /// Set when AI triage merges it into another question (milestone 8).
   mergedIntoId     String?        @map("merged_into_id") @db.Uuid
+  /**
+   * When it was first published or answered, if ever. A change to a question
+   * that has never been public reaches others as a WITHDRAWN placeholder
+   * without its ID (they have nothing of it to remove).
+   */
+  firstPublishedAt DateTime?      @map("first_published_at") @db.Timestamptz(3)
   /// Kept equal to the number of votes in the same transaction as each vote.
   voteCount        Int            @default(0) @map("vote_count")
   version          Int            @default(1)
@@ -680,6 +686,21 @@ model RealtimeJournal {
 
   @@id([eventId, channel, sequence])
   @@map("realtime_journal")
+}
+
+/// A change to who may take part in live interaction, written in the
+/// transaction that makes it. Every API instance reads the recent ones every
+/// second and re-checks the connections they concern: a revocation ends live
+/// connections within seconds without depending on a message broker
+/// (FR-AD-4). Rows older than an hour are deleted.
+model AccessChange {
+  id        BigInt   @id @default(autoincrement())
+  /// `{ type: "recheck", scope, ids }` or `{ type: "status", eventId, slug, status }`.
+  change    Json
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@index([createdAt])
+  @@map("access_changes")
 }
 
 /// An attendee watched during this minute (heartbeats every 30 seconds):

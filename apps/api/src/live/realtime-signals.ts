@@ -1,30 +1,22 @@
-import { Inject, Injectable, Module } from "@nestjs/common";
+import { Injectable, Module } from "@nestjs/common";
 import { EventStatus } from "@opspilot/contracts";
-import type { Redis } from "ioredis";
-import { InjectPinoLogger, PinoLogger } from "nestjs-pino";
 import { z } from "zod";
 
-import { APP_CONFIG, type AppConfig } from "../config/app-config.js";
-import { VALKEY_CLIENT } from "../valkey/valkey.js";
-import { ValkeyModule } from "../valkey/valkey.module.js";
+import type { Prisma } from "../generated/prisma/client.js";
 import { RECHECK_SCOPES, type RecheckScope } from "./rooms.js";
 
-/** The Valkey channel every API instance's gateway listens on. */
-export const signalsChannel = (config: AppConfig) =>
-  `${config.realtime.channelPrefix}:realtime:signals`;
+/** At most this many IDs per row; more are written as several. */
+const IDS_PER_CHANGE = 500;
 
-/** At most this many IDs per message; more are sent in several. */
-const IDS_PER_SIGNAL = 500;
-
-export const RealtimeSignal = z.discriminatedUnion("type", [
+export const AccessChangeBody = z.discriminatedUnion("type", [
   /**
    * Something that decides access changed: every instance re-checks its
-   * connections in the scope now, and disconnects those no longer allowed.
+   * connections in the scope, and disconnects those no longer allowed.
    */
   z.object({
     type: z.literal("recheck"),
     scope: z.enum(RECHECK_SCOPES),
-    ids: z.array(z.uuid()).min(1).max(IDS_PER_SIGNAL),
+    ids: z.array(z.uuid()).min(1).max(IDS_PER_CHANGE),
   }),
   /** An event's status changed (and its connections are re-checked too). */
   z.object({
@@ -35,63 +27,54 @@ export const RealtimeSignal = z.discriminatedUnion("type", [
     status: EventStatus,
   }),
 ]);
-export type RealtimeSignal = z.infer<typeof RealtimeSignal>;
+export type AccessChangeBody = z.infer<typeof AccessChangeBody>;
 
 /**
- * Tells every API instance's real-time gateway, through Valkey, about
- * changes it must act on at once: a revocation ends live sessions within
- * seconds (FR-AD-4, docs/02, section 7.1), and a status change switches the
- * watch page (FR-RN-1). The API and the worker both send them.
+ * Records changes the real-time gateways must act on: a revocation ends live
+ * connections within seconds (FR-AD-4, docs/02, section 7.6), and a status
+ * change switches the watch page (FR-RN-1).
  *
- * Call it after the change has committed. It never throws: if Valkey cannot
- * take the message, the gateway's periodic sweep re-checks every connection
- * within half a minute anyway.
+ * Written in the transaction that makes the change, so it exists exactly
+ * when the change does, whatever fails afterwards. Every API instance reads
+ * the recent rows every second (RealtimeGateway); nothing depends on a
+ * message broker.
  */
 @Injectable()
 export class RealtimeSignals {
-  constructor(
-    @Inject(VALKEY_CLIENT) private readonly valkey: Redis,
-    @Inject(APP_CONFIG) private readonly config: AppConfig,
-    @InjectPinoLogger(RealtimeSignals.name) private readonly logger: PinoLogger,
-  ) {}
-
-  async recheck(scope: RecheckScope, ids: readonly string[]): Promise<void> {
+  async recheck(
+    tx: Prisma.TransactionClient,
+    scope: RecheckScope,
+    ids: readonly string[],
+  ): Promise<void> {
     const unique = [...new Set(ids)];
-    for (let start = 0; start < unique.length; start += IDS_PER_SIGNAL) {
-      await this.publish({
+    for (let start = 0; start < unique.length; start += IDS_PER_CHANGE) {
+      await record(tx, {
         type: "recheck",
         scope,
-        ids: unique.slice(start, start + IDS_PER_SIGNAL),
+        ids: unique.slice(start, start + IDS_PER_CHANGE),
       });
     }
   }
 
   async statusChanged(
+    tx: Prisma.TransactionClient,
     eventId: string,
     slug: string,
     status: EventStatus,
   ): Promise<void> {
-    await this.publish({ type: "status", eventId, slug, status });
+    await record(tx, { type: "status", eventId, slug, status });
   }
+}
 
-  private async publish(signal: RealtimeSignal): Promise<void> {
-    try {
-      await this.valkey.publish(
-        signalsChannel(this.config),
-        JSON.stringify(signal),
-      );
-    } catch (error) {
-      this.logger.warn(
-        { err: error, signal: signal.type },
-        "Could not send a real-time signal; the sweep will catch up",
-      );
-    }
-  }
+async function record(
+  tx: Prisma.TransactionClient,
+  change: AccessChangeBody,
+): Promise<void> {
+  await tx.accessChange.create({ data: { change } });
 }
 
 /** For every module that changes who may take part in an event. */
 @Module({
-  imports: [ValkeyModule],
   providers: [RealtimeSignals],
   exports: [RealtimeSignals],
 })

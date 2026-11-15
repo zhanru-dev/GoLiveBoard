@@ -43,6 +43,7 @@ import {
   QUESTION_SELECT,
   type QuestionRow,
   toQuestion,
+  withdrawn,
 } from "./question-view.js";
 import { authorRoom, channelRoom, moderatorsRoom } from "./rooms.js";
 
@@ -122,6 +123,10 @@ export class QuestionsService {
               event.questionsPreModerated,
               participant.moderator,
             ),
+            ...(initialQuestionStatus(
+              event.questionsPreModerated,
+              participant.moderator,
+            ) === "PUBLISHED" && { firstPublishedAt: this.clock.now() }),
             authorAttendeeId: participant.attendeeId,
             authorUserId:
               participant.attendeeId === undefined
@@ -280,6 +285,10 @@ export class QuestionsService {
         data: {
           status: plan.status,
           pinSlot: plan.pinSlot,
+          ...(current.firstPublishedAt === null &&
+            (plan.status === "PUBLISHED" || plan.status === "ANSWERED") && {
+              firstPublishedAt: this.clock.now(),
+            }),
           version: { increment: 1 },
           updatedAt: this.clock.now(),
         },
@@ -460,7 +469,6 @@ export class QuestionsService {
       this.fanout.toRooms([everyone], [], "questions.event", {
         sequence,
         kind: "WITHDRAWN",
-        questionId,
       });
       return;
     }
@@ -475,11 +483,12 @@ export class QuestionsService {
       ...(author === undefined ? [] : [authorRoom(eventId, author)]),
     ];
     this.fanout.toRooms(privileged, [], "questions.event", full);
-    this.fanout.toRooms([everyone], privileged, "questions.event", {
-      sequence,
-      kind: "WITHDRAWN",
-      questionId,
-    });
+    this.fanout.toRooms(
+      [everyone],
+      privileged,
+      "questions.event",
+      withdrawn(sequence, row),
+    );
   }
 }
 

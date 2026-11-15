@@ -101,6 +101,22 @@ async function say(page: Page, text: string) {
   await page.getByRole("button", { name: "Send" }).click();
 }
 
+/**
+ * Says something and waits until the server has stored it (the sender's
+ * log shows it, no longer "Sending…"): the next message is then stored
+ * after it. Without the wait, messages sent quickly can be stored in
+ * another order than they were typed.
+ */
+async function sayStored(page: Page, text: string) {
+  await say(page, text);
+  await expect(
+    chatLog(page)
+      .getByRole("listitem")
+      .filter({ hasText: text })
+      .filter({ hasNotText: "Sending" }),
+  ).toBeVisible();
+}
+
 /** The texts of the chat's stored messages, in order. */
 async function chatTexts(page: Page): Promise<string[]> {
   const items = await chatLog(page).getByRole("listitem").allInnerTexts();
@@ -151,13 +167,13 @@ test("a dropped connection loses and duplicates no chat message (FR-RN-2)", asyn
   await openWatchPage(ada.page, event);
   await openWatchPage(grace.page, event);
 
-  await say(grace.page, "Before the outage");
+  await sayStored(grace.page, "Before the outage");
   await expect(chatLog(ada.page)).toContainText("Before the outage");
 
   // The network fails: the server's messages no longer reach Ada.
   link.cut = true;
   for (const text of ["During 1", "During 2", "During 3"]) {
-    await say(grace.page, text);
+    await sayStored(grace.page, text);
   }
   // Ada writes too: her message reaches the server, its answer does not.
   await say(ada.page, "Ada during the outage");
@@ -168,27 +184,31 @@ test("a dropped connection loses and duplicates no chat message (FR-RN-2)", asyn
   link.cut = false;
   await link.drop();
   await expect.poll(() => link.connections).toBeGreaterThan(1);
-  await say(grace.page, "After the outage");
+  await sayStored(grace.page, "After the outage");
 
-  const expected = [
-    "Before the outage",
-    "During 1",
-    "During 2",
-    "During 3",
-    "Ada during the outage",
-    "After the outage",
-  ];
-  await expect
-    .poll(() => chatTexts(ada.page), { timeout: 15_000 })
-    .toEqual(expected);
-  await expect.poll(() => chatTexts(grace.page)).toEqual(expected);
-  await expect(chatLog(ada.page)).not.toContainText("Sending");
-  // Stored once each, whatever was retried.
+  // What the server stored, in its order (by sequence): each message once,
+  // whatever was retried.
   const history = await page.request.get(
     `/api/v1/events/${event.id}/chat/messages`,
   );
   const { items } = (await history.json()) as { items: { body: string }[] };
-  expect(items.map(({ body }) => body)).toEqual(expected);
+  const stored = items.map(({ body }) => body);
+  expect([...stored].sort()).toEqual(
+    [
+      "Before the outage",
+      "During 1",
+      "During 2",
+      "During 3",
+      "Ada during the outage",
+      "After the outage",
+    ].sort(),
+  );
+  // Both pages show exactly that, in that order: nothing lost, nothing twice.
+  await expect
+    .poll(() => chatTexts(ada.page), { timeout: 15_000 })
+    .toEqual(stored);
+  await expect.poll(() => chatTexts(grace.page)).toEqual(stored);
+  await expect(chatLog(ada.page)).not.toContainText("Sending");
 
   await ada.context.close();
   await grace.context.close();

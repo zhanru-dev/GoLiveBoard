@@ -323,6 +323,66 @@ describe("live chat (FR-RN-2, FR-RN-3)", { timeout: 30_000 }, () => {
       },
     );
 
+    it("refuses a message for an event the sender does not take part in", async () => {
+      const { event } = await setUp();
+      const stranger = await api().newOwner("stranger");
+      const other = await setUp();
+      const otherVisitor = await attendee(other.event.slug);
+
+      for (const cookie of [staffCookie(stranger), otherVisitor.cookie]) {
+        await expect(
+          (await connect(cookie)).send(event.slug, "Not mine"),
+        ).resolves.toEqual({ ok: false, error: "NOT_FOUND" });
+      }
+      expect(await storedMessages(event.id)).toEqual([]);
+    });
+
+    it("drops a connection that sends more than 16 KiB at once", async () => {
+      const { owner, event } = await setUp();
+      const staff = await connect(staffCookie(owner));
+
+      void staff.send(event.slug, "x".repeat(20 * 1024)).catch(() => undefined);
+
+      await staff.untilDisconnected(2_000);
+      expect(await storedMessages(event.id)).toEqual([]);
+    });
+
+    it("gives messages that wait for the event together consecutive sequences", async () => {
+      const { event } = await setUp();
+      const senders = [];
+      for (let index = 0; index < 8; index += 1) {
+        senders.push(
+          await connect(
+            (await attendee(event.slug)).cookie,
+            index % 2 === 0 ? url : secondUrl,
+          ),
+        );
+      }
+      const block = await holdLock(
+        database.url,
+        "SELECT id FROM events WHERE id = $1 FOR NO KEY UPDATE",
+        [event.id],
+      );
+      let acks: ChatSendAck[];
+      try {
+        const sending = Promise.all(
+          senders.map((sender, index) =>
+            sender.send(event.slug, `Together ${String(index)}`),
+          ),
+        );
+        await block.waitForWaiters(8);
+        await block.release();
+        acks = await sending;
+      } catch (error) {
+        await block.release().catch(() => undefined);
+        throw error;
+      }
+
+      expect(
+        acks.map((ack) => sentMessage(ack).sequence).sort((a, b) => a - b),
+      ).toEqual([1, 2, 3, 4, 5, 6, 7, 8]);
+    });
+
     it("lets Analysts read but not write", async () => {
       const { api: client, owner, event } = await setUp();
       const analyst = await memberOf(client, mailer, owner, "ANALYST");

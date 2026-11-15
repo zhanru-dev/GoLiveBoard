@@ -124,13 +124,13 @@ export class DemoSeeder {
         await this.writeEvents(tx);
         const eventIds = deleted.map(({ id }) => id);
         await this.recordFilePurges(eventIds, tx);
+        // Everyone connected to the demo's old events is disconnected:
+        // those events, and their attendees' sessions, are gone.
+        await this.signals.recheck(tx, "workspace", [DEMO_WORKSPACE.id]);
         return eventIds;
       },
       { timeout: TRANSACTION_TIMEOUT_MS },
     );
-    // Everyone connected to the demo's old events is disconnected: those
-    // events, and their attendees' sessions, are gone.
-    await this.signals.recheck("workspace", [DEMO_WORKSPACE.id]);
     for (const prefix of deletedEventIds.flatMap(filePrefixesOf)) {
       await this.removeAllQuietly(prefix);
     }

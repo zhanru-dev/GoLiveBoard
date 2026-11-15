@@ -100,6 +100,17 @@ export class RealtimeClient {
     this.socket.on("questions.event", listener);
   }
 
+  /**
+   * The statuses received, each once in a row: the server says the current
+   * status whenever it may have changed, so it can repeat itself.
+   */
+  get statusChanges(): EventStatusChanged[] {
+    return this.statuses.filter(
+      (status, index) =>
+        index === 0 || status.status !== this.statuses[index - 1]?.status,
+    );
+  }
+
   get connected(): boolean {
     return this.socket.connected;
   }

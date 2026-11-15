@@ -17,6 +17,8 @@ import {
 import { QuestionsService } from "./questions.service.js";
 import { RealtimeGateway } from "./realtime.gateway.js";
 import { RealtimeSignalsModule } from "./realtime-signals.js";
+import { ValkeyModule } from "../valkey/valkey.module.js";
+import { ConnectionSlots } from "./connection-slots.js";
 import { WatchController } from "./watch.controller.js";
 import { WatchService } from "./watch.service.js";
 
@@ -29,6 +31,7 @@ import { WatchService } from "./watch.service.js";
     DatabaseModule,
     RateLimitModule,
     RealtimeSignalsModule,
+    ValkeyModule,
   ],
   controllers: [
     ChatController,
@@ -44,6 +47,7 @@ import { WatchService } from "./watch.service.js";
     QuestionsService,
     Idempotency,
     WatchService,
+    ConnectionSlots,
   ],
   exports: [RealtimeGateway],
 })

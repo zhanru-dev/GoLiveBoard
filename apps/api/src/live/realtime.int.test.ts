@@ -31,6 +31,10 @@ import { memberOf, prepareForLaunch } from "../testing/events.js";
 import { CapturingMailer } from "../testing/fakes.js";
 import { listen, RealtimeClient } from "../testing/realtime.js";
 import {
+  type SilentServer,
+  startSilentServer,
+} from "../testing/silent-server.js";
+import {
   createTestApp,
   createTestWorker,
   TEST_ORIGIN,
@@ -40,7 +44,6 @@ import { DEMO_PEOPLE, DEMO_WORKSPACE } from "../demo/demo-accounts.js";
 import { DemoSeeder } from "../demo/demo-seeder.js";
 import { DEMO_SESSION_LIMIT } from "../demo/demo-workspace.js";
 import { Participants } from "./participants.js";
-import { RealtimeSignals } from "./realtime-signals.js";
 import {
   CONNECTIONS_PER_SESSION,
   MESSAGES_PER_WINDOW,
@@ -307,6 +310,53 @@ describe(
         ).resolves.toEqual({ ok: false, error: "NOT_FOUND" });
       });
 
+      it("leaves nothing of a refused join behind, also beside a channel it follows", async () => {
+        const { api: client, owner, event } = await setUp();
+        const visitor = await attendee(event.slug);
+        const live = await watching(visitor.cookie, event.slug);
+        const heard: unknown[] = [];
+        live.onQuestions((questionsEvent) => heard.push(questionsEvent));
+        // No longer admitted, and nothing has told the gateway yet.
+        await database.query(
+          "UPDATE attendees SET status = 'REVOKED', revoked_at = now() WHERE id = $1",
+          [visitor.id],
+        );
+
+        await expect(live.join(event.slug, 0, "QUESTIONS")).resolves.toEqual({
+          ok: false,
+          error: "FORBIDDEN",
+        });
+        await client.send(owner, "post", `/events/${event.id}/questions`, {
+          body: "Who hears this?",
+        });
+
+        await new Promise((resolve) => setTimeout(resolve, 1_000));
+        expect(heard).toEqual([]);
+      });
+
+      it("stops sending a channel's events once the client leaves it", async () => {
+        const { api: client, owner, event } = await setUp();
+        const staff = await connect(staffCookie(owner));
+        const heard: unknown[] = [];
+        staff.onQuestions((questionsEvent) => heard.push(questionsEvent));
+        expect(await staff.join(event.slug, 0, "QUESTIONS")).toMatchObject({
+          ok: true,
+        });
+
+        await expect(
+          staff.emit("channel.leave", {
+            slug: event.slug,
+            channel: "QUESTIONS",
+          }),
+        ).resolves.toEqual({ ok: true });
+        await client.send(owner, "post", `/events/${event.id}/questions`, {
+          body: "Anyone?",
+        });
+
+        await new Promise((resolve) => setTimeout(resolve, 1_000));
+        expect(heard).toEqual([]);
+      });
+
       it("refuses a malformed join", async () => {
         const { owner } = await setUp();
         const client = await connect(staffCookie(owner));
@@ -522,9 +572,33 @@ describe(
         });
 
         await expectEnded(live, "ACCESS_REVOKED");
-        expect(live.statuses).toEqual([
+        expect(live.statusChanges).toEqual([
           { slug: event.slug, status: "CANCELLED" },
         ]);
+      });
+
+      it("when a re-check finds the event closed before its status change is read, telling them first", async () => {
+        const { event } = await setUp();
+        const visitor = await attendee(event.slug);
+        const live = await watching(visitor.cookie, event.slug);
+
+        // Let every earlier access change be read (one read a second)...
+        await new Promise((resolve) => setTimeout(resolve, 2_500));
+        // ...then the status changes, and only a re-check is recorded.
+        await database.query(
+          "UPDATE events SET status = 'CANCELLED' WHERE id = $1",
+          [event.id],
+        );
+        await database.query(
+          "INSERT INTO access_changes (change) VALUES ($1)",
+          [{ type: "recheck", scope: "event", ids: [event.id] }],
+        );
+
+        await expectEnded(live, "ACCESS_REVOKED");
+        expect(live.statusChanges.at(-1)).toEqual({
+          slug: event.slug,
+          status: "CANCELLED",
+        });
       });
 
       it("when they sign out of this browser", async () => {
@@ -727,11 +801,14 @@ describe(
       }
 
       await expect
-        .poll(() => live.statuses, { timeout: REVOCATION_MS })
-        .toEqual([
-          { slug: event.slug, status: "UPCOMING" },
-          { slug: event.slug, status: "LIVE" },
-        ]);
+        .poll(() => live.statusChanges.at(-1), { timeout: REVOCATION_MS })
+        .toEqual({ slug: event.slug, status: "LIVE" });
+      // Only the current status is ever announced (READY is UPCOMING).
+      expect(
+        live.statusChanges.every(({ status }) =>
+          ["UPCOMING", "LIVE"].includes(status),
+        ),
+      ).toBe(true);
       expect(live.connected).toBe(true);
     });
 
@@ -762,6 +839,50 @@ describe(
         await expectEnded(live, "SIGNED_OUT");
       });
 
+      it("takes exactly the limit of many handshakes made at the same moment on both instances", async () => {
+        const { owner } = await setUp();
+        const attempts = Array.from({ length: 30 }, (_, index) =>
+          RealtimeClient.connect(index % 2 === 0 ? url : secondUrl, {
+            cookie: staffCookie(owner),
+            ip: newAddress(),
+          }).then(
+            (client) => {
+              clients.push(client);
+              return true;
+            },
+            () => false,
+          ),
+        );
+
+        const accepted = (await Promise.all(attempts)).filter(Boolean);
+
+        expect(accepted).toHaveLength(CONNECTIONS_PER_SESSION);
+      });
+
+      it("gives a closed connection's slot back", async () => {
+        const { owner } = await setUp();
+        const open = [];
+        for (let tab = 0; tab < CONNECTIONS_PER_SESSION; tab += 1) {
+          open.push(
+            await connect(staffCookie(owner), {
+              at: tab % 2 === 0 ? url : secondUrl,
+            }),
+          );
+        }
+        open[0]?.close();
+
+        await expect
+          .poll(async () => {
+            try {
+              (await connect(staffCookie(owner))).close();
+              return true;
+            } catch {
+              return false;
+            }
+          })
+          .toBe(true);
+      });
+
       it("counts a session's connections on every instance", async () => {
         const { owner } = await setUp();
         for (let tab = 0; tab < CONNECTIONS_PER_SESSION; tab += 1) {
@@ -789,6 +910,65 @@ describe(
       await new Promise((resolve) => setTimeout(resolve, 500));
       expect(staying.connected).toBe(true);
       expect(await staying.join(event.slug)).toMatchObject({ ok: true });
+    });
+
+    describe("with Valkey frozen (accepting connections, answering nothing)", () => {
+      let frozen: NestExpressApplication;
+      let frozenUrl: string;
+      let silent: SilentServer;
+
+      beforeAll(async () => {
+        silent = await startSilentServer();
+        frozen = await createTestApp({
+          env: {
+            ...env(),
+            VALKEY_URL: silent.url.replace("http:", "redis:"),
+          },
+          mailer,
+        });
+        frozenUrl = await listen(frozen);
+      });
+
+      afterAll(async () => {
+        await frozen.close();
+        await silent.close();
+      });
+
+      it("keeps a session's connections to the limit on this instance when Valkey cannot count", async () => {
+        const { owner } = await setUp();
+        const attempts = Array.from({ length: 15 }, () =>
+          RealtimeClient.connect(frozenUrl, {
+            cookie: staffCookie(owner),
+            ip: newAddress(),
+          }).then(
+            (client) => {
+              clients.push(client);
+              return true;
+            },
+            () => false,
+          ),
+        );
+
+        const accepted = (await Promise.all(attempts)).filter(Boolean);
+
+        expect(accepted).toHaveLength(CONNECTIONS_PER_SESSION);
+      });
+
+      it("still ends a revoked attendee's connection within seconds (FR-AD-4)", async () => {
+        const { api: client, owner, event } = await setUp();
+        const visitor = await attendee(event.slug);
+        const live = await watching(visitor.cookie, event.slug, frozenUrl);
+
+        // Revoked through the other instance: nothing reaches this one but
+        // the database.
+        await client.send(
+          owner,
+          "post",
+          `/events/${event.id}/attendees/${visitor.id}/revoke`,
+        );
+
+        await expectEnded(live, "SIGNED_OUT");
+      });
     });
 
     describe("the sweep, when no signal comes", () => {
@@ -893,7 +1073,7 @@ describe(
 
         try {
           await expect
-            .poll(() => live.statuses, { timeout: REVOCATION_MS })
+            .poll(() => live.statusChanges, { timeout: REVOCATION_MS })
             .toEqual([{ slug: event.slug, status: "CANCELLED" }]);
         } finally {
           join.release();
@@ -917,9 +1097,18 @@ describe(
         await join.reached;
         const recheck = joinGate.arm();
 
-        await raced
-          .get(RealtimeSignals)
-          .recheck("user", [(await client.me(owner)).user.id]);
+        // An access change that concerns this connection, as a role change
+        // writes one.
+        await database.query(
+          "INSERT INTO access_changes (change) VALUES ($1)",
+          [
+            {
+              type: "recheck",
+              scope: "user",
+              ids: [(await client.me(owner)).user.id],
+            },
+          ],
+        );
         await recheck.reached;
         await releaseAndSettle(recheck.release);
         join.release();

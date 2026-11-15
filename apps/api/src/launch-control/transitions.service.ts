@@ -54,7 +54,7 @@ export class TransitionsService {
     eventId: string,
     to: EventStatus,
   ): Promise<EventDetail> {
-    const detail = await this.prisma.$transaction(async (tx) => {
+    return this.prisma.$transaction(async (tx) => {
       const event = await lockEvent(tx, actor.workspaceId, eventId);
       if (event === undefined) {
         throw new DomainError("NOT_FOUND");
@@ -104,12 +104,12 @@ export class TransitionsService {
         type: "event.transitioned",
         payload,
       });
-      return this.events.getWith(tx, actor, eventId);
+      const detail = await this.events.getWith(tx, actor, eventId);
+      // The watch page switches to the stream (FR-RN-1); a cancelled or
+      // archived event ends its live connections.
+      await this.signals.statusChanged(tx, eventId, detail.slug, to);
+      return detail;
     });
-    // The watch page switches to the stream (FR-RN-1); a cancelled or
-    // archived event ends its live connections.
-    await this.signals.statusChanged(eventId, detail.slug, to);
-    return detail;
   }
 
   private async assertNoHardBlockers(

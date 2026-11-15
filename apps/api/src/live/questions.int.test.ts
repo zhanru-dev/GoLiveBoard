@@ -239,6 +239,74 @@ describe("Q&A (FR-RN-4, FR-RN-5)", { timeout: 30_000 }, () => {
       expect(rows).toHaveLength(1);
     });
 
+    it("stores one question when two retries with the same key wait for the event together", async () => {
+      const { event } = await setUp();
+      const visitor = await attendee(event.slug);
+      const key = randomUUID();
+      const block = await holdLock(
+        database.url,
+        "SELECT id FROM events WHERE id = $1 FOR NO KEY UPDATE",
+        [event.id],
+      );
+      let responses: { status: number; body: unknown }[];
+      try {
+        const asking = Promise.all([
+          Promise.resolve(ask(visitor.browser, event.slug, "Once?", key)),
+          Promise.resolve(ask(visitor.browser, event.slug, "Once?", key)),
+        ]);
+        await block.waitForWaiters(2);
+        await block.release();
+        responses = await asking;
+      } catch (error) {
+        await block.release().catch(() => undefined);
+        throw error;
+      }
+
+      expect(responses.map(({ status }) => status)).toEqual([201, 201]);
+      expect(responses[1]?.body).toEqual(responses[0]?.body);
+      const rows = await database.query(
+        "SELECT 1 FROM questions WHERE event_id = $1",
+        [event.id],
+      );
+      expect(rows).toHaveLength(1);
+    });
+
+    it("is for the event's workspace and its admitted attendees only", async () => {
+      const { event } = await setUp();
+      const stranger = await api().newOwner("stranger");
+      const other = await setUp();
+      const otherVisitor = await attendee(other.event.slug);
+      const otherQuestion = await asked(otherVisitor.browser, other.event.slug);
+      const visitor = await attendee(event.slug);
+
+      expect(
+        (
+          await api().send(stranger, "post", `/events/${event.id}/questions`, {
+            body: "Not mine",
+          })
+        ).status,
+      ).toBe(404);
+      expect(
+        (await ask(otherVisitor.browser, event.slug, "Not mine")).status,
+      ).toBe(404);
+      expect(
+        (
+          await otherVisitor.browser.get(
+            `/public/events/${event.slug}/questions`,
+          )
+        ).status,
+      ).toBe(404);
+      // A question of another event, through this event's route.
+      expect(
+        (await vote(visitor.browser, event.slug, otherQuestion.id)).status,
+      ).toBe(404);
+      const rows = await database.query(
+        "SELECT 1 FROM questions WHERE event_id = $1",
+        [event.id],
+      );
+      expect(rows).toEqual([]);
+    });
+
     it("lets Managers ask, but not Analysts", async () => {
       const { api: client, owner, event } = await setUp();
       const analyst = await memberOf(client, mailer, owner, "ANALYST");
@@ -349,7 +417,8 @@ describe("Q&A (FR-RN-4, FR-RN-5)", { timeout: 30_000 }, () => {
       }
       await expect
         .poll(() => otherLive.received, { timeout: DELIVERY_MS })
-        .toEqual([{ sequence: 1, kind: "WITHDRAWN", questionId: question.id }]);
+        // Never public: not even its ID reaches them.
+        .toEqual([{ sequence: 1, kind: "WITHDRAWN" }]);
       expect((await list(other.browser, event.slug)).items).toEqual([]);
       expect((await list(author.browser, event.slug)).items).toHaveLength(1);
       const staffList = QuestionList.parse(
@@ -370,6 +439,14 @@ describe("Q&A (FR-RN-4, FR-RN-5)", { timeout: 30_000 }, () => {
           question: { id: question.id, status: "PUBLISHED" },
         });
       expect((await list(other.browser, event.slug)).items).toHaveLength(1);
+
+      // Public once, so hiding it now names it: others must drop it.
+      await moderate(client, owner, Question.parse(approved.body), {
+        status: "HIDDEN",
+      });
+      await expect
+        .poll(() => otherLive.received.at(-1), { timeout: DELIVERY_MS })
+        .toEqual({ sequence: 3, kind: "WITHDRAWN", questionId: question.id });
     });
 
     it("publishes a moderator's own question at once", async () => {
@@ -409,10 +486,10 @@ describe("Q&A (FR-RN-4, FR-RN-5)", { timeout: 30_000 }, () => {
           const event = QuestionsEvent.parse(entry);
           return "question" in event
             ? `${String(event.sequence)} ${event.question.id}`
-            : `${String(event.sequence)} withdrawn ${event.questionId}`;
+            : `${String(event.sequence)} withdrawn ${event.questionId ?? "-"}`;
         });
       expect(seen(other.joined.replay)).toEqual([
-        `1 withdrawn ${pending.id}`,
+        "1 withdrawn -",
         `2 ${publishedId}`,
       ]);
       for (const privileged of [moderator, own]) {

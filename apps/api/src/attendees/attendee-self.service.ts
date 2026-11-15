@@ -34,10 +34,12 @@ export class AttendeeSelfService {
 
   /** Signs this browser out: the session stops working at once. */
   async signOut(attendee: AttendeeActor): Promise<void> {
-    await this.prisma.attendeeSession.deleteMany({
-      where: { id: attendee.sessionId },
+    await this.prisma.$transaction(async (tx) => {
+      await tx.attendeeSession.deleteMany({
+        where: { id: attendee.sessionId },
+      });
+      await this.signals.recheck(tx, "attendee-session", [attendee.sessionId]);
     });
-    await this.signals.recheck("attendee-session", [attendee.sessionId]);
   }
 
   /**

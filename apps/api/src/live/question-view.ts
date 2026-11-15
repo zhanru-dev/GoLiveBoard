@@ -16,6 +16,7 @@ export const QUESTION_SELECT = {
   voteCount: true,
   version: true,
   createdAt: true,
+  firstPublishedAt: true,
   authorAttendeeId: true,
   authorUserId: true,
   authorAttendee: { select: { name: true } },
@@ -59,6 +60,19 @@ export function isPublic(row: Pick<QuestionRow, "status">): boolean {
   return row.status === "PUBLISHED" || row.status === "ANSWERED";
 }
 
+/**
+ * The placeholder for a change the viewer may not see: with the question's
+ * ID only if it was ever public (the viewer may hold it and must drop it).
+ */
+export function withdrawn(
+  sequence: number,
+  row: Pick<QuestionRow, "id" | "firstPublishedAt">,
+): QuestionsEvent {
+  return row.firstPublishedAt === null
+    ? { sequence, kind: "WITHDRAWN" }
+    : { sequence, kind: "WITHDRAWN", questionId: row.id };
+}
+
 /** The event one viewer receives for a journal entry. */
 export function questionsEventFor(
   viewer: QuestionViewer,
@@ -67,7 +81,7 @@ export function questionsEventFor(
   row: QuestionRow,
 ): QuestionsEvent {
   if (!isQuestionVisibleTo(row, viewer)) {
-    return { sequence, kind: "WITHDRAWN", questionId: row.id };
+    return withdrawn(sequence, row);
   }
   return {
     sequence,

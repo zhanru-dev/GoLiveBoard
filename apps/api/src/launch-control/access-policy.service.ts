@@ -66,7 +66,7 @@ export class AccessPolicyService {
     ifMatch: string | undefined,
     input: PutAccessPolicyRequest,
   ): Promise<AccessPolicy> {
-    const policy = await this.prisma.$transaction(async (tx) => {
+    return this.prisma.$transaction(async (tx) => {
       await lockWritableEvent(tx, actor.workspaceId, eventId);
       const current = await tx.accessPolicy.findUnique({
         where: { eventId },
@@ -84,6 +84,7 @@ export class AccessPolicyService {
           select: POLICY_SELECT,
         });
         await this.audit(tx, actor, eventId, undefined, input);
+        await this.signals.recheck(tx, "event", [eventId]);
         return toAccessPolicy(created);
       }
       if (versionFromIfMatch(ifMatch) !== current.version) {
@@ -95,11 +96,10 @@ export class AccessPolicyService {
         select: POLICY_SELECT,
       });
       await this.audit(tx, actor, eventId, current, input);
+      // A stricter policy ends the live connections it no longer admits.
+      await this.signals.recheck(tx, "event", [eventId]);
       return toAccessPolicy(updated);
     });
-    // A stricter policy ends the live connections it no longer admits.
-    await this.signals.recheck("event", [eventId]);
-    return policy;
   }
 
   private async audit(

@@ -105,7 +105,7 @@ export async function questionsReplay(
     const row = byId.get(entry.entityId);
     const sequence = Number(entry.sequence);
     return row === undefined
-      ? { sequence, kind: "WITHDRAWN", questionId: entry.entityId }
+      ? { sequence, kind: "WITHDRAWN" }
       : questionsEventFor(viewer, sequence, entry.kind, row);
   });
 }

@@ -111,7 +111,7 @@ export class AudienceService {
     eventId: string,
     attendeeId: string,
   ): Promise<StaffAttendee> {
-    const revoked = await this.prisma.$transaction(async (tx) => {
+    return this.prisma.$transaction(async (tx) => {
       await lockWritableEvent(tx, actor.workspaceId, eventId);
       await this.lockAttendee(tx, eventId, attendeeId);
       if (await revokeAttendee(tx, attendeeId, this.clock.now())) {
@@ -121,12 +121,11 @@ export class AudienceService {
           targetId: attendeeId,
           eventId,
         });
+        // Their live connections end too, within seconds (FR-AD-4).
+        await this.signals.recheck(tx, "attendee", [attendeeId]);
       }
       return toStaffAttendee(await this.read(tx, attendeeId), actor);
     });
-    // Their live connections end too, within seconds (FR-AD-4).
-    await this.signals.recheck("attendee", [attendeeId]);
-    return revoked;
   }
 
   /**
@@ -141,7 +140,7 @@ export class AudienceService {
     eventId: string,
     attendeeId: string,
   ): Promise<StaffAttendee> {
-    const erased = await this.prisma.$transaction(async (tx) => {
+    return this.prisma.$transaction(async (tx) => {
       const event = await lockEvent(tx, actor.workspaceId, eventId);
       if (event === undefined) {
         throw new DomainError("NOT_FOUND");
@@ -155,11 +154,10 @@ export class AudienceService {
           targetId: attendeeId,
           eventId,
         });
+        await this.signals.recheck(tx, "attendee", [attendeeId]);
       }
       return toStaffAttendee(await this.read(tx, attendeeId), actor);
     });
-    await this.signals.recheck("attendee", [attendeeId]);
-    return erased;
   }
 
   /** The event's live invitations, newest first. */
@@ -280,9 +278,9 @@ export class AudienceService {
           targetId: attendee.id,
           eventId: found.eventId,
         });
+        await this.signals.recheck(tx, "attendee", [attendee.id]);
       }
     });
-    await this.signals.recheck("event", [found.eventId]);
   }
 
   private async lockAttendee(

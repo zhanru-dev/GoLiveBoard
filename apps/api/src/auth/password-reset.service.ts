@@ -84,7 +84,7 @@ export class PasswordResetService {
   async confirm(input: PasswordResetConfirmRequest): Promise<void> {
     const now = this.clock.now();
     const passwordHash = await this.passwords.hash(input.password);
-    const userId = await this.prisma.$transaction(async (tx) => {
+    await this.prisma.$transaction(async (tx) => {
       const tokenHash = hashToken(input.token);
       const { count } = await tx.passwordResetToken.updateMany({
         where: { tokenHash, usedAt: null, expiresAt: { gt: now } },
@@ -107,8 +107,7 @@ export class PasswordResetService {
         where: { userId, revokedAt: null },
         data: { revokedAt: now },
       });
-      return userId;
+      await this.signals.recheck(tx, "user", [userId]);
     });
-    await this.signals.recheck("user", [userId]);
   }
 }

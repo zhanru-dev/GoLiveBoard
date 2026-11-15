@@ -14,7 +14,6 @@ import {
   type ChatEvent,
   type ChatSendAck,
   type QuestionsEvent,
-  type EventStatus,
   type EventStatusChanged,
   REALTIME_PATH,
   type RealtimeChannel,
@@ -39,6 +38,7 @@ import { ROOT_LOGGER } from "../observability/logger.js";
 import { RATE_LIMITS, RateLimiter } from "../rate-limit/rate-limiter.js";
 import { ChatService } from "./chat.service.js";
 import { clientIp } from "./client-ip.js";
+import { ConnectionSlots, SLOT_REFRESH_MS } from "./connection-slots.js";
 import { Fanout } from "./fanout.js";
 import { WatchService } from "./watch.service.js";
 import { replayPlan } from "./domain/replay.js";
@@ -51,7 +51,7 @@ import {
   Participants,
 } from "./participants.js";
 import { authorKey, viewerOf } from "./questions.service.js";
-import { RealtimeSignal, signalsChannel } from "./realtime-signals.js";
+import { AccessChangeBody } from "./realtime-signals.js";
 import {
   authorRoom,
   channelRoom,
@@ -65,6 +65,16 @@ export const MESSAGES_PER_WINDOW = 30;
 export const MESSAGE_WINDOW_MS = 10_000;
 /** Open connections per session, across every instance (browser tabs). */
 export const CONNECTIONS_PER_SESSION = 10;
+/**
+ * How often each instance reads the access changes committed since: the
+ * bound on FR-AD-4's "within 5 seconds", with the re-checks it causes.
+ */
+export const POLL_MS = 1_000;
+/** How far back each read looks: longer than any transaction runs. */
+const LOOKBACK_MS = 120_000;
+/** Access changes are kept this long, then deleted. */
+const KEEP_MS = 60 * 60_000;
+const CLEANUP_EVERY_POLLS = 300;
 /** Connections re-checked at the same time. */
 const RECHECK_CONCURRENCY = 16;
 /** The largest message a client may send. */
@@ -83,6 +93,8 @@ interface JoinedEvent {
 
 /** What the gateway keeps about each connection. */
 export interface ConnectionState {
+  /** The session slots this connection holds (ConnectionSlots). */
+  readonly slots: readonly string[];
   identity: Identity;
   /** Correlates this connection's log lines, like a request ID. */
   readonly connectionId: string;
@@ -163,6 +175,14 @@ export class RealtimeGateway
   private io?: RealtimeServer;
   private readonly connections: Redis[] = [];
   private sweepTimer?: NodeJS.Timeout;
+  private pollTimer?: NodeJS.Timeout;
+  private polling = false;
+  private polls = 0;
+  /** This instance's connections, by session room. */
+  private readonly localSlots = new Map<string, Set<string>>();
+  private slotTimer?: NodeJS.Timeout;
+  /** Access changes acted on, by ID, with when. */
+  private readonly seen = new Map<string, number>();
   private readonly logger: Logger;
 
   constructor(
@@ -176,6 +196,7 @@ export class RealtimeGateway
     private readonly chat: ChatService,
     private readonly fanout: Fanout,
     private readonly watch: WatchService,
+    private readonly slots: ConnectionSlots,
   ) {
     this.logger = rootLogger.child({ context: RealtimeGateway.name });
   }
@@ -212,7 +233,18 @@ export class RealtimeGateway
     });
     this.io = io;
     this.fanout.attach(io);
-    this.listenForSignals();
+    this.pollTimer = setInterval(() => {
+      void this.poll();
+    }, POLL_MS);
+    this.pollTimer.unref();
+    this.slotTimer = setInterval(() => {
+      void this.slots.refresh(
+        [...this.localSlots].flatMap(([room, connections]) =>
+          [...connections].map((connection) => [room, connection] as const),
+        ),
+      );
+    }, SLOT_REFRESH_MS);
+    this.slotTimer.unref();
     this.sweepTimer = setInterval(() => {
       void this.sweep();
     }, this.config.realtime.sweepMs);
@@ -226,6 +258,8 @@ export class RealtimeGateway
    */
   beforeApplicationShutdown(): void {
     clearInterval(this.sweepTimer);
+    clearInterval(this.pollTimer);
+    clearInterval(this.slotTimer);
     if (this.io !== undefined) {
       // This instance's clients only: through the adapter, a plain
       // disconnectSockets reaches every instance's.
@@ -278,12 +312,18 @@ export class RealtimeGateway
         ? []
         : [scopeRoom("attendee-session", attendee.sessionId)]),
     ];
+    const claimed: string[] = [];
     for (const room of sessionRooms) {
-      if ((await this.countIn(room)) >= CONNECTIONS_PER_SESSION) {
+      if (!(await this.claimSlot(room, socket.id))) {
+        for (const taken of claimed) {
+          await this.releaseSlot(taken, socket.id);
+        }
         return "RATE_LIMITED";
       }
+      claimed.push(room);
     }
     socket.data = {
+      slots: claimed,
       identity: {
         staffSessionId: actor?.sessionId,
         attendeeSessionId: attendee?.sessionId,
@@ -304,20 +344,47 @@ export class RealtimeGateway
     return undefined;
   }
 
-  /** Connections in a room on every instance; this one's if Valkey fails. */
-  private async countIn(room: string): Promise<number> {
-    const io = this.requireServer();
-    try {
-      return (await io.in(room).fetchSockets()).length;
-    } catch {
-      return io.local
-        .in(room)
-        .fetchSockets()
-        .then((found) => found.length);
+  /**
+   * Takes one of a session's CONNECTIONS_PER_SESSION slots, across every
+   * instance, atomically (ConnectionSlots). When Valkey cannot answer, the
+   * limit holds per instance instead: never more than that many here, so at
+   * most that many per instance in all (an explicit fail-open, bounded).
+   */
+  private async claimSlot(room: string, connection: string): Promise<boolean> {
+    const taken = await this.slots.claim(
+      room,
+      connection,
+      CONNECTIONS_PER_SESSION,
+    );
+    const local = this.localSlots.get(room) ?? new Set<string>();
+    if (taken === false) {
+      return false;
     }
+    // Checked and taken in one synchronous step: no other handshake on this
+    // instance can come between.
+    if (taken === undefined && local.size >= CONNECTIONS_PER_SESSION) {
+      return false;
+    }
+    local.add(connection);
+    this.localSlots.set(room, local);
+    return true;
+  }
+
+  private async releaseSlot(room: string, connection: string): Promise<void> {
+    const local = this.localSlots.get(room);
+    local?.delete(connection);
+    if (local?.size === 0) {
+      this.localSlots.delete(room);
+    }
+    await this.slots.release(room, connection);
   }
 
   private onConnection(socket: RealtimeSocket): void {
+    socket.on("disconnect", () => {
+      for (const room of socket.data.slots) {
+        void this.releaseSlot(room, socket.id);
+      }
+    });
     // A revocation that committed while the handshake ran sent its signal
     // before this connection was in any room: decide once more, now that
     // every later signal reaches it.
@@ -431,12 +498,15 @@ export class RealtimeGateway
       );
     }
     if (!access.ok) {
-      if (existing === undefined) {
+      // Refused: out of this channel's room whatever else the connection
+      // follows (it may have joined it before, and must not hear it now),
+      // and out of the event's if nothing is left. The workspace's room may
+      // serve another event; staying in it only costs an extra re-check.
+      joined.channels.delete(channel);
+      await socket.leave(channelRoom(event.id, channel));
+      if (joined.channels.size === 0) {
         state.joined.delete(event.id);
-        // The workspace's room may serve another event; staying in it only
-        // costs an extra re-check now and then.
         await socket.leave(scopeRoom("event", event.id));
-        await socket.leave(channelRoom(event.id, channel));
       }
       return failure(access.error);
     }
@@ -499,56 +569,100 @@ export class RealtimeGateway
 
   // --- Access re-checks --------------------------------------------------
 
-  private listenForSignals(): void {
-    const subscriber = this.subscriber("signals");
-    const channelName = signalsChannel(this.config);
-    void subscriber.subscribe(channelName);
-    subscriber.on("message", (channel: string, message: string) => {
-      if (channel !== channelName) {
-        return;
-      }
-      void this.onSignal(message);
-    });
-    // Signals sent while the subscription was down are lost: catch up.
-    let connectedBefore = false;
-    subscriber.on("ready", () => {
-      if (connectedBefore) {
-        void this.sweep();
-      }
-      connectedBefore = true;
-    });
-  }
-
-  private async onSignal(message: string): Promise<void> {
-    let signal: RealtimeSignal;
-    try {
-      signal = RealtimeSignal.parse(JSON.parse(message));
-    } catch (error) {
-      this.logger.warn({ err: error }, "Ignored a malformed real-time signal");
+  /**
+   * Acts on the access changes committed since the last read (see
+   * RealtimeSignals). Reads every POLL_MS what the last LOOKBACK_MS wrote and
+   * skips what it already acted on: a transaction can commit a row with a
+   * lower ID after a higher one, so reading after the highest ID seen could
+   * miss it. Acting twice would only re-check twice.
+   */
+  private async poll(): Promise<void> {
+    if (this.polling) {
       return;
     }
+    this.polling = true;
     try {
-      if (signal.type === "status") {
-        await this.onStatus(signal.eventId, signal.slug, signal.status);
-      } else {
-        await this.recheckScope(signal.scope, signal.ids);
+      const rows = await this.prisma.$queryRaw<
+        { id: bigint; change: unknown }[]
+      >`
+        SELECT id, change FROM access_changes
+        WHERE created_at > now() - make_interval(secs => ${LOOKBACK_MS / 1000})
+        ORDER BY id`;
+      const now = Date.now();
+      const fresh = rows.filter((row) => !this.seen.has(String(row.id)));
+      for (const row of fresh) {
+        this.seen.set(String(row.id), now);
+      }
+      // Status changes first, once per event, with the event's current
+      // status (a change read late is no longer news; what is now is): a
+      // re-check earlier in the batch already sees the newer status and
+      // could end a connection before it is told.
+      const changes = fresh.flatMap((row) => {
+        const parsed = AccessChangeBody.safeParse(row.change);
+        if (!parsed.success) {
+          this.logger.warn("Ignored a malformed access change");
+          return [];
+        }
+        return [parsed.data];
+      });
+      const statusEvents = new Set(
+        changes.flatMap((change) =>
+          change.type === "status" ? [change.eventId] : [],
+        ),
+      );
+      for (const eventId of statusEvents) {
+        await this.act(() => this.announceStatus(eventId));
+      }
+      for (const change of changes) {
+        await this.act(() =>
+          change.type === "status"
+            ? this.recheckScope("event", [change.eventId])
+            : this.recheckScope(change.scope, change.ids),
+        );
+      }
+      for (const [key, seenAt] of this.seen) {
+        if (now - seenAt > LOOKBACK_MS * 2) {
+          this.seen.delete(key);
+        }
+      }
+      this.polls += 1;
+      if (this.polls % CLEANUP_EVERY_POLLS === 0) {
+        await this.prisma.$executeRaw`
+          DELETE FROM access_changes
+          WHERE created_at < now() - make_interval(secs => ${KEEP_MS / 1000})`;
       }
     } catch (error) {
-      this.logger.error({ err: error }, "Could not act on a real-time signal");
+      this.logger.error({ err: error }, "Could not read access changes");
+    } finally {
+      this.polling = false;
     }
   }
 
-  private async onStatus(
-    eventId: string,
-    slug: string,
-    status: EventStatus,
-  ): Promise<void> {
-    // Local only: every instance receives the signal and tells its own,
+  private async act(work: () => Promise<void>): Promise<void> {
+    try {
+      await work();
+    } catch (error) {
+      this.logger.error({ err: error }, "Could not act on an access change");
+    }
+  }
+
+  /** Tells the event's connections here its current public status. */
+  private async announceStatus(eventId: string): Promise<void> {
+    const event = await this.prisma.event.findUnique({
+      where: { id: eventId },
+      select: { slug: true, status: true },
+    });
+    if (event === null) {
+      return;
+    }
+    // Local only: every instance reads the change and tells its own,
     // including connections whose join is still being decided.
     this.requireServer()
       .local.to(scopeRoom("event", eventId))
-      .emit("event.status", { slug, status: publicStatusOf(status) });
-    await this.recheckScope("event", [eventId]);
+      .emit("event.status", {
+        slug: event.slug,
+        status: publicStatusOf(event.status),
+      });
   }
 
   private async recheckScope(
@@ -602,6 +716,12 @@ export class RealtimeGateway
       state.connectionId,
     );
     if (typeof live === "string") {
+      // An attendee whose event closed fails here, not below.
+      for (const [eventId, joined] of state.joined) {
+        if (joined.participant !== undefined) {
+          await this.tellStatus(socket, eventId, joined.participant);
+        }
+      }
       this.revoke(socket, live);
       return;
     }
@@ -620,6 +740,9 @@ export class RealtimeGateway
           joined.stale = true;
           continue;
         }
+        // If the event's status changed, say so first: its own notice may
+        // only be read after this connection is gone.
+        await this.tellStatus(socket, eventId, joined.participant);
         this.revoke(
           socket,
           access.error === "UNAUTHENTICATED" ? "SIGNED_OUT" : "ACCESS_REVOKED",
@@ -640,6 +763,23 @@ export class RealtimeGateway
         }
         joined.participant = access.participant;
       }
+    }
+  }
+
+  private async tellStatus(
+    socket: RealtimeSocket,
+    eventId: string,
+    known: Participant,
+  ): Promise<void> {
+    const event = await this.prisma.event.findUnique({
+      where: { id: eventId },
+      select: { status: true },
+    });
+    if (event !== null && event.status !== known.status) {
+      socket.emit("event.status", {
+        slug: known.slug,
+        status: publicStatusOf(event.status),
+      });
     }
   }
 

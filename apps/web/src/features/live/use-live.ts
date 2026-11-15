@@ -211,7 +211,9 @@ export function applyQuestionsEvent(
 ): Map<string, Question> {
   const next = new Map(current);
   if (event.kind === "WITHDRAWN") {
-    next.delete(event.questionId);
+    if (event.questionId !== undefined) {
+      next.delete(event.questionId);
+    }
     return next;
   }
   const before = current.get(event.question.id);

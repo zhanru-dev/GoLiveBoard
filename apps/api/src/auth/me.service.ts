@@ -57,12 +57,14 @@ export class MeService {
     if (membership === null) {
       throw new DomainError("NOT_FOUND");
     }
-    await this.prisma.session.update({
-      where: { id: actor.sessionId },
-      data: { activeWorkspaceId: workspaceId },
+    await this.prisma.$transaction(async (tx) => {
+      await tx.session.update({
+        where: { id: actor.sessionId },
+        data: { activeWorkspaceId: workspaceId },
+      });
+      // Its live connections to the other workspace's events end.
+      await this.signals.recheck(tx, "session", [actor.sessionId]);
     });
-    // Its live connections to the other workspace's events end.
-    await this.signals.recheck("session", [actor.sessionId]);
     return this.describe({ ...actor, workspaceId });
   }
 }

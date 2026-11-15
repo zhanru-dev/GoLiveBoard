@@ -55,15 +55,11 @@ export class RetentionJob {
           AND event.ends_at + workspace.retention_days * interval '1 day' <= ${now}
         ORDER BY attendee.id
         LIMIT ${BATCH}`;
-      const ended: string[] = [];
       for (const attendee of due) {
         if (await this.anonymise(attendee, now)) {
           anonymised += 1;
-          ended.push(attendee.id);
         }
       }
-      // Anyone still connected to such an old event is disconnected.
-      await this.signals.recheck("attendee", ended);
       if (due.length < BATCH) {
         break;
       }
@@ -142,6 +138,8 @@ export class RetentionJob {
         targetId: attendee.id,
         eventId: attendee.event_id,
       });
+      // Anyone still connected to such an old event is disconnected.
+      await this.signals.recheck(tx, "attendee", [attendee.id]);
       return true;
     });
   }

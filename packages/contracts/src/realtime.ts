@@ -160,7 +160,11 @@ export const QuestionsEvent = z.union([
   z.object({
     sequence: Sequence,
     kind: z.literal("WITHDRAWN"),
-    questionId: z.uuid(),
+    /**
+     * The question to drop. Absent when it was never public: the viewer has
+     * nothing of it to drop, and learns only that the sequence moved.
+     */
+    questionId: z.uuid().optional(),
   }),
 ]);
 export type QuestionsEvent = z.infer<typeof QuestionsEvent>;

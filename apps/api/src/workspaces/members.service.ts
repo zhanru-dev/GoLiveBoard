@@ -40,7 +40,7 @@ export class MembersService {
     membershipId: string,
     role: Role,
   ): Promise<void> {
-    const userId = await this.prisma.$transaction(async (tx) => {
+    await this.prisma.$transaction(async (tx) => {
       const membership = await this.lockMembership(tx, actor, membershipId);
       if (membership.role === "OWNER" && role !== "OWNER") {
         await this.assertAnotherOwner(tx, actor.workspaceId, membershipId);
@@ -49,15 +49,14 @@ export class MembersService {
         where: { id: membershipId },
         data: { role },
       });
-      return membership.userId;
+      // Live connections pick up the new role (moderation rights).
+      await this.signals.recheck(tx, "user", [membership.userId]);
     });
-    // Live connections pick up the new role (moderation rights).
-    await this.signals.recheck("user", [userId]);
   }
 
   /** Removes the member and ends their sessions in this workspace at once. */
   async remove(actor: Actor, membershipId: string): Promise<void> {
-    const userId = await this.prisma.$transaction(async (tx) => {
+    await this.prisma.$transaction(async (tx) => {
       const membership = await this.lockMembership(tx, actor, membershipId);
       if (membership.role === "OWNER") {
         await this.assertAnotherOwner(tx, actor.workspaceId, membershipId);
@@ -71,9 +70,8 @@ export class MembersService {
         },
         data: { revokedAt: this.clock.now() },
       });
-      return membership.userId;
+      await this.signals.recheck(tx, "user", [membership.userId]);
     });
-    await this.signals.recheck("user", [userId]);
   }
 
   /** FR-AUTH-3: an Owner signs a member out of every browser. */
@@ -85,11 +83,13 @@ export class MembersService {
     if (membership === null) {
       throw new DomainError("NOT_FOUND");
     }
-    await this.prisma.session.updateMany({
-      where: { userId: membership.userId, revokedAt: null },
-      data: { revokedAt: this.clock.now() },
+    await this.prisma.$transaction(async (tx) => {
+      await tx.session.updateMany({
+        where: { userId: membership.userId, revokedAt: null },
+        data: { revokedAt: this.clock.now() },
+      });
+      await this.signals.recheck(tx, "user", [membership.userId]);
     });
-    await this.signals.recheck("user", [membership.userId]);
   }
 
   /**

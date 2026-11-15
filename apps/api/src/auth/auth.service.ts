@@ -153,17 +153,18 @@ export class AuthService {
       where: { id: DEMO_PEOPLE.manager.id },
       select: { passwordHash: true },
     });
-    let ended: string[] = [];
-    const tokens = await this.startSession(
+    return this.startSession(
       DEMO_PEOPLE.manager.id,
       DEMO_WORKSPACE.id,
       visitor.passwordHash,
       async (tx, now) => {
-        ended = await limitDemoSessions(tx, now);
+        await this.signals.recheck(
+          tx,
+          "session",
+          await limitDemoSessions(tx, now),
+        );
       },
     );
-    await this.signals.recheck("session", ended);
-    return tokens;
   }
 
   /**
@@ -212,22 +213,25 @@ export class AuthService {
   /** Revokes the session the refresh token belongs to (FR-AUTH-3). */
   async signOut(refreshToken: string): Promise<void> {
     const presentedHash = hashToken(refreshToken);
-    const revoked = await this.prisma.session.updateManyAndReturn({
-      where: {
-        OR: [
-          { refreshTokenHash: presentedHash },
-          { previousRefreshTokenHash: presentedHash },
-        ],
-        revokedAt: null,
-      },
-      data: { revokedAt: this.clock.now() },
-      select: { id: true },
+    await this.prisma.$transaction(async (tx) => {
+      const revoked = await tx.session.updateManyAndReturn({
+        where: {
+          OR: [
+            { refreshTokenHash: presentedHash },
+            { previousRefreshTokenHash: presentedHash },
+          ],
+          revokedAt: null,
+        },
+        data: { revokedAt: this.clock.now() },
+        select: { id: true },
+      });
+      // Its live connections end too (FR-AUTH-3).
+      await this.signals.recheck(
+        tx,
+        "session",
+        revoked.map((session) => session.id),
+      );
     });
-    // Its live connections end too (FR-AUTH-3).
-    await this.signals.recheck(
-      "session",
-      revoked.map((session) => session.id),
-    );
   }
 
   /**
@@ -309,11 +313,13 @@ export class AuthService {
     if (rotatedAgoMs < REFRESH_REUSE_GRACE_MS) {
       return true;
     }
-    await this.prisma.session.updateMany({
-      where: { id: session.id, revokedAt: null },
-      data: { revokedAt: now },
+    await this.prisma.$transaction(async (tx) => {
+      await tx.session.updateMany({
+        where: { id: session.id, revokedAt: null },
+        data: { revokedAt: now },
+      });
+      await this.signals.recheck(tx, "session", [session.id]);
     });
-    await this.signals.recheck("session", [session.id]);
     this.logger.warn(
       { sessionId: session.id },
       "Refresh token reused after rotation; session revoked",

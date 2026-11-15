@@ -13,7 +13,11 @@ import {
 } from "../testing/api-client.js";
 import { TEST_S3_BUCKET, TEST_S3_CREDENTIALS } from "../testing/containers.js";
 import { cookieHeader } from "../testing/cookies.js";
-import { createTestDatabase, type TestDatabase } from "../testing/database.js";
+import {
+  createTestDatabase,
+  holdLock,
+  type TestDatabase,
+} from "../testing/database.js";
 import { prepareForLaunch } from "../testing/events.js";
 import { CapturingMailer } from "../testing/fakes.js";
 import { listen, RealtimeClient } from "../testing/realtime.js";
@@ -205,6 +209,51 @@ describe(
         }
 
         expect(await minutes(event.id)).toHaveLength(1);
+      });
+
+      it("record nothing for a session of another event", async () => {
+        const { api, owner, event } = await setUp();
+        await prepareForLaunch(api, database, owner, event.id, new Date());
+        await goLive(api, owner, event.id);
+        const other = await setUp();
+        const stranger = await attendee(other.event.slug);
+        const tab = await connect(stranger.cookie);
+
+        await expect(tab.heartbeat(event.slug)).resolves.toEqual({
+          ok: false,
+          error: "NOT_FOUND",
+        });
+        expect(await minutes(event.id)).toEqual([]);
+      });
+
+      it("record nothing when the attendee is revoked while it waits for the event", async () => {
+        const { api, owner, event } = await setUp();
+        await prepareForLaunch(api, database, owner, event.id, new Date());
+        await goLive(api, owner, event.id);
+        const visitor = await attendee(event.slug);
+        const tab = await connect(visitor.cookie);
+        const block = await holdLock(
+          database.url,
+          "SELECT id FROM events WHERE id = $1 FOR NO KEY UPDATE",
+          [event.id],
+        );
+        let answer: unknown;
+        try {
+          const beating = tab.heartbeat(event.slug);
+          await block.waitForWaiters(1);
+          await block.run(
+            "UPDATE attendees SET status = 'REVOKED', revoked_at = now() WHERE event_id = $1",
+            [event.id],
+          );
+          await block.release();
+          answer = await beating;
+        } catch (error) {
+          await block.release().catch(() => undefined);
+          throw error;
+        }
+
+        expect(answer).toEqual({ ok: false, error: "FORBIDDEN" });
+        expect(await minutes(event.id)).toEqual([]);
       });
 
       it("leave staff out of the audience, and refuse what is not a heartbeat", async () => {

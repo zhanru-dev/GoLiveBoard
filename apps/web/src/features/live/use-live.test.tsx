@@ -101,6 +101,17 @@ describe("applyQuestionsEvent", () => {
 
     expect(after.size).toBe(0);
   });
+
+  it("keeps everything for a placeholder that names no question", () => {
+    const shown = question("1");
+
+    const after = applyQuestionsEvent(new Map([[shown.id, shown]]), {
+      sequence: 4,
+      kind: "WITHDRAWN",
+    });
+
+    expect([...after.values()]).toEqual([shown]);
+  });
 });
 
 describe("orderQuestions", () => {

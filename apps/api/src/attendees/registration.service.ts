@@ -252,87 +252,81 @@ export class RegistrationService {
       ip,
     );
     const now = this.clock.now();
-    const { grant, endedSessions } = await this.prisma.$transaction(
-      async (tx) => {
-        // The attendee first, then the link: the order of every other path
-        // that touches both (registering again, revoking, erasing). The other
-        // way round, using a link while a Manager revokes its attendee
-        // deadlocked.
-        const [link] = await tx.$queryRaw<
-          { attendee_id: string; event_id: string }[]
-        >`
+    return this.prisma.$transaction(async (tx) => {
+      // The attendee first, then the link: the order of every other path
+      // that touches both (registering again, revoking, erasing). The other
+      // way round, using a link while a Manager revokes its attendee
+      // deadlocked.
+      const [link] = await tx.$queryRaw<
+        { attendee_id: string; event_id: string }[]
+      >`
         SELECT link.attendee_id, attendee.event_id
         FROM attendee_verification_tokens AS link
         JOIN attendees AS attendee ON attendee.id = link.attendee_id
         WHERE link.token_hash = ${hashToken(token)}`;
-        // The event's row first, as every path that also locks an attendee:
-        // its policy cannot change while this decides.
-        if (link === undefined || !(await lockEventById(tx, link.event_id))) {
-          throw new DomainError("TOKEN_INVALID");
-        }
-        const [attendee] = await tx.$queryRaw<
-          { id: string; status: string; email: string; event_id: string }[]
-        >`
+      // The event's row first, as every path that also locks an attendee:
+      // its policy cannot change while this decides.
+      if (link === undefined || !(await lockEventById(tx, link.event_id))) {
+        throw new DomainError("TOKEN_INVALID");
+      }
+      const [attendee] = await tx.$queryRaw<
+        { id: string; status: string; email: string; event_id: string }[]
+      >`
         SELECT id, status::text AS status, email::text AS email, event_id
         FROM attendees WHERE id = ${link.attendee_id}::uuid
         FOR UPDATE`;
-        // Spent in the statement that checks it: of two requests with the
-        // same link, exactly one gets a row back.
-        const [used] = await tx.$queryRaw<{ id: string }[]>`
+      // Spent in the statement that checks it: of two requests with the
+      // same link, exactly one gets a row back.
+      const [used] = await tx.$queryRaw<{ id: string }[]>`
         UPDATE attendee_verification_tokens SET used_at = ${now}
         WHERE token_hash = ${hashToken(token)} AND used_at IS NULL
           AND expires_at > ${now}
         RETURNING id`;
-        if (
-          used === undefined ||
-          attendee === undefined ||
-          (attendee.status !== "PENDING" && attendee.status !== "VERIFIED")
-        ) {
-          throw new DomainError("TOKEN_INVALID");
-        }
-        const event = await tx.event.findUniqueOrThrow({
-          where: { id: attendee.event_id },
-          select: PUBLIC_EVENT_SELECT,
+      if (
+        used === undefined ||
+        attendee === undefined ||
+        (attendee.status !== "PENDING" && attendee.status !== "VERIFIED")
+      ) {
+        throw new DomainError("TOKEN_INVALID");
+      }
+      const event = await tx.event.findUniqueOrThrow({
+        where: { id: attendee.event_id },
+        select: PUBLIC_EVENT_SELECT,
+      });
+      const admission = admitsAttendance({
+        attendeeStatus: "VERIFIED",
+        eventStatus: event.status,
+        policy: event.accessPolicy,
+        email: attendee.email,
+        invited: await hasLiveInvitation(tx, event.id, attendee.email),
+      });
+      if (!admission.admitted) {
+        throw new DomainError("FORBIDDEN", {
+          detail: "This event no longer admits you.",
         });
-        const admission = admitsAttendance({
-          attendeeStatus: "VERIFIED",
-          eventStatus: event.status,
-          policy: event.accessPolicy,
-          email: attendee.email,
-          invited: await hasLiveInvitation(tx, event.id, attendee.email),
+      }
+      if (attendee.status === "PENDING") {
+        await tx.attendee.update({
+          where: { id: attendee.id },
+          data: { status: "VERIFIED", verifiedAt: now, updatedAt: now },
         });
-        if (!admission.admitted) {
-          throw new DomainError("FORBIDDEN", {
-            detail: "This event no longer admits you.",
-          });
-        }
-        if (attendee.status === "PENDING") {
-          await tx.attendee.update({
-            where: { id: attendee.id },
-            data: { status: "VERIFIED", verifiedAt: now, updatedAt: now },
-          });
-        }
-        const sessionToken = generateToken();
-        const expiresAt = attendeeSessionExpiresAt(event.endsAt, now);
-        await tx.attendeeSession.create({
-          data: {
-            attendeeId: attendee.id,
-            tokenHash: hashToken(sessionToken),
-            expiresAt,
-          },
-        });
-        const ended = await this.boundLinksAndSessions(tx, attendee.id, now);
-        return {
-          grant: { slug: event.slug, token: sessionToken, expiresAt },
-          endedSessions: ended,
-        };
-      },
-    );
-    // A browser signed out to make room must leave live interaction too.
-    if (endedSessions.length > 0) {
-      await this.signals.recheck("attendee-session", endedSessions);
-    }
-    return grant;
+      }
+      const sessionToken = generateToken();
+      const expiresAt = attendeeSessionExpiresAt(event.endsAt, now);
+      await tx.attendeeSession.create({
+        data: {
+          attendeeId: attendee.id,
+          tokenHash: hashToken(sessionToken),
+          expiresAt,
+        },
+      });
+      const ended = await this.boundLinksAndSessions(tx, attendee.id, now);
+      // A browser signed out to make room leaves live interaction too.
+      if (ended.length > 0) {
+        await this.signals.recheck(tx, "attendee-session", ended);
+      }
+      return { slug: event.slug, token: sessionToken, expiresAt };
+    });
   }
 
   /**
