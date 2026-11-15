@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto";
+
 import { type AppConfig, loadConfig } from "../config/app-config.js";
 
 /** The app origin in tests; state-changing requests must send it. */
@@ -16,6 +18,9 @@ export const TEST_ENV: Readonly<Record<string, string>> = {
   JWT_SECRET: "test-signing-key-that-is-long-enough",
   SMTP_URL: "smtp://127.0.0.1:1",
   MAIL_FROM: "OpsPilot <no-reply@opspilot.test>",
+  // One per test file (each file loads this module afresh): the apps of a
+  // file share real-time traffic, files running side by side do not.
+  REALTIME_CHANNEL_PREFIX: `test-${randomUUID().slice(0, 8)}`,
 };
 
 export function loadTestConfig(

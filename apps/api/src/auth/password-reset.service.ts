@@ -8,6 +8,7 @@ import { InjectPinoLogger, PinoLogger } from "nestjs-pino";
 import { APP_CONFIG, type AppConfig } from "../config/app-config.js";
 import { PRISMA } from "../database/prisma.js";
 import type { PrismaClient } from "../generated/prisma/client.js";
+import { RealtimeSignals } from "../live/realtime-signals.js";
 import { Mailer, mailDeliveryError } from "../mail/mailer.js";
 import { RATE_LIMITS, RateLimiter } from "../rate-limit/rate-limiter.js";
 import { CLOCK, type Clock } from "../shared/clock.js";
@@ -28,6 +29,7 @@ export class PasswordResetService {
     private readonly mailer: Mailer,
     private readonly rateLimiter: RateLimiter,
     private readonly passwords: PasswordHasher,
+    private readonly signals: RealtimeSignals,
     @InjectPinoLogger(PasswordResetService.name)
     private readonly logger: PinoLogger,
   ) {}
@@ -82,7 +84,7 @@ export class PasswordResetService {
   async confirm(input: PasswordResetConfirmRequest): Promise<void> {
     const now = this.clock.now();
     const passwordHash = await this.passwords.hash(input.password);
-    await this.prisma.$transaction(async (tx) => {
+    const userId = await this.prisma.$transaction(async (tx) => {
       const tokenHash = hashToken(input.token);
       const { count } = await tx.passwordResetToken.updateMany({
         where: { tokenHash, usedAt: null, expiresAt: { gt: now } },
@@ -105,6 +107,8 @@ export class PasswordResetService {
         where: { userId, revokedAt: null },
         data: { revokedAt: now },
       });
+      return userId;
     });
+    await this.signals.recheck("user", [userId]);
   }
 }

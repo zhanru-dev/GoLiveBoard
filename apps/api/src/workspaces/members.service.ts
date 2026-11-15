@@ -4,6 +4,7 @@ import type { Member, Role } from "@opspilot/contracts";
 import type { Actor } from "../auth/actor.js";
 import { PRISMA } from "../database/prisma.js";
 import type { Prisma, PrismaClient } from "../generated/prisma/client.js";
+import { RealtimeSignals } from "../live/realtime-signals.js";
 import { CLOCK, type Clock } from "../shared/clock.js";
 import { DomainError } from "../shared/domain/domain-error.js";
 
@@ -14,6 +15,7 @@ export class MembersService {
   constructor(
     @Inject(PRISMA) private readonly prisma: PrismaClient,
     @Inject(CLOCK) private readonly clock: Clock,
+    private readonly signals: RealtimeSignals,
   ) {}
 
   async list(actor: Actor): Promise<Member[]> {
@@ -38,7 +40,7 @@ export class MembersService {
     membershipId: string,
     role: Role,
   ): Promise<void> {
-    await this.prisma.$transaction(async (tx) => {
+    const userId = await this.prisma.$transaction(async (tx) => {
       const membership = await this.lockMembership(tx, actor, membershipId);
       if (membership.role === "OWNER" && role !== "OWNER") {
         await this.assertAnotherOwner(tx, actor.workspaceId, membershipId);
@@ -47,12 +49,15 @@ export class MembersService {
         where: { id: membershipId },
         data: { role },
       });
+      return membership.userId;
     });
+    // Live connections pick up the new role (moderation rights).
+    await this.signals.recheck("user", [userId]);
   }
 
   /** Removes the member and ends their sessions in this workspace at once. */
   async remove(actor: Actor, membershipId: string): Promise<void> {
-    await this.prisma.$transaction(async (tx) => {
+    const userId = await this.prisma.$transaction(async (tx) => {
       const membership = await this.lockMembership(tx, actor, membershipId);
       if (membership.role === "OWNER") {
         await this.assertAnotherOwner(tx, actor.workspaceId, membershipId);
@@ -66,7 +71,9 @@ export class MembersService {
         },
         data: { revokedAt: this.clock.now() },
       });
+      return membership.userId;
     });
+    await this.signals.recheck("user", [userId]);
   }
 
   /** FR-AUTH-3: an Owner signs a member out of every browser. */
@@ -82,6 +89,7 @@ export class MembersService {
       where: { userId: membership.userId, revokedAt: null },
       data: { revokedAt: this.clock.now() },
     });
+    await this.signals.recheck("user", [membership.userId]);
   }
 
   /**

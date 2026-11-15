@@ -9,6 +9,7 @@ import {
   uploadKeyFor,
 } from "../assets/assets.service.js";
 import { PasswordHasher } from "../auth/password-hasher.js";
+import { RealtimeSignals } from "../live/realtime-signals.js";
 import { PRISMA } from "../database/prisma.js";
 import { eventSlug } from "../events/domain/slug.js";
 import { randomSlugSuffix } from "../events/slug-suffix.js";
@@ -43,6 +44,7 @@ export class DemoSeeder {
     @Inject(CLOCK) private readonly clock: Clock,
     private readonly passwords: PasswordHasher,
     private readonly storage: ObjectStorage,
+    private readonly signals: RealtimeSignals,
     @InjectPinoLogger(DemoSeeder.name) private readonly logger: PinoLogger,
   ) {}
 
@@ -126,6 +128,9 @@ export class DemoSeeder {
       },
       { timeout: TRANSACTION_TIMEOUT_MS },
     );
+    // Everyone connected to the demo's old events is disconnected: those
+    // events, and their attendees' sessions, are gone.
+    await this.signals.recheck("workspace", [DEMO_WORKSPACE.id]);
     for (const prefix of deletedEventIds.flatMap(filePrefixesOf)) {
       await this.removeAllQuietly(prefix);
     }

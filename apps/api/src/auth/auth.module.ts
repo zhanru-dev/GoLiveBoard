@@ -1,12 +1,14 @@
 import { Module } from "@nestjs/common";
 import { APP_GUARD } from "@nestjs/core";
 
+import { RealtimeSignalsModule } from "../live/realtime-signals.js";
 import { DatabaseModule } from "../database/database.module.js";
 import { DemoModule } from "../demo/demo.module.js";
 import { DemoWriteBudgetGuard } from "../demo/demo-write-budget.guard.js";
 import { MailModule } from "../mail/mail.module.js";
 import { RateLimitModule } from "../rate-limit/rate-limit.module.js";
 import { AuthController, MeController } from "./auth.controller.js";
+import { ActorLoader } from "./actor-loader.js";
 import { AuthService } from "./auth.service.js";
 import { MeService } from "./me.service.js";
 import { PasswordHasherModule } from "./password-hasher.js";
@@ -21,9 +23,11 @@ import { SessionGuard } from "./session.guard.js";
     MailModule,
     PasswordHasherModule,
     RateLimitModule,
+    RealtimeSignalsModule,
   ],
   controllers: [AuthController, MeController],
   providers: [
+    ActorLoader,
     AuthService,
     MeService,
     PasswordResetService,
@@ -34,5 +38,6 @@ import { SessionGuard } from "./session.guard.js";
     { provide: APP_GUARD, useClass: SessionGuard },
     { provide: APP_GUARD, useClass: DemoWriteBudgetGuard },
   ],
+  exports: [ActorLoader],
 })
 export class AuthModule {}

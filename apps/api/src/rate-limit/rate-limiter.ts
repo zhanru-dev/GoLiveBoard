@@ -75,6 +75,15 @@ export const RATE_LIMITS = {
     limit: 3,
     windowMs: HOUR_MS,
   },
+  /**
+   * Real-time connections opened from one address. Clients reconnect with a
+   * backoff (1 s doubling to 30 s), so a person needs a few per minute.
+   */
+  realtimeConnectionsPerIp: {
+    name: "realtime-connections:ip",
+    limit: 60,
+    windowMs: MINUTE_MS,
+  },
   /** "Check now" on one event's stream; checks already run every 30 s. */
   streamCheckPerEvent: {
     name: "stream-check:event",

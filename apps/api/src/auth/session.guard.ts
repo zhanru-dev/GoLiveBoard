@@ -1,26 +1,20 @@
 import {
   type CanActivate,
   type ExecutionContext,
-  Inject,
   Injectable,
 } from "@nestjs/common";
 import { Reflector } from "@nestjs/core";
 import type { Role } from "@opspilot/contracts";
 import { InjectPinoLogger, PinoLogger } from "nestjs-pino";
 
-import { APP_CONFIG, type AppConfig } from "../config/app-config.js";
-import { PRISMA } from "../database/prisma.js";
-import type { PrismaClient } from "../generated/prisma/client.js";
-import { CLOCK, type Clock } from "../shared/clock.js";
 import { DomainError } from "../shared/domain/domain-error.js";
-import { verifyAccessToken } from "./access-token.js";
 import {
-  type Actor,
   hasRole,
   IS_PUBLIC,
   REQUIRED_ROLE,
   type RequestWithActor,
 } from "./actor.js";
+import { ActorLoader } from "./actor-loader.js";
 import { readAccessCookie } from "./cookies.js";
 import { requestIdOf } from "../observability/request-id.js";
 
@@ -42,9 +36,7 @@ export const WORKSPACE_HEADER = "x-workspace-id";
 export class SessionGuard implements CanActivate {
   constructor(
     private readonly reflector: Reflector,
-    @Inject(PRISMA) private readonly prisma: PrismaClient,
-    @Inject(CLOCK) private readonly clock: Clock,
-    @Inject(APP_CONFIG) private readonly config: AppConfig,
+    private readonly actors: ActorLoader,
     @InjectPinoLogger(SessionGuard.name) private readonly logger: PinoLogger,
   ) {}
 
@@ -54,7 +46,7 @@ export class SessionGuard implements CanActivate {
       return true;
     }
     const request = context.switchToHttp().getRequest<RequestWithActor>();
-    const actor = await this.loadActor(
+    const actor = await this.actors.load(
       readAccessCookie(request),
       requestIdOf(request),
     );
@@ -81,53 +73,5 @@ export class SessionGuard implements CanActivate {
       throw new DomainError("FORBIDDEN");
     }
     return true;
-  }
-
-  private async loadActor(
-    accessToken: string | undefined,
-    requestId: string,
-  ): Promise<Actor | undefined> {
-    if (accessToken === undefined) {
-      return undefined;
-    }
-    const now = this.clock.now();
-    const sessionId = await verifyAccessToken(
-      accessToken,
-      {
-        current: this.config.auth.jwtSecret,
-        previous: this.config.auth.jwtPreviousSecret,
-      },
-      now,
-    );
-    if (sessionId === undefined) {
-      return undefined;
-    }
-    const session = await this.prisma.session.findUnique({
-      where: { id: sessionId },
-      include: { user: { include: { memberships: true } } },
-    });
-    if (session === null) {
-      return undefined;
-    }
-    if (
-      session.revokedAt !== null ||
-      session.refreshExpiresAt <= now ||
-      session.user.disabledAt !== null
-    ) {
-      return undefined;
-    }
-    const membership = session.user.memberships.find(
-      (candidate) => candidate.workspaceId === session.activeWorkspaceId,
-    );
-    if (membership === undefined) {
-      return undefined;
-    }
-    return {
-      userId: session.userId,
-      sessionId: session.id,
-      workspaceId: session.activeWorkspaceId,
-      role: membership.role,
-      requestId,
-    };
   }
 }

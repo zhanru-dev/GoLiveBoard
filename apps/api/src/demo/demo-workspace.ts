@@ -149,10 +149,10 @@ export function assertNotDemoStream(workspaceId: string): void {
 export async function limitDemoSessions(
   tx: Prisma.TransactionClient,
   now: Date,
-): Promise<void> {
+): Promise<string[]> {
   await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${DEMO_SESSIONS_LOCK_KEY}, 0))`;
   const visitor = DEMO_PEOPLE.manager.id;
-  await tx.$executeRaw`
+  const deleted = await tx.$queryRaw<{ id: string }[]>`
     DELETE FROM sessions
     WHERE user_id = ${visitor}::uuid
       AND (
@@ -165,5 +165,7 @@ export async function limitDemoSessions(
           ORDER BY created_at DESC, id DESC
           LIMIT ${DEMO_SESSION_LIMIT}
         )
-      )`;
+      )
+    RETURNING id`;
+  return deleted.map((row) => row.id);
 }

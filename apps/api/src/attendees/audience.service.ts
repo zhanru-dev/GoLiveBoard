@@ -16,6 +16,7 @@ import { isDemoWorkspace } from "../demo/demo-workspace.js";
 import { lockEvent, lockWritableEvent } from "../events/event-lock.queries.js";
 import type { Prisma, PrismaClient } from "../generated/prisma/client.js";
 import { decodeCursor, encodeCursor } from "../http/cursor.js";
+import { RealtimeSignals } from "../live/realtime-signals.js";
 import { Mailer, mailDeliveryError } from "../mail/mailer.js";
 import { CLOCK, type Clock } from "../shared/clock.js";
 import { DomainError } from "../shared/domain/domain-error.js";
@@ -55,6 +56,7 @@ export class AudienceService {
     @Inject(CLOCK) private readonly clock: Clock,
     @Inject(APP_CONFIG) private readonly config: AppConfig,
     private readonly mailer: Mailer,
+    private readonly signals: RealtimeSignals,
     @InjectPinoLogger(AudienceService.name) private readonly logger: PinoLogger,
   ) {}
 
@@ -109,7 +111,7 @@ export class AudienceService {
     eventId: string,
     attendeeId: string,
   ): Promise<StaffAttendee> {
-    return this.prisma.$transaction(async (tx) => {
+    const revoked = await this.prisma.$transaction(async (tx) => {
       await lockWritableEvent(tx, actor.workspaceId, eventId);
       await this.lockAttendee(tx, eventId, attendeeId);
       if (await revokeAttendee(tx, attendeeId, this.clock.now())) {
@@ -122,6 +124,9 @@ export class AudienceService {
       }
       return toStaffAttendee(await this.read(tx, attendeeId), actor);
     });
+    // Their live connections end too, within seconds (FR-AD-4).
+    await this.signals.recheck("attendee", [attendeeId]);
+    return revoked;
   }
 
   /**
@@ -136,7 +141,7 @@ export class AudienceService {
     eventId: string,
     attendeeId: string,
   ): Promise<StaffAttendee> {
-    return this.prisma.$transaction(async (tx) => {
+    const erased = await this.prisma.$transaction(async (tx) => {
       const event = await lockEvent(tx, actor.workspaceId, eventId);
       if (event === undefined) {
         throw new DomainError("NOT_FOUND");
@@ -153,6 +158,8 @@ export class AudienceService {
       }
       return toStaffAttendee(await this.read(tx, attendeeId), actor);
     });
+    await this.signals.recheck("attendee", [attendeeId]);
+    return erased;
   }
 
   /** The event's live invitations, newest first. */
@@ -275,6 +282,7 @@ export class AudienceService {
         });
       }
     });
+    await this.signals.recheck("event", [found.eventId]);
   }
 
   private async lockAttendee(

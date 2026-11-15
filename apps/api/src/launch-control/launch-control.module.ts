@@ -1,6 +1,7 @@
 import { Module } from "@nestjs/common";
 
 import { DatabaseModule } from "../database/database.module.js";
+import { RealtimeSignalsModule } from "../live/realtime-signals.js";
 import { EventsModule } from "../events/events.module.js";
 import { AccessPolicyService } from "./access-policy.service.js";
 import {
@@ -12,7 +13,7 @@ import { RunbookService } from "./runbook.service.js";
 import { TransitionsService } from "./transitions.service.js";
 
 @Module({
-  imports: [DatabaseModule, EventsModule],
+  imports: [DatabaseModule, EventsModule, RealtimeSignalsModule],
   controllers: [EventLaunchControlController, RunbookTasksController],
   providers: [
     TransitionsService,

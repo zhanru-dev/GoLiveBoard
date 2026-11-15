@@ -2,6 +2,7 @@ import type {
   AccessMode,
   AttendeeStatus,
   EventStatus,
+  PublicEventStatus,
 } from "@opspilot/contracts";
 
 /**
@@ -123,4 +124,22 @@ export function admitsAttendance(check: AttendanceCheck): Admission {
     return refuse("EVENT_CLOSED");
   }
   return policyAdmits(check.policy, check.email, check.invited);
+}
+
+const PUBLIC_STATUS: Readonly<Record<EventStatus, PublicEventStatus>> = {
+  DRAFT: "UPCOMING",
+  CONFIGURING: "UPCOMING",
+  READY: "UPCOMING",
+  LIVE: "LIVE",
+  COMPLETED: "ENDED",
+  ARCHIVED: "ENDED",
+  CANCELLED: "CANCELLED",
+};
+
+/**
+ * What the public sees of an event's status: internal statuses (CONFIGURING,
+ * READY…) are staff vocabulary.
+ */
+export function publicStatusOf(status: EventStatus): PublicEventStatus {
+  return PUBLIC_STATUS[status];
 }

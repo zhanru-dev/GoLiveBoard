@@ -3,12 +3,16 @@ import type { Me } from "@opspilot/contracts";
 
 import { PRISMA } from "../database/prisma.js";
 import type { PrismaClient } from "../generated/prisma/client.js";
+import { RealtimeSignals } from "../live/realtime-signals.js";
 import { DomainError } from "../shared/domain/domain-error.js";
 import type { Actor } from "./actor.js";
 
 @Injectable()
 export class MeService {
-  constructor(@Inject(PRISMA) private readonly prisma: PrismaClient) {}
+  constructor(
+    @Inject(PRISMA) private readonly prisma: PrismaClient,
+    private readonly signals: RealtimeSignals,
+  ) {}
 
   async describe(actor: Actor): Promise<Me> {
     const user = await this.prisma.user.findUniqueOrThrow({
@@ -57,6 +61,8 @@ export class MeService {
       where: { id: actor.sessionId },
       data: { activeWorkspaceId: workspaceId },
     });
+    // Its live connections to the other workspace's events end.
+    await this.signals.recheck("session", [actor.sessionId]);
     return this.describe({ ...actor, workspaceId });
   }
 }

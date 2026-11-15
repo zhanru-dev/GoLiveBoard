@@ -53,6 +53,26 @@ const AppConfigSchema = z
      * address from X-Forwarded-For, which rate limits depend on; 0 trusts none.
      */
     TRUST_PROXY_HOPS: z.coerce.number().int().min(0).max(5).default(0),
+    /**
+     * How often the real-time gateway re-checks every connection, whatever
+     * signals arrived: the backstop for a lost signal, and how expired
+     * sessions end. Tests shorten it.
+     */
+    REALTIME_SWEEP_MS: z.coerce
+      .number()
+      .int()
+      .min(1_000)
+      .max(5 * 60_000)
+      .default(30_000),
+    /**
+     * Prefix of the Valkey channels the real-time gateways of one deployment
+     * share (fan-out and signals): deployments that share a Valkey, or test
+     * files running side by side, must not hear each other.
+     */
+    REALTIME_CHANNEL_PREFIX: z
+      .string()
+      .regex(/^[a-z0-9-]{1,40}$/)
+      .default("opspilot"),
     LOG_FORMAT: z.enum(["json", "pretty"]).default("json"),
     DATABASE_URL: z.url({
       protocol: /^postgres(ql)?$/,
@@ -132,6 +152,10 @@ const AppConfigSchema = z
       host: env.API_HOST,
       port: env.API_PORT,
       trustProxyHops: env.TRUST_PROXY_HOPS,
+    },
+    realtime: {
+      sweepMs: env.REALTIME_SWEEP_MS,
+      channelPrefix: env.REALTIME_CHANNEL_PREFIX,
     },
     log: { level: env.LOG_LEVEL, format: env.LOG_FORMAT },
     database: { url: env.DATABASE_URL },

@@ -4,6 +4,7 @@ import type { AttendeeMe, DemoInbox } from "@opspilot/contracts";
 import { hashToken } from "../auth/tokens.js";
 import { APP_CONFIG, type AppConfig } from "../config/app-config.js";
 import { PRISMA } from "../database/prisma.js";
+import { RealtimeSignals } from "../live/realtime-signals.js";
 import type { PrismaClient } from "../generated/prisma/client.js";
 import { CLOCK, type Clock } from "../shared/clock.js";
 import { DomainError } from "../shared/domain/domain-error.js";
@@ -20,6 +21,7 @@ export class AttendeeSelfService {
     @Inject(PRISMA) private readonly prisma: PrismaClient,
     @Inject(CLOCK) private readonly clock: Clock,
     @Inject(APP_CONFIG) private readonly config: AppConfig,
+    private readonly signals: RealtimeSignals,
   ) {}
 
   async me(attendee: AttendeeActor): Promise<AttendeeMe> {
@@ -35,6 +37,7 @@ export class AttendeeSelfService {
     await this.prisma.attendeeSession.deleteMany({
       where: { id: attendee.sessionId },
     });
+    await this.signals.recheck("attendee-session", [attendee.sessionId]);
   }
 
   /**

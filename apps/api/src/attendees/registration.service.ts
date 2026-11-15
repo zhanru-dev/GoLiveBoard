@@ -1,10 +1,5 @@
 import { Inject, Injectable } from "@nestjs/common";
-import type {
-  EventStatus,
-  PublicEvent,
-  PublicEventStatus,
-  RegistrationRequest,
-} from "@opspilot/contracts";
+import type { PublicEvent, RegistrationRequest } from "@opspilot/contracts";
 
 import { generateToken, hashToken } from "../auth/tokens.js";
 import { APP_CONFIG, type AppConfig } from "../config/app-config.js";
@@ -16,6 +11,7 @@ import {
 } from "../demo/demo-workspace.js";
 import { lockEventById } from "../events/event-lock.queries.js";
 import type { Prisma, PrismaClient } from "../generated/prisma/client.js";
+import { RealtimeSignals } from "../live/realtime-signals.js";
 import { RATE_LIMITS, RateLimiter } from "../rate-limit/rate-limiter.js";
 import { CLOCK, type Clock } from "../shared/clock.js";
 import { DomainError } from "../shared/domain/domain-error.js";
@@ -26,6 +22,7 @@ import {
   admitsRegistration,
   isPublic,
   isRegistrationOpen,
+  publicStatusOf,
 } from "./domain/admission.js";
 import {
   attendeeSessionExpiresAt,
@@ -38,16 +35,6 @@ import { hasLiveInvitation } from "./invitation.queries.js";
  * ends the oldest.
  */
 export const ATTENDEE_SESSION_LIMIT = 5;
-
-const PUBLIC_STATUS: Readonly<Record<EventStatus, PublicEventStatus>> = {
-  DRAFT: "UPCOMING",
-  CONFIGURING: "UPCOMING",
-  READY: "UPCOMING",
-  LIVE: "LIVE",
-  COMPLETED: "ENDED",
-  ARCHIVED: "ENDED",
-  CANCELLED: "CANCELLED",
-};
 
 const PUBLIC_EVENT_SELECT = {
   id: true,
@@ -88,6 +75,7 @@ export class RegistrationService {
     @Inject(APP_CONFIG) private readonly config: AppConfig,
     private readonly rateLimiter: RateLimiter,
     private readonly mail: AttendeeMail,
+    private readonly signals: RealtimeSignals,
   ) {}
 
   /**
@@ -264,96 +252,108 @@ export class RegistrationService {
       ip,
     );
     const now = this.clock.now();
-    return this.prisma.$transaction(async (tx) => {
-      // The attendee first, then the link: the order of every other path
-      // that touches both (registering again, revoking, erasing). The other
-      // way round, using a link while a Manager revokes its attendee
-      // deadlocked.
-      const [link] = await tx.$queryRaw<
-        { attendee_id: string; event_id: string }[]
-      >`
+    const { grant, endedSessions } = await this.prisma.$transaction(
+      async (tx) => {
+        // The attendee first, then the link: the order of every other path
+        // that touches both (registering again, revoking, erasing). The other
+        // way round, using a link while a Manager revokes its attendee
+        // deadlocked.
+        const [link] = await tx.$queryRaw<
+          { attendee_id: string; event_id: string }[]
+        >`
         SELECT link.attendee_id, attendee.event_id
         FROM attendee_verification_tokens AS link
         JOIN attendees AS attendee ON attendee.id = link.attendee_id
         WHERE link.token_hash = ${hashToken(token)}`;
-      // The event's row first, as every path that also locks an attendee:
-      // its policy cannot change while this decides.
-      if (link === undefined || !(await lockEventById(tx, link.event_id))) {
-        throw new DomainError("TOKEN_INVALID");
-      }
-      const [attendee] = await tx.$queryRaw<
-        { id: string; status: string; email: string; event_id: string }[]
-      >`
+        // The event's row first, as every path that also locks an attendee:
+        // its policy cannot change while this decides.
+        if (link === undefined || !(await lockEventById(tx, link.event_id))) {
+          throw new DomainError("TOKEN_INVALID");
+        }
+        const [attendee] = await tx.$queryRaw<
+          { id: string; status: string; email: string; event_id: string }[]
+        >`
         SELECT id, status::text AS status, email::text AS email, event_id
         FROM attendees WHERE id = ${link.attendee_id}::uuid
         FOR UPDATE`;
-      // Spent in the statement that checks it: of two requests with the
-      // same link, exactly one gets a row back.
-      const [used] = await tx.$queryRaw<{ id: string }[]>`
+        // Spent in the statement that checks it: of two requests with the
+        // same link, exactly one gets a row back.
+        const [used] = await tx.$queryRaw<{ id: string }[]>`
         UPDATE attendee_verification_tokens SET used_at = ${now}
         WHERE token_hash = ${hashToken(token)} AND used_at IS NULL
           AND expires_at > ${now}
         RETURNING id`;
-      if (
-        used === undefined ||
-        attendee === undefined ||
-        (attendee.status !== "PENDING" && attendee.status !== "VERIFIED")
-      ) {
-        throw new DomainError("TOKEN_INVALID");
-      }
-      const event = await tx.event.findUniqueOrThrow({
-        where: { id: attendee.event_id },
-        select: PUBLIC_EVENT_SELECT,
-      });
-      const admission = admitsAttendance({
-        attendeeStatus: "VERIFIED",
-        eventStatus: event.status,
-        policy: event.accessPolicy,
-        email: attendee.email,
-        invited: await hasLiveInvitation(tx, event.id, attendee.email),
-      });
-      if (!admission.admitted) {
-        throw new DomainError("FORBIDDEN", {
-          detail: "This event no longer admits you.",
+        if (
+          used === undefined ||
+          attendee === undefined ||
+          (attendee.status !== "PENDING" && attendee.status !== "VERIFIED")
+        ) {
+          throw new DomainError("TOKEN_INVALID");
+        }
+        const event = await tx.event.findUniqueOrThrow({
+          where: { id: attendee.event_id },
+          select: PUBLIC_EVENT_SELECT,
         });
-      }
-      if (attendee.status === "PENDING") {
-        await tx.attendee.update({
-          where: { id: attendee.id },
-          data: { status: "VERIFIED", verifiedAt: now, updatedAt: now },
+        const admission = admitsAttendance({
+          attendeeStatus: "VERIFIED",
+          eventStatus: event.status,
+          policy: event.accessPolicy,
+          email: attendee.email,
+          invited: await hasLiveInvitation(tx, event.id, attendee.email),
         });
-      }
-      const sessionToken = generateToken();
-      const expiresAt = attendeeSessionExpiresAt(event.endsAt, now);
-      await tx.attendeeSession.create({
-        data: {
-          attendeeId: attendee.id,
-          tokenHash: hashToken(sessionToken),
-          expiresAt,
-        },
-      });
-      await this.boundLinksAndSessions(tx, attendee.id, now);
-      return { slug: event.slug, token: sessionToken, expiresAt };
-    });
+        if (!admission.admitted) {
+          throw new DomainError("FORBIDDEN", {
+            detail: "This event no longer admits you.",
+          });
+        }
+        if (attendee.status === "PENDING") {
+          await tx.attendee.update({
+            where: { id: attendee.id },
+            data: { status: "VERIFIED", verifiedAt: now, updatedAt: now },
+          });
+        }
+        const sessionToken = generateToken();
+        const expiresAt = attendeeSessionExpiresAt(event.endsAt, now);
+        await tx.attendeeSession.create({
+          data: {
+            attendeeId: attendee.id,
+            tokenHash: hashToken(sessionToken),
+            expiresAt,
+          },
+        });
+        const ended = await this.boundLinksAndSessions(tx, attendee.id, now);
+        return {
+          grant: { slug: event.slug, token: sessionToken, expiresAt },
+          endedSessions: ended,
+        };
+      },
+    );
+    // A browser signed out to make room must leave live interaction too.
+    if (endedSessions.length > 0) {
+      await this.signals.recheck("attendee-session", endedSessions);
+    }
+    return grant;
   }
 
   /**
    * Keeps what one attendee can accumulate bounded, however often they
    * register and verify (in the demo, anyone can, from anywhere): spent and
    * expired links go, and only the newest sessions stay.
+   *
+   * @returns the sessions it ended
    */
   private async boundLinksAndSessions(
     tx: Prisma.TransactionClient,
     attendeeId: string,
     now: Date,
-  ): Promise<void> {
+  ): Promise<string[]> {
     await tx.attendeeVerificationToken.deleteMany({
       where: {
         attendeeId,
         OR: [{ usedAt: { not: null } }, { expiresAt: { lte: now } }],
       },
     });
-    await tx.$executeRaw`
+    const ended = await tx.$queryRaw<{ id: string }[]>`
       DELETE FROM attendee_sessions
       WHERE attendee_id = ${attendeeId}::uuid
         AND id NOT IN (
@@ -361,7 +361,9 @@ export class RegistrationService {
           WHERE attendee_id = ${attendeeId}::uuid
           ORDER BY created_at DESC, id DESC
           LIMIT ${ATTENDEE_SESSION_LIMIT}
-        )`;
+        )
+      RETURNING id`;
+    return ended.map((row) => row.id);
   }
 
   private async findPublic(
@@ -389,7 +391,7 @@ function toPublicEvent(event: PublicEventRow): PublicEvent {
     startsAt: event.startsAt.toISOString(),
     endsAt: event.endsAt.toISOString(),
     timeZone: event.timeZone,
-    status: PUBLIC_STATUS[event.status],
+    status: publicStatusOf(event.status),
     registration: {
       open,
       mode: open ? policy.mode : null,

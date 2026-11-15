@@ -10,6 +10,7 @@ import type { AppConfig } from "./config/app-config.js";
 import { ConfigModule } from "./config/config.module.js";
 import { EventsModule } from "./events/events.module.js";
 import { LaunchControlModule } from "./launch-control/launch-control.module.js";
+import { LiveModule } from "./live/live.module.js";
 import { NetModule } from "./net/net.module.js";
 import type { SafeHttpOptions } from "./net/safe-http.js";
 import { StreamsModule } from "./streams/streams.module.js";
@@ -56,6 +57,7 @@ export class AppModule {
         StreamsModule,
         AssetsModule,
         AttendeesModule,
+        LiveModule,
       ],
       providers: [
         { provide: APP_FILTER, useClass: ProblemDetailsFilter },

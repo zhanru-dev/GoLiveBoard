@@ -17,6 +17,7 @@ describe("loadConfig", () => {
     expect(loadConfig(REQUIRED)).toEqual({
       environment: "development",
       api: { host: "127.0.0.1", port: 4301, trustProxyHops: 0 },
+      realtime: { sweepMs: 30_000, channelPrefix: "opspilot" },
       log: { level: "info", format: "json" },
       database: { url: REQUIRED.DATABASE_URL },
       valkey: { url: REQUIRED.VALKEY_URL },

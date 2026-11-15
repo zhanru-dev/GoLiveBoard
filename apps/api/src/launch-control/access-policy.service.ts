@@ -4,6 +4,7 @@ import type { AccessPolicy, PutAccessPolicyRequest } from "@opspilot/contracts";
 import { recordAudit } from "../audit/audit.js";
 import type { Actor } from "../auth/actor.js";
 import { PRISMA } from "../database/prisma.js";
+import { RealtimeSignals } from "../live/realtime-signals.js";
 import { lockWritableEvent } from "../events/event-lock.queries.js";
 import type { Prisma, PrismaClient } from "../generated/prisma/client.js";
 import { versionFromIfMatch } from "../http/concurrency.js";
@@ -34,6 +35,7 @@ export class AccessPolicyService {
   constructor(
     @Inject(PRISMA) private readonly prisma: PrismaClient,
     @Inject(CLOCK) private readonly clock: Clock,
+    private readonly signals: RealtimeSignals,
   ) {}
 
   /** @throws DomainError `NOT_FOUND` when the event has no policy yet */
@@ -64,7 +66,7 @@ export class AccessPolicyService {
     ifMatch: string | undefined,
     input: PutAccessPolicyRequest,
   ): Promise<AccessPolicy> {
-    return this.prisma.$transaction(async (tx) => {
+    const policy = await this.prisma.$transaction(async (tx) => {
       await lockWritableEvent(tx, actor.workspaceId, eventId);
       const current = await tx.accessPolicy.findUnique({
         where: { eventId },
@@ -95,6 +97,9 @@ export class AccessPolicyService {
       await this.audit(tx, actor, eventId, current, input);
       return toAccessPolicy(updated);
     });
+    // A stricter policy ends the live connections it no longer admits.
+    await this.signals.recheck("event", [eventId]);
+    return policy;
   }
 
   private async audit(

@@ -15,6 +15,7 @@ import {
 import { lockEvent } from "../events/event-lock.queries.js";
 import { EventsService } from "../events/events.service.js";
 import type { Prisma, PrismaClient } from "../generated/prisma/client.js";
+import { RealtimeSignals } from "../live/realtime-signals.js";
 import { writeOutbox } from "../outbox/outbox.js";
 import { CLOCK, type Clock } from "../shared/clock.js";
 import { DomainError } from "../shared/domain/domain-error.js";
@@ -31,6 +32,7 @@ export class TransitionsService {
     @Inject(PRISMA) private readonly prisma: PrismaClient,
     @Inject(CLOCK) private readonly clock: Clock,
     private readonly events: EventsService,
+    private readonly signals: RealtimeSignals,
   ) {}
 
   /**
@@ -52,7 +54,7 @@ export class TransitionsService {
     eventId: string,
     to: EventStatus,
   ): Promise<EventDetail> {
-    return this.prisma.$transaction(async (tx) => {
+    const detail = await this.prisma.$transaction(async (tx) => {
       const event = await lockEvent(tx, actor.workspaceId, eventId);
       if (event === undefined) {
         throw new DomainError("NOT_FOUND");
@@ -104,6 +106,10 @@ export class TransitionsService {
       });
       return this.events.getWith(tx, actor, eventId);
     });
+    // The watch page switches to the stream (FR-RN-1); a cancelled or
+    // archived event ends its live connections.
+    await this.signals.statusChanged(eventId, to);
+    return detail;
   }
 
   private async assertNoHardBlockers(

@@ -8,6 +8,7 @@ import { DEMO_PEOPLE, DEMO_WORKSPACE } from "../demo/demo-accounts.js";
 import { DemoSeeder } from "../demo/demo-seeder.js";
 import { limitDemoSessions } from "../demo/demo-workspace.js";
 import { Prisma, type PrismaClient } from "../generated/prisma/client.js";
+import { RealtimeSignals } from "../live/realtime-signals.js";
 import { Mailer, mailDeliveryError, type MailMessage } from "../mail/mailer.js";
 import { RATE_LIMITS, RateLimiter } from "../rate-limit/rate-limiter.js";
 import { CLOCK, type Clock } from "../shared/clock.js";
@@ -50,6 +51,7 @@ export class AuthService {
     private readonly rateLimiter: RateLimiter,
     private readonly passwords: PasswordHasher,
     private readonly demo: DemoSeeder,
+    private readonly signals: RealtimeSignals,
     @InjectPinoLogger(AuthService.name) private readonly logger: PinoLogger,
   ) {
     this.tokenKeys = {
@@ -151,12 +153,17 @@ export class AuthService {
       where: { id: DEMO_PEOPLE.manager.id },
       select: { passwordHash: true },
     });
-    return this.startSession(
+    let ended: string[] = [];
+    const tokens = await this.startSession(
       DEMO_PEOPLE.manager.id,
       DEMO_WORKSPACE.id,
       visitor.passwordHash,
-      (tx, now) => limitDemoSessions(tx, now),
+      async (tx, now) => {
+        ended = await limitDemoSessions(tx, now);
+      },
     );
+    await this.signals.recheck("session", ended);
+    return tokens;
   }
 
   /**
@@ -205,7 +212,7 @@ export class AuthService {
   /** Revokes the session the refresh token belongs to (FR-AUTH-3). */
   async signOut(refreshToken: string): Promise<void> {
     const presentedHash = hashToken(refreshToken);
-    await this.prisma.session.updateMany({
+    const revoked = await this.prisma.session.updateManyAndReturn({
       where: {
         OR: [
           { refreshTokenHash: presentedHash },
@@ -214,7 +221,13 @@ export class AuthService {
         revokedAt: null,
       },
       data: { revokedAt: this.clock.now() },
+      select: { id: true },
     });
+    // Its live connections end too (FR-AUTH-3).
+    await this.signals.recheck(
+      "session",
+      revoked.map((session) => session.id),
+    );
   }
 
   /**
@@ -300,6 +313,7 @@ export class AuthService {
       where: { id: session.id, revokedAt: null },
       data: { revokedAt: now },
     });
+    await this.signals.recheck("session", [session.id]);
     this.logger.warn(
       { sessionId: session.id },
       "Refresh token reused after rotation; session revoked",

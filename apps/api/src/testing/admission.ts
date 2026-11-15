@@ -72,6 +72,11 @@ export class PublicClient {
     private readonly cookies: Record<string, string> = {},
   ) {}
 
+  /** A cookie this client sends, e.g. the attendee session. */
+  cookie(name: string): string | undefined {
+    return this.cookies[name];
+  }
+
   /** The same address with these cookies too. */
   with(cookies: Record<string, string>): PublicClient {
     return new PublicClient(this.app, this.address, {

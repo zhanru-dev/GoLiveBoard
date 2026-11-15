@@ -4,6 +4,7 @@ import { recordSystemAudit } from "../audit/audit.js";
 import { PRISMA } from "../database/prisma.js";
 import { lockEventById } from "../events/event-lock.queries.js";
 import type { PrismaClient } from "../generated/prisma/client.js";
+import { RealtimeSignals } from "../live/realtime-signals.js";
 import { CLOCK, type Clock } from "../shared/clock.js";
 import { anonymiseAttendee } from "./anonymise.js";
 
@@ -36,6 +37,7 @@ export class RetentionJob {
   constructor(
     @Inject(PRISMA) private readonly prisma: PrismaClient,
     @Inject(CLOCK) private readonly clock: Clock,
+    private readonly signals: RealtimeSignals,
   ) {}
 
   async run(): Promise<RetentionOutcome> {
@@ -53,11 +55,15 @@ export class RetentionJob {
           AND event.ends_at + workspace.retention_days * interval '1 day' <= ${now}
         ORDER BY attendee.id
         LIMIT ${BATCH}`;
+      const ended: string[] = [];
       for (const attendee of due) {
         if (await this.anonymise(attendee, now)) {
           anonymised += 1;
+          ended.push(attendee.id);
         }
       }
+      // Anyone still connected to such an old event is disconnected.
+      await this.signals.recheck("attendee", ended);
       if (due.length < BATCH) {
         break;
       }

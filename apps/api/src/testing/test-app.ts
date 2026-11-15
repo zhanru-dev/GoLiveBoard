@@ -41,6 +41,11 @@ export interface TestAppOptions {
   readonly safeHttp?: SafeHttpOptions;
   /** Shorter storage limits, to test what happens when storage hangs. */
   readonly storageTimeouts?: StorageTimeouts;
+  /**
+   * Providers replaced by a subclass with the same dependencies, e.g. one
+   * that pauses at a chosen point to force an interleaving.
+   */
+  readonly replace?: readonly (readonly [Type, Type])[];
 }
 
 class DiscardingMailer extends Mailer {
@@ -80,6 +85,9 @@ export async function createTestApp(
     builder
       .overrideProvider(HEALTH_INDICATORS)
       .useValue(options.healthIndicators);
+  }
+  for (const [original, replacement] of options.replace ?? []) {
+    builder.overrideProvider(original).useClass(replacement);
   }
   const { storageTimeouts } = options;
   if (storageTimeouts !== undefined) {

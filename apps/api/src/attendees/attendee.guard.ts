@@ -2,29 +2,16 @@ import {
   type CanActivate,
   createParamDecorator,
   type ExecutionContext,
-  Inject,
   Injectable,
 } from "@nestjs/common";
 import type { Request } from "express";
 import { InjectPinoLogger, PinoLogger } from "nestjs-pino";
 
-import { hashToken } from "../auth/tokens.js";
-import { PRISMA } from "../database/prisma.js";
-import type { PrismaClient } from "../generated/prisma/client.js";
-import { CLOCK, type Clock } from "../shared/clock.js";
 import { DomainError } from "../shared/domain/domain-error.js";
 import { readAttendeeCookie } from "./attendee-cookies.js";
-import { admitsAttendance } from "./domain/admission.js";
-import { hasLiveInvitation } from "./invitation.queries.js";
+import { type AttendeeActor, AttendeeSessions } from "./attendee-sessions.js";
 
-/** The attendee making a request, loaded fresh by AttendeeGuard. */
-export interface AttendeeActor {
-  readonly attendeeId: string;
-  readonly sessionId: string;
-  readonly eventId: string;
-  readonly workspaceId: string;
-  readonly slug: string;
-}
+export type { AttendeeActor } from "./attendee-sessions.js";
 
 type RequestWithAttendee = Request & { attendee?: AttendeeActor };
 
@@ -40,69 +27,30 @@ type RequestWithAttendee = Request & { attendee?: AttendeeActor };
 @Injectable()
 export class AttendeeGuard implements CanActivate {
   constructor(
-    @Inject(PRISMA) private readonly prisma: PrismaClient,
-    @Inject(CLOCK) private readonly clock: Clock,
+    private readonly sessions: AttendeeSessions,
     @InjectPinoLogger(AttendeeGuard.name) private readonly logger: PinoLogger,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest<RequestWithAttendee>();
     const token = readAttendeeCookie(request);
-    if (token === undefined) {
+    const check =
+      token === undefined ? undefined : await this.sessions.byToken(token);
+    if (check === undefined) {
       throw new DomainError("UNAUTHENTICATED");
     }
-    const session = await this.prisma.attendeeSession.findUnique({
-      where: { tokenHash: hashToken(token) },
-      select: {
-        id: true,
-        expiresAt: true,
-        attendee: {
-          select: {
-            id: true,
-            email: true,
-            status: true,
-            event: {
-              select: {
-                id: true,
-                slug: true,
-                status: true,
-                workspaceId: true,
-                accessPolicy: { select: { mode: true, allowedDomains: true } },
-              },
-            },
-          },
-        },
-      },
-    });
-    if (session === null || session.expiresAt <= this.clock.now()) {
-      throw new DomainError("UNAUTHENTICATED");
-    }
-    const { attendee } = session;
-    const { event } = attendee;
-    if (request.params.slug !== event.slug) {
+    const { attendee } = check;
+    if (request.params.slug !== attendee.slug) {
       throw new DomainError("NOT_FOUND");
     }
     // Logged as the workspace, like staff requests (docs/02, section 7.9).
-    this.logger.assign({ workspaceId: event.workspaceId });
-    const admission = admitsAttendance({
-      attendeeStatus: attendee.status,
-      eventStatus: event.status,
-      policy: event.accessPolicy,
-      email: attendee.email,
-      invited: await hasLiveInvitation(this.prisma, event.id, attendee.email),
-    });
-    if (!admission.admitted) {
+    this.logger.assign({ workspaceId: attendee.workspaceId });
+    if (!check.admitted) {
       throw new DomainError("FORBIDDEN", {
         detail: "You no longer have access to this event.",
       });
     }
-    request.attendee = {
-      attendeeId: attendee.id,
-      sessionId: session.id,
-      eventId: event.id,
-      workspaceId: event.workspaceId,
-      slug: event.slug,
-    };
+    request.attendee = attendee;
     return true;
   }
 }

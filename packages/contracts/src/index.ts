@@ -119,3 +119,20 @@ export {
   Workspace,
 } from "./workspace.js";
 export { QuestionStatus, RealtimeChannel } from "./live.js";
+export {
+  ChannelJoin,
+  ChannelJoinAck,
+  ChannelJoined,
+  ChannelLeave,
+  ChatAuthor,
+  ChatEvent,
+  ChatEventKind,
+  ChatMessage,
+  EventStatusChanged,
+  REALTIME_PATH,
+  RealtimeErrorCode,
+  RealtimeFailure,
+  Sequence,
+  SessionRevoked,
+  Slug,
+} from "./realtime.js";

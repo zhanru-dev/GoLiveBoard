@@ -12,6 +12,7 @@ import { MaintenanceConsumer } from "./maintenance.consumer.js";
 import { DemoModule } from "../demo/demo.module.js";
 import { NetModule } from "../net/net.module.js";
 import type { SafeHttpOptions } from "../net/safe-http.js";
+import { RealtimeSignalsModule } from "../live/realtime-signals.js";
 import { MailModule } from "../mail/mail.module.js";
 import { createLogger } from "../observability/logger.js";
 import { ObservabilityModule } from "../observability/observability.module.js";
@@ -55,6 +56,7 @@ export class WorkerModule {
         DemoModule,
         MailModule,
         QueuesModule,
+        RealtimeSignalsModule,
       ],
       providers: [
         {

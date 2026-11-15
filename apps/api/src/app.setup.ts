@@ -8,6 +8,7 @@ import type { HttpLogger } from "pino-http";
 
 import { APP_CONFIG, type AppConfig } from "./config/app-config.js";
 import { API_PREFIX } from "./http/api-prefix.js";
+import { RealtimeGateway } from "./live/realtime.gateway.js";
 import { HTTP_LOGGER } from "./observability/logger.js";
 
 /**
@@ -52,4 +53,6 @@ export function configureApp(app: NestExpressApplication): void {
   app.use(noStore);
   app.use(cookieParser());
   app.useBodyParser("json", { limit: JSON_BODY_LIMIT });
+  // Socket.IO on /realtime, beside the routes (docs/04, section 4).
+  app.get(RealtimeGateway).attach(app.getHttpServer());
 }
