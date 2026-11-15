@@ -1,6 +1,6 @@
 import "server-only";
 
-import { AttendeeMe, Me, PublicEvent } from "@opspilot/contracts";
+import { AttendeeMe, Me, PublicEvent, WatchInfo } from "@opspilot/contracts";
 import { cookies } from "next/headers";
 
 /**
@@ -74,4 +74,28 @@ export async function getAttendeeMe(slug: string): Promise<AttendeeMe | null> {
     );
   }
   return AttendeeMe.parse(await response.json());
+}
+
+/**
+ * What the watch page shows, or null when this browser is not signed in as
+ * an attendee the event admits.
+ */
+export async function getWatchInfo(slug: string): Promise<WatchInfo | null> {
+  const cookieHeader = (await cookies()).toString();
+  if (cookieHeader === "") {
+    return null;
+  }
+  const response = await fetch(
+    `${API_INTERNAL_URL}/api/v1/public/events/${encodeURIComponent(slug)}/watch`,
+    { headers: { cookie: cookieHeader }, cache: "no-store" },
+  );
+  if ([401, 403, 404].includes(response.status)) {
+    return null;
+  }
+  if (!response.ok) {
+    throw new Error(
+      `GET /public/events/watch failed with ${String(response.status)}`,
+    );
+  }
+  return WatchInfo.parse(await response.json());
 }

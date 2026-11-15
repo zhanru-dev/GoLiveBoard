@@ -31,6 +31,11 @@ export function AttendeePanel({
           ? "We will remind you a day and an hour before it starts."
           : "You will not get reminders."}
       </p>
+      <p>
+        <a href={`/e/${slug}/watch`} className="font-medium">
+          Go to the event: stream, chat and questions
+        </a>
+      </p>
       <div>
         <PublicButton
           variant="outline"
