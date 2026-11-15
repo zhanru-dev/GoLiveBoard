@@ -7,6 +7,7 @@ import { AudienceSection } from "./audience-section";
 import { DetailsSection } from "./details-section";
 import { EventHeader } from "./event-header";
 import { HoldingSlateSection } from "./holding-slate-section";
+import { LiveSection } from "./live-section";
 import { ReadinessPanel } from "./readiness-panel";
 import { RunbookSection } from "./runbook-section";
 import { StreamSection } from "./stream-section";
@@ -42,6 +43,7 @@ export function LaunchControlPage({ eventId }: Readonly<{ eventId: string }>) {
           <StreamSection control={control} event={event.data} />
           <HoldingSlateSection control={control} eventId={eventId} />
           <AudienceSection control={control} event={event.data} />
+          <LiveSection control={control} event={event.data} />
           <DetailsSection control={control} event={event.data} />
         </div>
         <ReadinessPanel control={control} eventId={eventId} />

@@ -12,9 +12,12 @@ import {
   problem,
 } from "@/testing/events";
 import { OWNER, renderScreen } from "@/testing/render";
+import { FakeRealtimeConnection, fakeRealtimeModule } from "@/testing/live";
 import { server } from "@/testing/server";
 
 import { LaunchControlPage } from "./launch-control-page";
+
+vi.mock("@/features/live/realtime-connection", () => fakeRealtimeModule());
 
 const TASK = {
   id: "0195f0a0-0000-7000-8000-0000000000f1",
@@ -61,6 +64,12 @@ function serveEvent(
     ),
     http.get(`*/api/v1/events/${EVENT_ID}/invitations`, () =>
       HttpResponse.json([]),
+    ),
+    http.get(`*/api/v1/events/${EVENT_ID}/chat/messages`, () =>
+      HttpResponse.json({ items: [], latestSequence: 0, nextBefore: null }),
+    ),
+    http.get(`*/api/v1/events/${EVENT_ID}/questions`, () =>
+      HttpResponse.json({ items: [], latestSequence: 0 }),
     ),
   );
 }
@@ -697,6 +706,159 @@ describe("LaunchControlPage", () => {
         within(audience).queryByRole("button", { name: /Revoke|Erase/ }),
       ).toBeNull();
       expect(within(audience).queryByText("Invitations")).toBeNull();
+    });
+  });
+
+  describe("chat and Q&A (FR-RN-3 to FR-RN-5)", () => {
+    const QUESTION = {
+      id: "0195f0a0-0000-7000-8000-0000000000a1",
+      body: "Will it ship on time?",
+      status: "PENDING" as const,
+      author: { kind: "ATTENDEE" as const, name: "Ada" },
+      pinSlot: null,
+      voteCount: 2,
+      version: 1,
+      createdAt: "2026-11-15T12:00:00.000Z",
+      mine: false,
+      votedByMe: false,
+    };
+    const MESSAGE = {
+      id: "0195f0a0-0000-7000-8000-0000000000b1",
+      sequence: 1,
+      author: { kind: "ATTENDEE" as const, name: "Ada" },
+      body: "Something rude",
+      deleted: false,
+      createdAt: "2026-11-15T12:00:00.000Z",
+    };
+
+    function serveLive() {
+      server.use(
+        http.get(`*/api/v1/events/${EVENT_ID}/questions`, () =>
+          HttpResponse.json({ items: [QUESTION], latestSequence: 1 }),
+        ),
+        http.get(`*/api/v1/events/${EVENT_ID}/chat/messages`, () =>
+          HttpResponse.json({
+            items: [MESSAGE],
+            latestSequence: 1,
+            nextBefore: null,
+          }),
+        ),
+      );
+    }
+
+    it("approves a question with its version, and follows changes made elsewhere", async () => {
+      serveEvent();
+      serveLive();
+      const patches: { body: unknown; ifMatch: string | null }[] = [];
+      server.use(
+        http.patch(`*/api/v1/questions/${QUESTION.id}`, async ({ request }) => {
+          patches.push({
+            body: await request.json(),
+            ifMatch: request.headers.get("If-Match"),
+          });
+          return HttpResponse.json({
+            ...QUESTION,
+            status: "PUBLISHED",
+            version: 2,
+          });
+        }),
+      );
+      renderScreen(<LaunchControlPage eventId={EVENT_ID} />, OWNER);
+      const user = userEvent.setup();
+
+      await user.click(
+        await screen.findByRole("button", {
+          name: "Approve: Will it ship on time?",
+        }),
+      );
+
+      expect(patches).toEqual([
+        { body: { status: "PUBLISHED" }, ifMatch: '"1"' },
+      ]);
+      const list = screen.getByRole("list", { name: "Questions to moderate" });
+      expect(await within(list).findByText("Published")).toBeVisible();
+      FakeRealtimeConnection.last?.deliver("QUESTIONS", {
+        sequence: 3,
+        kind: "UPDATED",
+        question: { ...QUESTION, status: "PUBLISHED", pinSlot: 1, version: 3 },
+      });
+      expect(await within(list).findByText("Pinned")).toBeVisible();
+    });
+
+    it("lets Analysts follow chat and Q&A, but not moderate or write", async () => {
+      serveEvent();
+      serveLive();
+      renderScreen(<LaunchControlPage eventId={EVENT_ID} />, ANALYST);
+
+      expect(
+        await screen.findByText("Will it ship on time?"),
+      ).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: /^Approve/ })).toBeNull();
+      expect(
+        screen.queryByRole("button", { name: /^Delete message/ }),
+      ).toBeNull();
+      expect(screen.getByText(/Analysts follow the chat/)).toBeInTheDocument();
+      expect(
+        screen.getByRole("checkbox", { name: /wait for approval/ }),
+      ).toBeDisabled();
+    });
+
+    it("turns pre-moderation on with the event's version", async () => {
+      serveEvent();
+      const patches: { body: unknown; ifMatch: string | null }[] = [];
+      server.use(
+        http.patch(`*/api/v1/events/${EVENT_ID}`, async ({ request }) => {
+          patches.push({
+            body: await request.json(),
+            ifMatch: request.headers.get("If-Match"),
+          });
+          return HttpResponse.json(anEvent({ questionsPreModerated: true }));
+        }),
+      );
+      renderScreen(<LaunchControlPage eventId={EVENT_ID} />, OWNER);
+      const user = userEvent.setup();
+
+      await user.click(
+        await screen.findByRole("checkbox", { name: /wait for approval/ }),
+      );
+
+      expect(patches).toEqual([
+        { body: { questionsPreModerated: true }, ifMatch: '"3"' },
+      ]);
+    });
+
+    it("deletes a chat message once the Manager confirms", async () => {
+      serveEvent();
+      serveLive();
+      const deleted: string[] = [];
+      server.use(
+        http.delete(
+          `*/api/v1/events/${EVENT_ID}/chat/messages/${MESSAGE.id}`,
+          () => {
+            deleted.push(MESSAGE.id);
+            return HttpResponse.json({ ...MESSAGE, body: "", deleted: true });
+          },
+        ),
+      );
+      renderScreen(<LaunchControlPage eventId={EVENT_ID} />, OWNER);
+      const user = userEvent.setup();
+
+      await user.click(
+        await screen.findByRole("button", { name: "Delete message from Ada" }),
+      );
+      expect(deleted).toEqual([]);
+      await user.click(screen.getByRole("button", { name: "Delete" }));
+
+      expect(deleted).toEqual([MESSAGE.id]);
+    });
+
+    it("waits until the event is being configured", async () => {
+      serveEvent(anEvent({ status: "DRAFT" }));
+      renderScreen(<LaunchControlPage eventId={EVENT_ID} />, OWNER);
+
+      expect(
+        await screen.findByText(/open once the event is being configured/),
+      ).toBeVisible();
     });
   });
 });

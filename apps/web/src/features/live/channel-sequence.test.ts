@@ -41,6 +41,19 @@ describe("ChannelSequence", () => {
     expect(channel.latest).toBe(7);
   });
 
+  it("does not mistake events that arrive during a slow join for a gap", () => {
+    const { channel, applied, onGap } = setUp();
+    channel.reset(3);
+    channel.joinStarted();
+    channel.receive(event(6));
+
+    vi.advanceTimersByTime(GAP_WAIT_MS * 2);
+    channel.joined(5, [event(4), event(5)]);
+
+    expect(onGap).not.toHaveBeenCalled();
+    expect(applied).toEqual([4, 5, 6]);
+  });
+
   it("ignores what the snapshot already had", () => {
     const { channel, applied } = setUp();
     channel.reset(10);
