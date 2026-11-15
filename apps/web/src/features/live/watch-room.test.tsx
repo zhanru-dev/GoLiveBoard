@@ -193,4 +193,38 @@ describe("WatchRoom (FR-RN-1)", () => {
       await screen.findByText("You have been signed out of this event."),
     ).toBeVisible();
   });
+
+  it("says when chat and questions update live, once both are joined", async () => {
+    serveRoom();
+    renderScreen(<WatchRoom info={info()} />);
+    await screen.findByText("Will it ship?");
+    expect(screen.getByText("Connecting…")).toBeVisible();
+
+    act(() => {
+      FakeRealtimeConnection.last?.options.onJoined?.("CHAT");
+    });
+    expect(screen.getByText("Connecting…")).toBeVisible();
+    act(() => {
+      FakeRealtimeConnection.last?.options.onJoined?.("QUESTIONS");
+    });
+
+    expect(
+      screen.getByText("Live: chat and questions update as they happen."),
+    ).toBeVisible();
+  });
+
+  it("lets the server decide what the page becomes when the event refuses it", async () => {
+    serveRoom();
+    renderScreen(<WatchRoom info={info()} />);
+    await screen.findByText("Will it ship?");
+    expect(router.refresh).not.toHaveBeenCalled();
+
+    act(() => {
+      FakeRealtimeConnection.last?.options.onState("refused");
+    });
+
+    await vi.waitFor(() => {
+      expect(router.refresh).toHaveBeenCalledOnce();
+    });
+  });
 });

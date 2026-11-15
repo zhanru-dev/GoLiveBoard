@@ -9,6 +9,7 @@ import type {
   Question,
   QuestionList,
   QuestionsEvent,
+  RealtimeChannel,
 } from "@opspilot/contracts";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
@@ -31,6 +32,7 @@ export function useLiveConnection(
   const [connection, setConnection] = useState<RealtimeConnection>();
   const [state, setState] = useState<ConnectionState>("connecting");
   const [status, setStatus] = useState(options.initialStatus);
+  const [joined, setJoined] = useState<ReadonlySet<RealtimeChannel>>(new Set());
   const refreshSession = useRef(options.refreshSession);
 
   useEffect(() => {
@@ -39,6 +41,9 @@ export function useLiveConnection(
       onState: setState,
       onStatus: (event: EventStatusChanged) => {
         setStatus(event.status);
+      },
+      onJoined: (channel) => {
+        setJoined((current) => new Set(current).add(channel));
       },
       refreshSession: refreshSession.current,
     });
@@ -49,7 +54,7 @@ export function useLiveConnection(
     };
   }, [slug]);
 
-  return { connection, state, status };
+  return { connection, state, status, joined };
 }
 
 /** What chat needs from the API, for attendees or for staff. */

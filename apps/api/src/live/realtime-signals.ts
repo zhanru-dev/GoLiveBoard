@@ -30,6 +30,8 @@ export const RealtimeSignal = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("status"),
     eventId: z.uuid(),
+    /** What clients call the event: sent as is, whoever is connected. */
+    slug: z.string().min(1).max(100),
     status: EventStatus,
   }),
 ]);
@@ -64,8 +66,12 @@ export class RealtimeSignals {
     }
   }
 
-  async statusChanged(eventId: string, status: EventStatus): Promise<void> {
-    await this.publish({ type: "status", eventId, status });
+  async statusChanged(
+    eventId: string,
+    slug: string,
+    status: EventStatus,
+  ): Promise<void> {
+    await this.publish({ type: "status", eventId, slug, status });
   }
 
   private async publish(signal: RealtimeSignal): Promise<void> {

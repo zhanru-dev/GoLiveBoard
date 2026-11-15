@@ -880,6 +880,27 @@ describe(
         expect(live.connected).toBe(true);
       });
 
+      it("tells a connection whose join is still being decided that the event's status changed", async () => {
+        const { api: client, owner, event } = await setUp();
+        const live = await connect(staffCookie(owner), { at: racedUrl });
+        const join = joinGate.arm();
+        const joining = live.join(event.slug);
+        await join.reached;
+
+        await client.send(owner, "post", `/events/${event.id}/transitions`, {
+          to: "CANCELLED",
+        });
+
+        try {
+          await expect
+            .poll(() => live.statuses, { timeout: REVOCATION_MS })
+            .toEqual([{ slug: event.slug, status: "CANCELLED" }]);
+        } finally {
+          join.release();
+          await joining.catch(() => undefined);
+        }
+      });
+
       it("only refuses a join it may not make, also while the connection is re-checked", async () => {
         const client = api();
         const owner = await client.newOwner();

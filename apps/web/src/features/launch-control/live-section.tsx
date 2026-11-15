@@ -79,6 +79,13 @@ function PreModeration({
   control,
   event,
 }: Readonly<{ control: LaunchControl; event: EventDetail }>) {
+  // Shown at once, put back if the change is refused.
+  const [checked, setChecked] = useState(event.questionsPreModerated);
+  const [stored, setStored] = useState(event.questionsPreModerated);
+  if (stored !== event.questionsPreModerated) {
+    setStored(event.questionsPreModerated);
+    setChecked(event.questionsPreModerated);
+  }
   const change = useMutation({
     mutationFn: (questionsPreModerated: boolean) =>
       api(`/events/${event.id}`, {
@@ -87,16 +94,20 @@ function PreModeration({
         ifMatch: event.version,
         workspaceId: control.workspaceId,
       }),
-    onError: (error) => toast.error(errorMessage(error)),
+    onError: (error) => {
+      setChecked(event.questionsPreModerated);
+      toast.error(errorMessage(error));
+    },
     onSettled: control.refresh,
   });
   return (
     <label className="flex items-center gap-2 text-sm">
       <input
         type="checkbox"
-        checked={event.questionsPreModerated}
+        checked={checked}
         disabled={!control.canEdit || change.isPending}
         onChange={(input) => {
+          setChecked(input.target.checked);
           change.mutate(input.target.checked);
         }}
       />

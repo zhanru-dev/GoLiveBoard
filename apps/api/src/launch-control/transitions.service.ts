@@ -108,7 +108,7 @@ export class TransitionsService {
     });
     // The watch page switches to the stream (FR-RN-1); a cancelled or
     // archived event ends its live connections.
-    await this.signals.statusChanged(eventId, to);
+    await this.signals.statusChanged(eventId, detail.slug, to);
     return detail;
   }
 

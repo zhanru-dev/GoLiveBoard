@@ -39,7 +39,7 @@ const STATE_NOTES: Partial<Record<ConnectionState, string>> = {
 export function WatchRoom({ info }: Readonly<{ info: WatchInfo }>) {
   const { slug } = info;
   const router = useRouter();
-  const { connection, state, status } = useLiveConnection(slug, {
+  const { connection, state, status, joined } = useLiveConnection(slug, {
     initialStatus: info.status,
   });
   const current = status ?? info.status;
@@ -65,6 +65,16 @@ export function WatchRoom({ info }: Readonly<{ info: WatchInfo }>) {
       router.refresh();
     }
   }, [status, info.status, router]);
+
+  // Refused: the event may have changed before this page joined it (and
+  // so before it could hear about the change). The server decides what the
+  // page becomes; an attendee it no longer admits goes back to the event
+  // page, which says why.
+  useEffect(() => {
+    if (state === "refused") {
+      router.refresh();
+    }
+  }, [state, router]);
 
   useEffect(() => {
     if (connection === undefined || current !== "LIVE") {
@@ -125,6 +135,11 @@ export function WatchRoom({ info }: Readonly<{ info: WatchInfo }>) {
           )}
         </PublicNotice>
       )}
+      <p role="status" className="text-xs text-muted-foreground">
+        {joined.has("CHAT") && joined.has("QUESTIONS") && state === "connected"
+          ? "Live: chat and questions update as they happen."
+          : "Connecting…"}
+      </p>
       <Player
         status={current}
         streamUrl={current === "LIVE" ? info.streamUrl : null}

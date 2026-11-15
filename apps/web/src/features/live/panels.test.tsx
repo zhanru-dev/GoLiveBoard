@@ -30,7 +30,7 @@ describe("ChatPanel", () => {
     );
     const user = userEvent.setup();
 
-    await user.type(screen.getByLabelText("Message"), "  Hello  ");
+    await user.type(screen.getByLabelText("Your message"), "  Hello  ");
     await user.click(screen.getByRole("button", { name: "Send" }));
     await user.click(screen.getByRole("button", { name: "Try again" }));
 
@@ -53,7 +53,7 @@ describe("ChatPanel", () => {
       />,
     );
 
-    expect(screen.queryByLabelText("Message")).toBeNull();
+    expect(screen.queryByLabelText("Your message")).toBeNull();
     expect(screen.getByText("The event has ended.")).toBeVisible();
   });
 });

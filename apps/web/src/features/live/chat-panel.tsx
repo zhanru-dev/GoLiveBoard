@@ -42,73 +42,76 @@ export function ChatPanel({
       <h2 id="chat-heading" className="text-lg font-semibold">
         Chat
       </h2>
-      <ol
+      {/* The log announces new messages; the list inside keeps them a list. */}
+      <div
         role="log"
         aria-label="Chat messages"
-        className="grid max-h-96 gap-2 overflow-y-auto rounded-lg border p-3"
+        className="max-h-96 overflow-y-auto rounded-lg border p-3"
       >
-        {messages.length === 0 && pending.length === 0 ? (
-          <li className="text-sm text-muted-foreground">No messages yet.</li>
-        ) : null}
-        {messages.map((message) => (
-          <li key={message.id} className="grid gap-0.5 text-sm">
-            <span className="font-medium">
-              {message.author.name}
-              {message.author.kind === "STAFF" ? (
-                <span className="ml-1 text-xs text-muted-foreground">
-                  (team)
-                </span>
-              ) : null}
-            </span>
-            {message.deleted ? (
-              <span className="text-muted-foreground italic">
-                Message removed by a moderator.
+        <ol className="grid gap-2">
+          {messages.length === 0 && pending.length === 0 ? (
+            <li className="text-sm text-muted-foreground">No messages yet.</li>
+          ) : null}
+          {messages.map((message) => (
+            <li key={message.id} className="grid gap-0.5 text-sm">
+              <span className="font-medium">
+                {message.author.name}
+                {message.author.kind === "STAFF" ? (
+                  <span className="ml-1 text-xs text-muted-foreground">
+                    (team)
+                  </span>
+                ) : null}
               </span>
-            ) : (
-              <span className="whitespace-pre-wrap">{message.body}</span>
-            )}
-            {onDelete !== undefined && !message.deleted ? (
-              <button
-                type="button"
-                className="justify-self-start text-xs underline"
-                onClick={() => {
-                  onDelete(message);
-                }}
-              >
-                Delete message from {message.author.name}
-              </button>
-            ) : null}
-          </li>
-        ))}
-        {pending.map((message) => (
-          <li
-            key={message.clientMessageId}
-            className="grid gap-0.5 text-sm text-muted-foreground"
-          >
-            <span className="whitespace-pre-wrap">{message.body}</span>
-            {message.failed ? (
-              <span>
-                Not sent.{" "}
+              {message.deleted ? (
+                <span className="text-muted-foreground italic">
+                  Message removed by a moderator.
+                </span>
+              ) : (
+                <span className="whitespace-pre-wrap">{message.body}</span>
+              )}
+              {onDelete !== undefined && !message.deleted ? (
                 <button
                   type="button"
-                  className="underline"
+                  className="justify-self-start text-xs underline"
                   onClick={() => {
-                    onRetry(message.clientMessageId);
+                    onDelete(message);
                   }}
                 >
-                  Try again
+                  Delete message from {message.author.name}
                 </button>
-              </span>
-            ) : (
-              <span>Sending…</span>
-            )}
-          </li>
-        ))}
-      </ol>
+              ) : null}
+            </li>
+          ))}
+          {pending.map((message) => (
+            <li
+              key={message.clientMessageId}
+              className="grid gap-0.5 text-sm text-muted-foreground"
+            >
+              <span className="whitespace-pre-wrap">{message.body}</span>
+              {message.failed ? (
+                <span>
+                  Not sent.{" "}
+                  <button
+                    type="button"
+                    className="underline"
+                    onClick={() => {
+                      onRetry(message.clientMessageId);
+                    }}
+                  >
+                    Try again
+                  </button>
+                </span>
+              ) : (
+                <span>Sending…</span>
+              )}
+            </li>
+          ))}
+        </ol>
+      </div>
       {disabledReason === undefined ? (
         <form onSubmit={submit} className="flex gap-2">
           <label htmlFor="chat-message" className="sr-only">
-            Message
+            Your message
           </label>
           <input
             id="chat-message"

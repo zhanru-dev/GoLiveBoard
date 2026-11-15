@@ -529,7 +529,7 @@ export class RealtimeGateway
     }
     try {
       if (signal.type === "status") {
-        await this.onStatus(signal.eventId, signal.status);
+        await this.onStatus(signal.eventId, signal.slug, signal.status);
       } else {
         await this.recheckScope(signal.scope, signal.ids);
       }
@@ -538,20 +538,16 @@ export class RealtimeGateway
     }
   }
 
-  private async onStatus(eventId: string, status: EventStatus): Promise<void> {
-    const io = this.requireServer();
-    const sockets = await io.local
-      .in(scopeRoom("event", eventId))
-      .fetchSockets();
-    const slug = sockets
-      .map((socket) => socket.data.joined.get(eventId)?.participant?.slug)
-      .find((candidate) => candidate !== undefined);
-    if (slug !== undefined) {
-      // Local only: every instance receives the signal and tells its own.
-      io.local
-        .to(scopeRoom("event", eventId))
-        .emit("event.status", { slug, status: publicStatusOf(status) });
-    }
+  private async onStatus(
+    eventId: string,
+    slug: string,
+    status: EventStatus,
+  ): Promise<void> {
+    // Local only: every instance receives the signal and tells its own,
+    // including connections whose join is still being decided.
+    this.requireServer()
+      .local.to(scopeRoom("event", eventId))
+      .emit("event.status", { slug, status: publicStatusOf(status) });
     await this.recheckScope("event", [eventId]);
   }
 

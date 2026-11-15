@@ -48,6 +48,8 @@ export interface ConnectionOptions {
   readonly slug: string;
   readonly onState: (state: ConnectionState) => void;
   readonly onStatus?: (event: EventStatusChanged) => void;
+  /** A channel's join was answered: its events now arrive live. */
+  readonly onJoined?: (channel: RealtimeChannel) => void;
   /**
    * Renews an expired staff session; true when it worked. Attendees have
    * nothing to renew: their session lasts until the event ends.
@@ -188,6 +190,7 @@ export class RealtimeConnection {
     }
     if (ack.ok) {
       joined.sequence.joined(ack.latestSequence, ack.replay);
+      this.options.onJoined?.(channel);
       return;
     }
     if (ack.error === "RESYNC_REQUIRED") {
