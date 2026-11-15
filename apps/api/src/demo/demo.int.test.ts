@@ -291,9 +291,11 @@ describe("demo mode (FR-AUTH-5)", () => {
       (await api.get(visitor, "/events?q=Autumn")).body,
     ).items[0];
     const detail = await api.get(visitor, `/events/${launch?.id ?? ""}`);
-    const block = await blockWrites(database.url, "events");
-    // The edit locks the event row and waits at its UPDATE; the reset then
-    // waits for that row (or for the table) to delete it.
+    // The edit has updated the event (so it holds the row) and waits to
+    // write its audit entry; the reset then waits for that row to delete
+    // it. Blocking the events table instead would stop both before the
+    // row, and either could get it first.
+    const block = await blockWrites(database.url, "audit_entries");
     const edit = Promise.resolve(
       api
         .send(visitor, "patch", `/events/${launch?.id ?? ""}`, {
