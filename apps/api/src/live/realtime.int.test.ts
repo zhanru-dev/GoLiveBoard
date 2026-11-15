@@ -115,6 +115,21 @@ class GatedAttendeeSessions extends AttendeeSessions {
   }
 }
 
+/** Makes the next `remaining` session reloads fail, as a database blip. */
+const reloadFailures = { remaining: 0 };
+
+class FlakyParticipants extends Participants {
+  override async reload(
+    ...args: Parameters<Participants["reload"]>
+  ): ReturnType<Participants["reload"]> {
+    if (reloadFailures.remaining > 0) {
+      reloadFailures.remaining -= 1;
+      throw new Error("A transient failure");
+    }
+    return super.reload(...args);
+  }
+}
+
 async function expectEnded(
   client: RealtimeClient,
   reason: "SIGNED_OUT" | "ACCESS_REVOKED",
@@ -316,6 +331,9 @@ describe(
         const live = await watching(visitor.cookie, event.slug);
         const heard: unknown[] = [];
         live.onQuestions((questionsEvent) => heard.push(questionsEvent));
+        // Let every earlier access change be read: a re-check would end the
+        // connection once the attendee is revoked below.
+        await new Promise((resolve) => setTimeout(resolve, 2_500));
         // No longer admitted, and nothing has told the gateway yet.
         await database.query(
           "UPDATE attendees SET status = 'REVOKED', revoked_at = now() WHERE id = $1",
@@ -968,6 +986,44 @@ describe(
         );
 
         await expectEnded(live, "SIGNED_OUT");
+      });
+    });
+
+    describe("when acting on an access change fails once", () => {
+      let flaky: NestExpressApplication;
+      let flakyUrl: string;
+
+      beforeAll(async () => {
+        flaky = await createTestApp({
+          env: env(),
+          mailer,
+          replace: [[Participants, FlakyParticipants]],
+        });
+        flakyUrl = await listen(flaky);
+      });
+
+      afterAll(async () => {
+        reloadFailures.remaining = 0;
+        await flaky.close();
+      });
+
+      it("tries again, and still ends the connection within seconds (FR-AD-4)", async () => {
+        const { api: client, owner, event } = await setUp();
+        const visitor = await attendee(event.slug);
+        const live = await watching(visitor.cookie, event.slug, flakyUrl);
+        // Let every earlier access change be read, so the failure meets
+        // this revocation's re-check.
+        await new Promise((resolve) => setTimeout(resolve, 2_500));
+        reloadFailures.remaining = 1;
+
+        await client.send(
+          owner,
+          "post",
+          `/events/${event.id}/attendees/${visitor.id}/revoke`,
+        );
+
+        await expectEnded(live, "SIGNED_OUT");
+        expect(reloadFailures.remaining).toBe(0);
       });
     });
 

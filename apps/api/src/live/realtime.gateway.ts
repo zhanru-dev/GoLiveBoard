@@ -589,36 +589,46 @@ export class RealtimeGateway
         WHERE created_at > now() - make_interval(secs => ${LOOKBACK_MS / 1000})
         ORDER BY id`;
       const now = Date.now();
-      const fresh = rows.filter((row) => !this.seen.has(String(row.id)));
-      for (const row of fresh) {
-        this.seen.set(String(row.id), now);
-      }
+      const fresh = rows.flatMap((row) => {
+        const key = String(row.id);
+        if (this.seen.has(key)) {
+          return [];
+        }
+        const parsed = AccessChangeBody.safeParse(row.change);
+        if (!parsed.success) {
+          this.seen.set(key, now);
+          this.logger.warn("Ignored a malformed access change");
+          return [];
+        }
+        return [{ key, change: parsed.data }];
+      });
       // Status changes first, once per event, with the event's current
       // status (a change read late is no longer news; what is now is): a
       // re-check earlier in the batch already sees the newer status and
       // could end a connection before it is told.
-      const changes = fresh.flatMap((row) => {
-        const parsed = AccessChangeBody.safeParse(row.change);
-        if (!parsed.success) {
-          this.logger.warn("Ignored a malformed access change");
-          return [];
+      const announced = new Map<string, boolean>();
+      for (const { change } of fresh) {
+        if (change.type === "status" && !announced.has(change.eventId)) {
+          announced.set(
+            change.eventId,
+            await this.attempt(() => this.announceStatus(change.eventId)),
+          );
         }
-        return [parsed.data];
-      });
-      const statusEvents = new Set(
-        changes.flatMap((change) =>
-          change.type === "status" ? [change.eventId] : [],
-        ),
-      );
-      for (const eventId of statusEvents) {
-        await this.act(() => this.announceStatus(eventId));
       }
-      for (const change of changes) {
-        await this.act(() =>
+      // A change counts as done only once everything it asks for has
+      // worked; until then the next read (a second later) tries it again.
+      for (const { key, change } of fresh) {
+        const done =
           change.type === "status"
-            ? this.recheckScope("event", [change.eventId])
-            : this.recheckScope(change.scope, change.ids),
-        );
+            ? (await this.attempt(() =>
+                this.recheckScope("event", [change.eventId]),
+              )) && announced.get(change.eventId) === true
+            : await this.attempt(() =>
+                this.recheckScope(change.scope, change.ids),
+              );
+        if (done) {
+          this.seen.set(key, now);
+        }
       }
       for (const [key, seenAt] of this.seen) {
         if (now - seenAt > LOOKBACK_MS * 2) {
@@ -638,11 +648,17 @@ export class RealtimeGateway
     }
   }
 
-  private async act(work: () => Promise<void>): Promise<void> {
+  /** Runs one action of an access change; false when it failed. */
+  private async attempt(work: () => Promise<void>): Promise<boolean> {
     try {
       await work();
+      return true;
     } catch (error) {
-      this.logger.error({ err: error }, "Could not act on an access change");
+      this.logger.error(
+        { err: error },
+        "Could not act on an access change; trying again",
+      );
+      return false;
     }
   }
 
@@ -690,18 +706,29 @@ export class RealtimeGateway
 
   private async recheckAll(socketIds: readonly string[]): Promise<void> {
     const queue = [...socketIds];
+    let failures = 0;
     const workers = Array.from(
       { length: Math.min(RECHECK_CONCURRENCY, queue.length) },
       async () => {
         for (let id = queue.shift(); id !== undefined; id = queue.shift()) {
           const socket = this.io?.of("/").sockets.get(id);
           if (socket?.connected === true) {
-            await this.recheck(socket);
+            // One connection failing must not stop the others' re-checks.
+            await this.recheck(socket).catch((error: unknown) => {
+              failures += 1;
+              this.logger.error(
+                { err: error, connectionId: socket.data.connectionId },
+                "Real-time re-check failed",
+              );
+            });
           }
         }
       },
     );
     await Promise.all(workers);
+    if (failures > 0) {
+      throw new Error(`${String(failures)} re-checks failed`);
+    }
   }
 
   /**

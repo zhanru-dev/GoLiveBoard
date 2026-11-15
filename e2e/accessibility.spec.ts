@@ -33,6 +33,9 @@ test("pages without a session have no WCAG 2.2 AA violations", async ({
   page,
   browser,
 }) => {
+  // A page after page through axe: more than the default 30 s on a busy
+  // runner, with nothing wrong.
+  test.setTimeout(90_000);
   const event = await openEvent(page.request);
   const visitor = await (await browser.newContext()).newPage();
   const paths = [
@@ -54,6 +57,9 @@ test("pages without a session have no WCAG 2.2 AA violations", async ({
 test("pages of the signed-in app have no WCAG 2.2 AA violations", async ({
   page,
 }) => {
+  // A page after page through axe: more than the default 30 s on a busy
+  // runner, with nothing wrong.
+  test.setTimeout(90_000);
   const event = await openEvent(page.request);
 
   for (const path of [

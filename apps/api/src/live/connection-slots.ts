@@ -10,19 +10,36 @@ export const SLOT_STALE_MS = 60_000;
 export const SLOT_REFRESH_MS = 20_000;
 
 /**
+ * Valkey's own clock, in milliseconds: every instance's slots are timed by
+ * the same clock, however far the instances' clocks drift apart.
+ */
+const NOW = `
+local time = redis.call("TIME")
+local now = tonumber(time[1]) * 1000 + math.floor(tonumber(time[2]) / 1000)`;
+
+/**
  * Takes a slot if fewer than `limit` live ones are taken, in one step: of
  * many handshakes at once, on any instances, exactly `limit` succeed.
- * Slots not refreshed for `stale` ms (an instance that died) are dropped
+ * Slots not refreshed for ARGV[1] ms (an instance that died) are dropped
  * first.
  */
-const CLAIM_SCRIPT = `
-local now = tonumber(ARGV[1])
-redis.call("ZREMRANGEBYSCORE", KEYS[1], "-inf", now - tonumber(ARGV[2]))
-if redis.call("ZCARD", KEYS[1]) >= tonumber(ARGV[3]) then
+const CLAIM_SCRIPT = `${NOW}
+redis.call("ZREMRANGEBYSCORE", KEYS[1], "-inf", now - tonumber(ARGV[1]))
+if redis.call("ZCARD", KEYS[1]) >= tonumber(ARGV[2]) then
   return 0
 end
-redis.call("ZADD", KEYS[1], now, ARGV[4])
-redis.call("PEXPIRE", KEYS[1], tonumber(ARGV[2]))
+redis.call("ZADD", KEYS[1], now, ARGV[3])
+redis.call("PEXPIRE", KEYS[1], tonumber(ARGV[1]))
+return 1`;
+
+/**
+ * Marks a live connection's slot as taken now, adding it back if it was
+ * dropped (after a Valkey outage longer than the lease, or a connection
+ * let in while Valkey could not count).
+ */
+const REFRESH_SCRIPT = `${NOW}
+redis.call("ZADD", KEYS[1], now, ARGV[2])
+redis.call("PEXPIRE", KEYS[1], tonumber(ARGV[1]))
 return 1`;
 
 /**
@@ -52,7 +69,6 @@ export class ConnectionSlots {
         CLAIM_SCRIPT,
         1,
         this.key(room),
-        Date.now(),
         SLOT_STALE_MS,
         limit,
         connection,
@@ -68,11 +84,15 @@ export class ConnectionSlots {
     if (slots.length === 0) {
       return;
     }
-    const now = Date.now();
     const pipeline = this.valkey.pipeline();
     for (const [room, connection] of slots) {
-      pipeline.zadd(this.key(room), "XX", now, connection);
-      pipeline.pexpire(this.key(room), SLOT_STALE_MS);
+      pipeline.eval(
+        REFRESH_SCRIPT,
+        1,
+        this.key(room),
+        SLOT_STALE_MS,
+        connection,
+      );
     }
     await pipeline.exec().catch(() => undefined);
   }
