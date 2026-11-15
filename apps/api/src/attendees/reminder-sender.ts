@@ -3,6 +3,7 @@ import type { AttendeeStatus } from "@opspilot/contracts";
 
 import { APP_CONFIG, type AppConfig } from "../config/app-config.js";
 import { PRISMA } from "../database/prisma.js";
+import { lockEventById } from "../events/event-lock.queries.js";
 import type { PrismaClient } from "../generated/prisma/client.js";
 import { CLOCK, type Clock } from "../shared/clock.js";
 import { reminderEmail } from "./attendee-emails.js";
@@ -71,6 +72,15 @@ export class ReminderSender {
   private async remind(attendeeId: string): Promise<boolean> {
     const send = await this.prisma.$transaction(async (tx) => {
       const now = this.clock.now();
+      // The event's row, then the attendee's: the order of every path that
+      // locks both. While both are held, neither the event's status and
+      // policy nor the attendee can change, so the decision below holds
+      // until the reminder is recorded.
+      const [owner] = await tx.$queryRaw<{ event_id: string }[]>`
+        SELECT event_id FROM attendees WHERE id = ${attendeeId}::uuid`;
+      if (owner === undefined || !(await lockEventById(tx, owner.event_id))) {
+        return undefined;
+      }
       const [locked] = await tx.$queryRaw<
         { status: AttendeeStatus; reminders_opt_in: boolean }[]
       >`

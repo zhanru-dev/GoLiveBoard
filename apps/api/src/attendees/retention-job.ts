@@ -2,7 +2,7 @@ import { Inject, Injectable } from "@nestjs/common";
 
 import { recordSystemAudit } from "../audit/audit.js";
 import { PRISMA } from "../database/prisma.js";
-import { lockEventForStreamCheck } from "../events/event-lock.queries.js";
+import { lockEventById } from "../events/event-lock.queries.js";
 import type { PrismaClient } from "../generated/prisma/client.js";
 import { CLOCK, type Clock } from "../shared/clock.js";
 import { anonymiseAttendee } from "./anonymise.js";
@@ -119,9 +119,7 @@ export class RetentionJob {
     now: Date,
   ): Promise<boolean> {
     return this.prisma.$transaction(async (tx) => {
-      if (
-        (await lockEventForStreamCheck(tx, attendee.event_id)) === undefined
-      ) {
+      if (!(await lockEventById(tx, attendee.event_id))) {
         return false;
       }
       const [locked] = await tx.$queryRaw<{ id: string }[]>`

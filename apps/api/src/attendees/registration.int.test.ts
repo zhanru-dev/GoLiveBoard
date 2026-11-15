@@ -8,13 +8,14 @@ import {
   PublicEvent,
 } from "@opspilot/contracts";
 import request from "supertest";
-import { afterAll, beforeAll, describe, expect, inject, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, inject, it, vi } from "vitest";
 
 import {
   ApiClient,
   tokenFromEmail,
   uniqueEmail,
 } from "../testing/api-client.js";
+import { Mailer, type MailMessage } from "../mail/mailer.js";
 import { loadTestConfig } from "../testing/config.js";
 import { setCookies } from "../testing/cookies.js";
 import {
@@ -34,6 +35,8 @@ import { CapturingMailer } from "../testing/fakes.js";
 import { createTestApp, LogCapture, TEST_ORIGIN } from "../testing/test-app.js";
 import { DEMO_ATTENDEE_LIMIT } from "../demo/demo-workspace.js";
 import { DEMO_INBOX_COOKIE } from "./attendee-cookies.js";
+import { DEMO_INBOX_PER_ATTENDEE } from "./attendee-mail.js";
+import { ATTENDEE_SESSION_LIMIT } from "./registration.service.js";
 import { unsubscribeToken } from "./unsubscribe-token.js";
 
 let addressCounter = 0;
@@ -277,7 +280,7 @@ describe("registration and verification (FR-AD-1 to FR-AD-3)", () => {
       expect(mailer.to(stranger)).toHaveLength(0);
     });
 
-    it("registers an address once when it registers twice at the same moment", async () => {
+    it("registers an address once, with one working link, when it registers twice at the same moment", async () => {
       const owner = await newOwner();
       const event = await openEvent(api, owner);
       const email = uniqueEmail("twice");
@@ -300,7 +303,16 @@ describe("registration and verification (FR-AD-1 to FR-AD-3)", () => {
         [email],
       );
       expect(rows).toHaveLength(1);
-      expect(mailer.to(email)).toHaveLength(1);
+      // The event's lock makes them take turns: the second finds the first's
+      // attendee and replaces its link, so only the newest link works.
+      const links = mailer.to(email).map(({ text }) => tokenFromEmail(text));
+      expect(links).toHaveLength(2);
+      expect((await visitor().verify(links[0] ?? "")).response.status).toBe(
+        400,
+      );
+      expect((await visitor().verify(links[1] ?? "")).response.status).toBe(
+        200,
+      );
     });
 
     it("limits registrations per address", async () => {
@@ -332,6 +344,129 @@ describe("registration and verification (FR-AD-1 to FR-AD-3)", () => {
 
       expect(logs.lines.join("\n")).not.toContain(email);
       expect(logs.lines.join("\n")).not.toContain(email.split("@")[0]);
+    });
+  });
+
+  describe("registration while staff change the event (FR-AD-2)", () => {
+    /**
+     * Holds the event's row, as a Manager's change does, while a
+     * registration starts; makes the change in that transaction; then lets
+     * the registration go on. It must decide under the change.
+     */
+    async function registerDuring(
+      event: { id: string; slug: string },
+      email: string,
+      change: string,
+      values: readonly unknown[],
+    ) {
+      const block = await holdLock(
+        database.url,
+        "SELECT id FROM events WHERE id = $1 FOR NO KEY UPDATE",
+        [event.id],
+      );
+      const registration_ = Promise.resolve(
+        visitor().register(event.slug, registration(email)),
+      );
+      try {
+        await block.waitForWaiters(1);
+        await block.run(change, values);
+      } finally {
+        await block.release();
+      }
+      return registration_;
+    }
+
+    async function expectNotRegistered(email: string) {
+      const rows = await database.query(
+        "SELECT 1 FROM attendees WHERE email = $1",
+        [email],
+      );
+      expect(rows).toEqual([]);
+      expect(mailer.to(email)).toEqual([]);
+    }
+
+    it("refuses an address a policy made stricter at the same moment no longer admits", async () => {
+      const owner = await newOwner();
+      const event = await openEvent(api, owner);
+      const email = uniqueEmail("late-policy");
+
+      const response = await registerDuring(
+        event,
+        email,
+        `UPDATE access_policies SET mode = 'EMAIL_DOMAIN',
+           allowed_domains = ARRAY['partner.org'] WHERE event_id = $1`,
+        [event.id],
+      );
+
+      expect(response.status).toBe(202);
+      await expectNotRegistered(email);
+    });
+
+    it("refuses a registration for an event cancelled at the same moment", async () => {
+      const owner = await newOwner();
+      const event = await openEvent(api, owner);
+      const email = uniqueEmail("late-cancel");
+
+      const response = await registerDuring(
+        event,
+        email,
+        "UPDATE events SET status = 'CANCELLED' WHERE id = $1",
+        [event.id],
+      );
+
+      expect(response.status).toBe(202);
+      await expectNotRegistered(email);
+    });
+
+    it("refuses an address whose invitation is revoked at the same moment", async () => {
+      const owner = await newOwner();
+      const event = await openEvent(api, owner, { mode: "INVITE_ONLY" });
+      const email = uniqueEmail("late-invite");
+      await database.query(
+        "INSERT INTO attendee_invitations (event_id, email) VALUES ($1, $2)",
+        [event.id, email],
+      );
+
+      const response = await registerDuring(
+        event,
+        email,
+        "UPDATE attendee_invitations SET revoked_at = now() WHERE event_id = $1",
+        [event.id],
+      );
+
+      expect(response.status).toBe(202);
+      await expectNotRegistered(email);
+    });
+  });
+
+  describe("what one attendee can pile up (the demo invites anyone to try)", () => {
+    it("keeps one unused link and a few sessions however often a verified address registers and signs in", async () => {
+      const owner = await newOwner();
+      const event = await openEvent(api, owner);
+      const email = uniqueEmail("repeat");
+      for (let round = 0; round < ATTENDEE_SESSION_LIMIT + 2; round += 1) {
+        await visitor().register(event.slug, registration(email));
+        const token = tokenFromEmail(mailer.to(email).at(-1)?.text ?? "");
+        expect((await visitor().verify(token)).response.status).toBe(200);
+      }
+      // One more registration: a link that is not used.
+      await visitor().register(event.slug, registration(email));
+      await visitor().register(event.slug, registration(email));
+
+      const [attendee] = await database.query<{ id: string }>(
+        "SELECT id FROM attendees WHERE email = $1",
+        [email],
+      );
+      const links = await database.query<{ used_at: Date | null }>(
+        "SELECT used_at FROM attendee_verification_tokens WHERE attendee_id = $1",
+        [attendee?.id],
+      );
+      expect(links).toEqual([{ used_at: null }]);
+      const sessions = await database.query(
+        "SELECT 1 FROM attendee_sessions WHERE attendee_id = $1",
+        [attendee?.id],
+      );
+      expect(sessions).toHaveLength(ATTENDEE_SESSION_LIMIT);
     });
   });
 
@@ -470,6 +605,65 @@ describe("registration and verification (FR-AD-1 to FR-AD-3)", () => {
   });
 
   describe("the attendee session", () => {
+    it("stops working once it expires, and requests do not extend it", async () => {
+      const owner = await newOwner();
+      const event = await openEvent(api, owner);
+      const { email, attendee } = await verifiedAttendee(event.slug);
+      const expiry = async () =>
+        (
+          await database.query<{ expires_at: Date }>(
+            `SELECT expires_at FROM attendee_sessions WHERE attendee_id =
+               (SELECT id FROM attendees WHERE email = $1)`,
+            [email],
+          )
+        )[0]?.expires_at.getTime();
+      const before = await expiry();
+      expect(
+        (await attendee.get(`/public/events/${event.slug}/me`)).status,
+      ).toBe(200);
+      expect(await expiry()).toBe(before);
+
+      // The event ends 2026-12-01; the session a day later.
+      clock.advance((before ?? 0) - Date.now() + 1000);
+      try {
+        expect(
+          (await attendee.get(`/public/events/${event.slug}/me`)).status,
+        ).toBe(401);
+        expect(
+          (await attendee.post(`/public/events/${event.slug}/sign-out`)).status,
+        ).toBe(401);
+      } finally {
+        clock.reset();
+      }
+    });
+
+    it.each(["CANCELLED", "ARCHIVED"])(
+      "refuses every attendee route once the event is %s",
+      async (status) => {
+        const owner = await newOwner();
+        const event = await openEvent(api, owner);
+        const { attendee } = await verifiedAttendee(event.slug);
+        for (const to of status === "CANCELLED"
+          ? ["CANCELLED"]
+          : ["CANCELLED", "ARCHIVED"]) {
+          const moved = await api.send(
+            owner,
+            "post",
+            `/events/${event.id}/transitions`,
+            { to },
+          );
+          expect(moved.status, moved.text).toBe(200);
+        }
+
+        expect(
+          (await attendee.get(`/public/events/${event.slug}/me`)).status,
+        ).toBe(403);
+        expect(
+          (await attendee.post(`/public/events/${event.slug}/sign-out`)).status,
+        ).toBe(403);
+      },
+    );
+
     it("re-checks eligibility on every request: a stricter policy applies at once (FR-AD-2)", async () => {
       const owner = await newOwner();
       const event = await openEvent(api, owner);
@@ -576,6 +770,74 @@ describe("registration and verification (FR-AD-1 to FR-AD-3)", () => {
   });
 });
 
+describe("a mail server that refuses an attendee's address (NFR-2)", () => {
+  let database: TestDatabase;
+  let app: NestExpressApplication;
+  const logs = new LogCapture();
+  const refused = `refused-${randomUUID()}@example.com`;
+
+  /** Refuses every message as SMTP servers do: naming the recipient. */
+  class RefusingMailer extends Mailer {
+    send(message: MailMessage): Promise<void> {
+      return Promise.reject(
+        Object.assign(
+          new Error(
+            `Can't send mail - all recipients were rejected: ${message.to}`,
+          ),
+          {
+            code: "EENVELOPE",
+            responseCode: 550,
+            response: `550 <${message.to}> rejected`,
+            rejected: [message.to],
+          },
+        ),
+      );
+    }
+  }
+
+  beforeAll(async () => {
+    database = await createTestDatabase();
+    app = await createTestApp({
+      env: {
+        DATABASE_URL: database.url,
+        VALKEY_URL: inject("valkeyUrl"),
+        TRUST_PROXY_HOPS: "1",
+      },
+      mailer: new RefusingMailer(),
+      logs,
+    });
+  });
+
+  afterAll(async () => {
+    await app.close();
+    await database.drop();
+  });
+
+  it("logs the failure without the address", async () => {
+    const api = new ApiClient(app, newAddress());
+    const event = await openEvent(api, await api.newOwner());
+
+    const response = await new PublicClient(app, newAddress()).register(
+      event.slug,
+      registration(refused),
+    );
+
+    expect(response.status).toBe(202);
+    await vi.waitFor(() => {
+      expect(logs.lines.join("\n")).toContain(
+        "Could not send an email to an attendee",
+      );
+    });
+    const failure =
+      logs.lines.find((line) =>
+        line.includes("Could not send an email to an attendee"),
+      ) ?? "";
+    expect(failure).toContain("EENVELOPE");
+    expect(logs.lines.join("\n")).not.toContain(refused);
+    expect(logs.lines.join("\n")).not.toContain(refused.split("@")[0]);
+  });
+});
+
 describe("registration in the demo workspace (FR-AUTH-5)", () => {
   let database: TestDatabase;
   let app: NestExpressApplication;
@@ -679,6 +941,36 @@ describe("registration in the demo workspace (FR-AUTH-5)", () => {
   });
 
   // Fills the demo first: more than the default 5 seconds on a slow machine.
+  it("keeps a bounded inbox for an address registered again and again, from anywhere", async () => {
+    const event = await demoEvent();
+    const email = `repeat-${randomUUID()}@northwind.example`;
+    const browser = new PublicClient(app, newAddress()).with({
+      [DEMO_INBOX_COOKIE]: "a-patient-attacker",
+    });
+    for (let round = 0; round < DEMO_INBOX_PER_ATTENDEE + 3; round += 1) {
+      // From a new address each time: the per-address limit is no bound.
+      const response = await new PublicClient(app, newAddress())
+        .with({ [DEMO_INBOX_COOKIE]: "a-patient-attacker" })
+        .register(event.slug, registration(email));
+      expect(response.status).toBe(202);
+    }
+
+    const stored = await database.query(
+      `SELECT 1 FROM demo_inbox_messages WHERE attendee_id =
+         (SELECT id FROM attendees WHERE email = $1)`,
+      [email],
+    );
+    expect(stored).toHaveLength(DEMO_INBOX_PER_ATTENDEE);
+    const links = await database.query(
+      `SELECT 1 FROM attendee_verification_tokens WHERE used_at IS NULL
+         AND attendee_id = (SELECT id FROM attendees WHERE email = $1)`,
+      [email],
+    );
+    expect(links).toHaveLength(1);
+    expect(
+      DemoInbox.parse((await browser.get("/public/demo-inbox")).body).messages,
+    ).toHaveLength(DEMO_INBOX_PER_ATTENDEE);
+  });
   it(
     "holds a bounded number of attendees, also when visitors register at the same moment",
     { timeout: 30_000 },

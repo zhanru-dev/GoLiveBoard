@@ -86,3 +86,20 @@ export async function lockEventForStreamCheck(
     FOR NO KEY UPDATE`;
   return rows[0];
 }
+
+/**
+ * The same row lock, by ID alone, for paths that act for no workspace or
+ * found the event another way (a registration by slug, a verification link,
+ * the reminder and retention jobs). Taken before any attendee's row, the
+ * order every path follows.
+ *
+ * @returns whether the event still exists
+ */
+export async function lockEventById(
+  tx: Prisma.TransactionClient,
+  eventId: string,
+): Promise<boolean> {
+  const rows = await tx.$queryRaw<{ id: string }[]>`
+    SELECT id FROM events WHERE id = ${eventId}::uuid FOR NO KEY UPDATE`;
+  return rows.length > 0;
+}

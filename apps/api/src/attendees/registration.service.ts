@@ -12,7 +12,9 @@ import { PRISMA } from "../database/prisma.js";
 import {
   demoHasRoomForAttendee,
   isDemoWorkspace,
+  lockDemoWorkspace,
 } from "../demo/demo-workspace.js";
+import { lockEventById } from "../events/event-lock.queries.js";
 import type { Prisma, PrismaClient } from "../generated/prisma/client.js";
 import { RATE_LIMITS, RateLimiter } from "../rate-limit/rate-limiter.js";
 import { CLOCK, type Clock } from "../shared/clock.js";
@@ -30,6 +32,12 @@ import {
   VERIFICATION_TTL_MS,
 } from "./domain/privacy.js";
 import { hasLiveInvitation } from "./invitation.queries.js";
+
+/**
+ * Browsers one attendee can be signed in on at once; signing in on one more
+ * ends the oldest.
+ */
+export const ATTENDEE_SESSION_LIMIT = 5;
 
 const PUBLIC_STATUS: Readonly<Record<EventStatus, PublicEventStatus>> = {
   DRAFT: "UPCOMING",
@@ -110,26 +118,37 @@ export class RegistrationService {
     demoInboxKey: () => string,
   ): Promise<void> {
     await this.rateLimiter.consumeOrThrow(RATE_LIMITS.registrationsPerIp, ip);
-    const event = await this.findPublic(this.prisma, slug);
-    const notice = event.accessPolicy?.privacyNoticeVersion;
-    if (notice !== undefined && input.privacyNoticeVersion !== notice) {
-      throw new DomainError("VALIDATION_FAILED", {
-        errors: [
-          {
-            path: "privacyNoticeVersion",
-            code: "notice_changed",
-            message:
-              "The privacy notice has changed. Reload the page and read it again.",
-          },
-        ],
-      });
-    }
-    const demoInboxKeyHash = isDemoWorkspace(event.workspaceId)
-      ? hashToken(demoInboxKey())
-      : null;
-    const send = await this.prisma.$transaction(async (tx) =>
-      this.registerIn(tx, event, input, demoInboxKeyHash),
-    );
+    // Which event, and so which workspace: neither ever changes.
+    const found = await this.findPublic(this.prisma, slug);
+    const demo = isDemoWorkspace(found.workspaceId);
+    const demoInboxKeyHash = demo ? hashToken(demoInboxKey()) : null;
+    const send = await this.prisma.$transaction(async (tx) => {
+      // The demo lock, then the event's row, then the attendee's: the order
+      // of the demo reset and of every staff write. Under the event's lock
+      // its status, policy and invitations cannot change until this
+      // registration commits, so the decision below stays true.
+      if (demo) {
+        await lockDemoWorkspace(tx);
+      }
+      if (!(await lockEventById(tx, found.id))) {
+        throw new DomainError("NOT_FOUND");
+      }
+      const event = await this.findPublic(tx, slug);
+      const notice = event.accessPolicy?.privacyNoticeVersion;
+      if (notice !== undefined && input.privacyNoticeVersion !== notice) {
+        throw new DomainError("VALIDATION_FAILED", {
+          errors: [
+            {
+              path: "privacyNoticeVersion",
+              code: "notice_changed",
+              message:
+                "The privacy notice has changed. Reload the page and read it again.",
+            },
+          ],
+        });
+      }
+      return this.registerIn(tx, event, input, demoInboxKeyHash);
+    });
     send();
   }
 
@@ -197,6 +216,10 @@ export class RegistrationService {
     } else if (existing.status === "VERIFIED") {
       attendeeId = existing.id;
       alreadyVerified = true;
+      // Only the newest link works, here too.
+      await tx.attendeeVerificationToken.deleteMany({
+        where: { attendeeId, usedAt: null },
+      });
       // A verified attendee's data stays as they confirmed it; the inbox
       // follows the browser asking, which is where the link is wanted.
       await tx.attendee.update({
@@ -246,10 +269,16 @@ export class RegistrationService {
       // that touches both (registering again, revoking, erasing). The other
       // way round, using a link while a Manager revokes its attendee
       // deadlocked.
-      const [link] = await tx.$queryRaw<{ attendee_id: string }[]>`
-        SELECT attendee_id FROM attendee_verification_tokens
-        WHERE token_hash = ${hashToken(token)}`;
-      if (link === undefined) {
+      const [link] = await tx.$queryRaw<
+        { attendee_id: string; event_id: string }[]
+      >`
+        SELECT link.attendee_id, attendee.event_id
+        FROM attendee_verification_tokens AS link
+        JOIN attendees AS attendee ON attendee.id = link.attendee_id
+        WHERE link.token_hash = ${hashToken(token)}`;
+      // The event's row first, as every path that also locks an attendee:
+      // its policy cannot change while this decides.
+      if (link === undefined || !(await lockEventById(tx, link.event_id))) {
         throw new DomainError("TOKEN_INVALID");
       }
       const [attendee] = await tx.$queryRaw<
@@ -303,8 +332,36 @@ export class RegistrationService {
           expiresAt,
         },
       });
+      await this.boundLinksAndSessions(tx, attendee.id, now);
       return { slug: event.slug, token: sessionToken, expiresAt };
     });
+  }
+
+  /**
+   * Keeps what one attendee can accumulate bounded, however often they
+   * register and verify (in the demo, anyone can, from anywhere): spent and
+   * expired links go, and only the newest sessions stay.
+   */
+  private async boundLinksAndSessions(
+    tx: Prisma.TransactionClient,
+    attendeeId: string,
+    now: Date,
+  ): Promise<void> {
+    await tx.attendeeVerificationToken.deleteMany({
+      where: {
+        attendeeId,
+        OR: [{ usedAt: { not: null } }, { expiresAt: { lte: now } }],
+      },
+    });
+    await tx.$executeRaw`
+      DELETE FROM attendee_sessions
+      WHERE attendee_id = ${attendeeId}::uuid
+        AND id NOT IN (
+          SELECT id FROM attendee_sessions
+          WHERE attendee_id = ${attendeeId}::uuid
+          ORDER BY created_at DESC, id DESC
+          LIMIT ${ATTENDEE_SESSION_LIMIT}
+        )`;
   }
 
   private async findPublic(

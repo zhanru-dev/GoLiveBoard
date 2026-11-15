@@ -124,7 +124,7 @@ A membership, invitation or workspace outside the session's active workspace is 
 
 ### 3.4 Audience (staff side)
 
-Every write locks the event row and then the attendee's, the order every path that touches both takes (registration and verification lock the attendee before its links). Attendee addresses never appear in audit entries or logs.
+Every write locks the event row and then the attendee's, the order every path that touches both takes (registration, verification and reminders too, then links and sessions). Attendee addresses never appear in audit entries or logs; a mail server's refusal, which names the recipient, is logged and reported only as its SMTP codes (`MailDeliveryError`).
 
 | Method and path                                 | Role  | Notes                                                                                                                                                                                                        |
 | ----------------------------------------------- | ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -136,7 +136,7 @@ Every write locks the event row and then the attendee's, the order every path th
 
 ### 3.5 Public and attendee
 
-`Att` routes need the attendee session cookie (`__Host-opspilot_attendee`, an opaque token stored only as a hash). Every such request reloads the session, the attendee, the event and its access policy and decides again (FR-AD-2): no session `401`; a session for another event `404`, as if the event did not exist; no longer admitted (revoked, erased, a stricter policy, a revoked invitation, the event archived or cancelled) `403`. A browser holds one attendee session at a time.
+`Att` routes need the attendee session cookie (`__Host-opspilot_attendee`, an opaque token stored only as a hash). An attendee keeps at most 5 sessions (signing in on another browser ends the oldest) and one unused link: registering again replaces it. Every such request reloads the session, the attendee, the event and its access policy and decides again (FR-AD-2): no session `401`; a session for another event `404`, as if the event did not exist; no longer admitted (revoked, erased, a stricter policy, a revoked invitation, the event archived or cancelled) `403`. A browser holds one attendee session at a time.
 
 | Method and path                           | Role | Notes                                                                                                                                                                                                                                             |
 | ----------------------------------------- | ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

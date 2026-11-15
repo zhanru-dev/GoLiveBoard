@@ -8,7 +8,7 @@ import { DEMO_PEOPLE, DEMO_WORKSPACE } from "../demo/demo-accounts.js";
 import { DemoSeeder } from "../demo/demo-seeder.js";
 import { limitDemoSessions } from "../demo/demo-workspace.js";
 import { Prisma, type PrismaClient } from "../generated/prisma/client.js";
-import { Mailer, type MailMessage } from "../mail/mailer.js";
+import { Mailer, mailDeliveryError, type MailMessage } from "../mail/mailer.js";
 import { RATE_LIMITS, RateLimiter } from "../rate-limit/rate-limiter.js";
 import { CLOCK, type Clock } from "../shared/clock.js";
 import { DomainError } from "../shared/domain/domain-error.js";
@@ -314,7 +314,10 @@ export class AuthService {
    */
   private sendInBackground(message: MailMessage): void {
     this.mailer.send(message).catch((error: unknown) => {
-      this.logger.error({ err: error }, "Sending email failed");
+      this.logger.error(
+        { err: mailDeliveryError(error) },
+        "Sending email failed",
+      );
     });
   }
 }

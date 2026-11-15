@@ -463,6 +463,27 @@ describe("the audience, as staff see it (docs/04, section 3.4)", () => {
         expect(response.status).toBe(403);
       }
       expect((await list(api, analyst, event.id)).status).toBe(200);
+      // Nor can they revoke an invitation, nor its attendee with it.
+      const [invitation] = await database.query<{ id: string }>(
+        "SELECT id FROM attendee_invitations WHERE email = $1",
+        [email],
+      );
+      const deleted = await api.send(
+        analyst,
+        "delete",
+        `/event-invitations/${invitation?.id ?? ""}`,
+      );
+      expect(deleted.status).toBe(403);
+      const [after] = await database.query<{
+        revoked_at: Date | null;
+        status: string;
+      }>(
+        `SELECT invitation.revoked_at, attendee.status::text AS status
+         FROM attendee_invitations AS invitation, attendees AS attendee
+         WHERE invitation.id = $1 AND attendee.id = $2`,
+        [invitation?.id, id],
+      );
+      expect(after).toEqual({ revoked_at: null, status: "VERIFIED" });
     });
 
     it("answers another workspace as if the event and its attendees did not exist", async () => {

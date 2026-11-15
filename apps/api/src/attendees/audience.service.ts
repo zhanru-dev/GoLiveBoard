@@ -16,7 +16,7 @@ import { isDemoWorkspace } from "../demo/demo-workspace.js";
 import { lockEvent, lockWritableEvent } from "../events/event-lock.queries.js";
 import type { Prisma, PrismaClient } from "../generated/prisma/client.js";
 import { decodeCursor, encodeCursor } from "../http/cursor.js";
-import { Mailer } from "../mail/mailer.js";
+import { Mailer, mailDeliveryError } from "../mail/mailer.js";
 import { CLOCK, type Clock } from "../shared/clock.js";
 import { DomainError } from "../shared/domain/domain-error.js";
 import { anonymiseAttendee, revokeAttendee } from "./anonymise.js";
@@ -220,7 +220,7 @@ export class AudienceService {
         .catch((error: unknown) => {
           // The address is personal data: logged by invitation only.
           this.logger.error(
-            { err: error, invitationId: invitation.id },
+            { err: mailDeliveryError(error), invitationId: invitation.id },
             "Could not send an event invitation",
           );
         });

@@ -3,7 +3,10 @@ import { InjectPinoLogger, PinoLogger } from "nestjs-pino";
 
 import { isDemoWorkspace } from "../demo/demo-workspace.js";
 import type { Prisma } from "../generated/prisma/client.js";
-import { Mailer, type MailMessage } from "../mail/mailer.js";
+import { Mailer, mailDeliveryError, type MailMessage } from "../mail/mailer.js";
+
+/** Demo inbox messages kept per attendee; older ones are deleted. */
+export const DEMO_INBOX_PER_ATTENDEE = 10;
 
 /** Who a message is for, as far as delivery cares. */
 export interface Recipient {
@@ -47,6 +50,17 @@ export class AttendeeMail {
             text: message.text,
           },
         });
+        // Bounded however often anyone registers this address: the newest
+        // messages are kept. The caller holds the attendee's row lock.
+        await tx.$executeRaw`
+          DELETE FROM demo_inbox_messages
+          WHERE attendee_id = ${recipient.attendeeId}::uuid
+            AND id NOT IN (
+              SELECT id FROM demo_inbox_messages
+              WHERE attendee_id = ${recipient.attendeeId}::uuid
+              ORDER BY created_at DESC, id DESC
+              LIMIT ${DEMO_INBOX_PER_ATTENDEE}
+            )`;
       }
       return () => undefined;
     }
@@ -54,7 +68,7 @@ export class AttendeeMail {
       this.mailer.send(message).catch((error: unknown) => {
         // The address is personal data: logged by attendee only.
         this.logger.error(
-          { err: error, attendeeId: recipient.attendeeId },
+          { err: mailDeliveryError(error), attendeeId: recipient.attendeeId },
           "Could not send an email to an attendee",
         );
       });

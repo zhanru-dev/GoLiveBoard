@@ -161,6 +161,48 @@ describe("reminders (FR-AD-5)", () => {
     expect(mailer.to(email)).toEqual([]);
   });
 
+  it.each([
+    [
+      "a policy made stricter",
+      `UPDATE access_policies SET mode = 'EMAIL_DOMAIN',
+         allowed_domains = ARRAY['partner.org'] WHERE event_id = $1`,
+    ],
+    [
+      "the event cancelled",
+      "UPDATE events SET status = 'CANCELLED' WHERE id = $1",
+    ],
+    [
+      "the attendee revoked",
+      `UPDATE attendees SET status = 'REVOKED', revoked_at = now()
+       WHERE event_id = $1`,
+    ],
+  ])(
+    "sends nothing when %s while the run is under way",
+    async (_label, change) => {
+      const event = await seedEvent(database, {
+        startsAt: startingIn(3 * HOUR_MS),
+      });
+      const { email } = await seedAttendee(database, event.eventId);
+      // A Manager's change holds the event's row; the run has listed the
+      // attendee and waits for that row, then decides under the change.
+      const block = await holdLock(
+        database.url,
+        "SELECT id FROM events WHERE id = $1 FOR NO KEY UPDATE",
+        [event.eventId],
+      );
+      const run = sendDue();
+      try {
+        await block.waitForWaiters(1);
+        await block.run(change, [event.eventId]);
+      } finally {
+        await block.release();
+      }
+
+      expect(await run).toBe(0);
+      expect(mailer.to(email)).toEqual([]);
+    },
+  );
+
   it("sends a reminder once when two workers run at the same moment", async () => {
     const event = await seedEvent(database, {
       startsAt: startingIn(3 * HOUR_MS),

@@ -14,7 +14,7 @@ import { generateToken, hashToken } from "../auth/tokens.js";
 import { APP_CONFIG, type AppConfig } from "../config/app-config.js";
 import { PRISMA } from "../database/prisma.js";
 import type { PrismaClient } from "../generated/prisma/client.js";
-import { Mailer } from "../mail/mailer.js";
+import { Mailer, mailDeliveryError } from "../mail/mailer.js";
 import { CLOCK, type Clock } from "../shared/clock.js";
 import { DomainError } from "../shared/domain/domain-error.js";
 
@@ -108,7 +108,10 @@ export class InvitationsService {
         }),
       )
       .catch((error: unknown) => {
-        this.logger.error({ err: error }, "Sending invitation email failed");
+        this.logger.error(
+          { err: mailDeliveryError(error) },
+          "Sending invitation email failed",
+        );
       });
     return {
       id: invitation.id,
