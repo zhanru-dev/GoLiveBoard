@@ -1029,6 +1029,23 @@ describe(
         expect(accepted).toHaveLength(CONNECTIONS_PER_SESSION);
       });
 
+      it("closes no connection when refreshing the slots fails", async () => {
+        const { owner } = await setUp();
+        const open: RealtimeClient[] = [];
+        for (let tab = 0; tab < CONNECTIONS_PER_SESSION; tab += 1) {
+          open.push(await connect(staffCookie(owner), { at: frozenUrl }));
+        }
+
+        await frozen.get(RealtimeGateway).refreshSlots();
+
+        await new Promise((resolve) => setTimeout(resolve, 500));
+        expect(open.every((client) => client.connected)).toBe(true);
+        // The instance still counts them: one more is refused.
+        await expect(
+          refusal(connect(staffCookie(owner), { at: frozenUrl })),
+        ).resolves.toBe("RATE_LIMITED");
+      });
+
       it("still ends a revoked attendee's connection within seconds (FR-AD-4)", async () => {
         const { api: client, owner, event } = await setUp();
         const visitor = await attendee(event.slug);

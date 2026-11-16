@@ -13,6 +13,8 @@ import {
 } from "vitest";
 
 import { loadTestConfig } from "../testing/config.js";
+import { startSilentServer } from "../testing/silent-server.js";
+import { createValkeyClient } from "../valkey/valkey.js";
 import {
   ConnectionSlots,
   SLOT_REFRESH_MS,
@@ -90,6 +92,38 @@ describe("ConnectionSlots", () => {
 
     expect(lost).toEqual(old.map((connection) => [room, connection]));
     expect(await valkey.zcard(slotsKey(room))).toBe(10);
+  });
+
+  it("reports no lost slot when Valkey cannot answer, and decides as usual once it can", async () => {
+    const room = `session:${randomUUID()}`;
+    const working = new ConnectionSlots(valkey, config);
+    const old = Array.from(
+      { length: 10 },
+      (_, index) => `old-${String(index)}`,
+    );
+    for (const connection of old) {
+      await working.claim(room, connection, 10);
+    }
+    await valkey.del(slotsKey(room));
+    for (let index = 0; index < 10; index += 1) {
+      await working.claim(room, `new-${String(index)}`, 10);
+    }
+    const silent = await startSilentServer();
+    const frozenValkey = createValkeyClient(
+      loadTestConfig({ VALKEY_URL: silent.url.replace("http:", "redis:") }),
+    );
+    try {
+      const frozen = new ConnectionSlots(frozenValkey, config);
+      const pairs = old.map((connection) => [room, connection] as const);
+
+      // Nothing is known, so nobody is closed.
+      await expect(frozen.refresh(pairs, 10)).resolves.toEqual([]);
+      // Once Valkey answers, the old connections are found to have lost.
+      await expect(working.refresh(pairs, 10)).resolves.toEqual(pairs);
+    } finally {
+      frozenValkey.disconnect();
+      await silent.close();
+    }
   });
 
   it("sets an expiry on a session's slots when it first claims one", async () => {
