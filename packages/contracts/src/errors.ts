@@ -31,6 +31,7 @@ export const ErrorCode = z.enum([
   "UNSUPPORTED_MEDIA_TYPE",
   "PRECONDITION_REQUIRED",
   "INTERACTION_CLOSED",
+  "REPORT_NOT_AVAILABLE",
   "QUESTION_STATUS_INVALID",
   "QUESTION_NOT_PINNABLE",
   "PIN_LIMIT_REACHED",
@@ -129,6 +130,10 @@ export const ERROR_DEFINITIONS = {
   PRECONDITION_REQUIRED: {
     status: 428,
     title: "The If-Match header is required",
+  },
+  REPORT_NOT_AVAILABLE: {
+    status: 409,
+    title: "The event has no report: it has not completed",
   },
   INTERACTION_CLOSED: {
     status: 409,

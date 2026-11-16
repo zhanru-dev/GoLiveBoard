@@ -121,6 +121,7 @@ export {
   Workspace,
 } from "./workspace.js";
 export { QuestionStatus, RealtimeChannel } from "./live.js";
+export { EventReport } from "./reports.js";
 export {
   LiveOps,
   LiveOpsAudience,

@@ -5,6 +5,7 @@ import type { DestinationStream } from "pino";
 
 import { AuditModule } from "./audit/audit.module.js";
 import { LiveOpsModule } from "./live-ops/live-ops.module.js";
+import { ReportsModule } from "./reports/reports.module.js";
 import { AttendeesModule } from "./attendees/attendees.module.js";
 import { AssetsModule } from "./assets/assets.module.js";
 import { AuthModule } from "./auth/auth.module.js";
@@ -63,6 +64,7 @@ export class AppModule {
         LiveModule,
         AuditModule,
         LiveOpsModule,
+        ReportsModule,
         WebhooksModule,
       ],
       providers: [

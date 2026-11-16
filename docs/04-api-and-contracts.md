@@ -169,16 +169,16 @@ Staff reach an event by its ID, attendees by its slug (their pages carry no inte
 
 ### 3.7 Record
 
-| Method and path                             | Role  | Notes                                                |
-| ------------------------------------------- | ----- | ---------------------------------------------------- |
-| `GET /audit-entries`                        | O M A | `eventId`, `actorId`, `action`, `from`, `to`, cursor |
-| `GET /webhook-endpoints` · `POST …`         | O     | Secret returned once on create                       |
-| `PATCH /webhook-endpoints/:id` · `DELETE …` | O     |                                                      |
-| `POST /webhook-endpoints/:id/rotate-secret` | O     | New secret returned once                             |
-| `GET /webhook-deliveries`                   | O     | `endpointId`, `status`, cursor; includes attempts    |
-| `POST /webhook-deliveries/:id/redeliver`    | O     | Creates a new attempt                                |
-| `GET /events/:id/report`                    | O M A | Available once `COMPLETED`                           |
-| `GET /events/:id/report.csv`                | O M A | `text/csv`                                           |
+| Method and path                             | Role  | Notes                                                                                                                      |
+| ------------------------------------------- | ----- | -------------------------------------------------------------------------------------------------------------------------- |
+| `GET /audit-entries`                        | O M A | `eventId`, `actorId`, `action`, `from`, `to`, cursor                                                                       |
+| `GET /webhook-endpoints` · `POST …`         | O     | Secret returned once on create                                                                                             |
+| `PATCH /webhook-endpoints/:id` · `DELETE …` | O     |                                                                                                                            |
+| `POST /webhook-endpoints/:id/rotate-secret` | O     | New secret returned once                                                                                                   |
+| `GET /webhook-deliveries`                   | O     | `endpointId`, `status`, cursor; includes attempts                                                                          |
+| `POST /webhook-deliveries/:id/redeliver`    | O     | Creates a new attempt                                                                                                      |
+| `GET /events/:id/report`                    | O M A | Once `COMPLETED` (also archived after): `409 REPORT_NOT_AVAILABLE` before, and for a cancelled event                       |
+| `GET /events/:id/report.csv`                | O M A | `text/csv`: figures, minutes and incidents as three tables; text that a spreadsheet would run as a formula starts with `'` |
 
 ## 4. Real-time protocol (Socket.IO)
 

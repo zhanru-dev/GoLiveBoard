@@ -228,4 +228,40 @@ describe("the daily retention job (FR-AD-6, docs/03 section 8)", () => {
       await other.close();
     }
   });
+
+  it("deletes attendance minutes 30 days after their event's report, and no sooner", async () => {
+    const watched = async (reportedDaysAgo: number | null) => {
+      const event = await seedEvent(database, {
+        startsAt: new Date(Date.now() - 40 * DAY_MS),
+        status: "COMPLETED",
+      });
+      const attendee = await seedAttendee(database, event.eventId);
+      await database.query(
+        `INSERT INTO attendance_minutes (event_id, attendee_id, minute)
+         VALUES ($1, $2, date_trunc('minute', now()) - interval '40 days')`,
+        [event.eventId, attendee.id],
+      );
+      if (reportedDaysAgo !== null) {
+        await database.query(
+          `INSERT INTO event_reports (event_id, generated_at, data)
+           VALUES ($1, now() - make_interval(days => $2), '{}')`,
+          [event.eventId, reportedDaysAgo],
+        );
+      }
+      return event.eventId;
+    };
+    const old = await watched(31);
+    const recent = await watched(29);
+    const unreported = await watched(null);
+
+    await run();
+
+    const left = await database.query<{ event_id: string }>(
+      "SELECT event_id FROM attendance_minutes WHERE event_id = ANY($1::uuid[])",
+      [[old, recent, unreported]],
+    );
+    expect(left.map(({ event_id }) => event_id).sort()).toEqual(
+      [recent, unreported].sort(),
+    );
+  });
 });

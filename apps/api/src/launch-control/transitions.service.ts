@@ -17,6 +17,7 @@ import { EventsService } from "../events/events.service.js";
 import type { Prisma, PrismaClient } from "../generated/prisma/client.js";
 import { RealtimeSignals } from "../live/realtime-signals.js";
 import { writeOutbox } from "../outbox/outbox.js";
+import { recordReport } from "../reports/report-store.js";
 import { CLOCK, type Clock } from "../shared/clock.js";
 import { DomainError } from "../shared/domain/domain-error.js";
 import {
@@ -77,6 +78,10 @@ export class TransitionsService {
         where: { id: eventId },
         data: { status: to, version: { increment: 1 }, updatedAt: now },
       });
+      if (to === "COMPLETED") {
+        // The audience figures, now final (FR-RC-3).
+        await recordReport(tx, eventId, now);
+      }
       await recordAudit(tx, actor, {
         action: "event.transitioned",
         targetType: "event",

@@ -13,6 +13,7 @@ import { RealtimeSignals } from "../live/realtime-signals.js";
 import { PRISMA } from "../database/prisma.js";
 import { eventSlug } from "../events/domain/slug.js";
 import { randomSlugSuffix } from "../events/slug-suffix.js";
+import { recordReport } from "../reports/report-store.js";
 import type { Prisma, PrismaClient } from "../generated/prisma/client.js";
 import { CLOCK, type Clock } from "../shared/clock.js";
 import { ObjectStorage } from "../storage/object-storage.js";
@@ -193,8 +194,9 @@ export class DemoSeeder {
   private async writeEvents(tx: Prisma.TransactionClient): Promise<void> {
     const userId = (key: keyof typeof DEMO_PEOPLE | null) =>
       key === null ? null : DEMO_PEOPLE[key].id;
-    for (const event of demoSeed(this.clock.now())) {
-      await tx.event.create({
+    const now = this.clock.now();
+    for (const event of demoSeed(now)) {
+      const { id } = await tx.event.create({
         data: {
           workspaceId: DEMO_WORKSPACE.id,
           slug: eventSlug(event.title, randomSlugSuffix()),
@@ -230,7 +232,13 @@ export class DemoSeeder {
                   },
                 },
         },
+        select: { id: true },
       });
+      // The demo's past events completed (the archived one too): they
+      // have reports.
+      if (event.status === "COMPLETED" || event.status === "ARCHIVED") {
+        await recordReport(tx, id, now);
+      }
     }
   }
 

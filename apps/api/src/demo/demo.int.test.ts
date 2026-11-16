@@ -153,6 +153,36 @@ describe("demo mode (FR-AUTH-5)", () => {
     expect(await eventTitles(api, session)).toEqual(SEED_TITLES);
   });
 
+  it("seeds reports for the demo's past events, which completed", async () => {
+    await demoSignIn(app);
+    const session = await demoSession(app);
+
+    const rows = await database.query<{ status: string; reported: boolean }>(
+      `SELECT event.status::text AS status, report.event_id IS NOT NULL AS reported
+       FROM events AS event
+       LEFT JOIN event_reports AS report ON report.event_id = event.id
+       WHERE event.workspace_id = $1 ORDER BY event.status`,
+      [DEMO_WORKSPACE.id],
+    );
+    const [completed] = await database.query<{ id: string }>(
+      "SELECT id FROM events WHERE workspace_id = $1 AND status = 'COMPLETED'",
+      [DEMO_WORKSPACE.id],
+    );
+
+    expect(
+      rows.map(({ status, reported }) => `${status}:${String(reported)}`),
+    ).toEqual(
+      rows.map(
+        ({ status }) =>
+          `${status}:${String(status === "COMPLETED" || status === "ARCHIVED")}`,
+      ),
+    );
+    expect(rows.filter(({ reported }) => reported)).toHaveLength(2);
+    expect(
+      (await api.get(session, `/events/${completed?.id ?? ""}/report`)).status,
+    ).toBe(200);
+  });
+
   it("refuses a demo sign-in from another site", async () => {
     const response = await request(app.getHttpServer())
       .post("/api/v1/auth/demo")

@@ -210,6 +210,7 @@ model Event {
   questions    Question[]
   journal      RealtimeJournal[]
   attendance   AttendanceMinute[]
+  report       EventReport?
 
   // The event list: one workspace, newest start first, ID as tie-breaker.
   @@index([workspaceId, startsAt(sort: Desc), id(sort: Desc)])
@@ -807,6 +808,22 @@ model AttendanceMinute {
   @@id([eventId, attendeeId, minute])
   @@index([attendeeId])
   @@map("attendance_minutes")
+}
+
+/// What the report (FR-RC-3) keeps of the attendance minutes, which are
+/// deleted 30 days after it: written when the event completes, when no
+/// heartbeat can add to them any more. The rest of the report is read from
+/// the event's records each time.
+model EventReport {
+  eventId     String   @id @map("event_id") @db.Uuid
+  generatedAt DateTime @map("generated_at") @db.Timestamptz(3)
+  /// `{ attended, peak, average, series: [{ minute, viewers }] }`.
+  data        Json
+
+  event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@index([generatedAt])
+  @@map("event_reports")
 }
 
 /// Stored files to delete once nothing can write to them any more: the
