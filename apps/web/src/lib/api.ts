@@ -149,6 +149,26 @@ export async function api<T = undefined>(
   path: string,
   options: RequestOptions<T> = {},
 ): Promise<T> {
+  const response = await request(path, options);
+  if (options.schema === undefined) {
+    return undefined as T;
+  }
+  return options.schema.parse(await response.json());
+}
+
+/** Like `api`, for an answer that is text (a CSV export, say). */
+export async function apiText(
+  path: string,
+  options: Omit<RequestOptions<never>, "schema"> = {},
+): Promise<string> {
+  const response = await request(path, options);
+  return response.text();
+}
+
+async function request(
+  path: string,
+  options: RequestOptions<unknown>,
+): Promise<Response> {
   const method = options.method ?? "GET";
   let response = await send(path, method, options);
   if (response.status === 401 && !NO_REFRESH.has(path)) {
@@ -167,8 +187,5 @@ export async function api<T = undefined>(
     }
     throw error;
   }
-  if (options.schema === undefined) {
-    return undefined as T;
-  }
-  return options.schema.parse(await response.json());
+  return response;
 }

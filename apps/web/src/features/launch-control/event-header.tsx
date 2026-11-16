@@ -97,6 +97,9 @@ export function EventHeader({
             Report
           </Link>
         ) : null}
+        <Link href={`/audit?eventId=${event.id}`} className="underline">
+          Audit trail
+        </Link>
       </nav>
       {control.canEdit && event.allowedTransitions.length > 0 ? (
         <div

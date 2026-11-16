@@ -97,7 +97,12 @@ export function AppShell({
           </DropdownMenu>
           <nav aria-label="Main" className="flex gap-4 text-sm">
             <Link href="/events">Events</Link>
+            <Link href="/audit">Audit trail</Link>
             <Link href="/settings/team">Team</Link>
+            {/* Webhooks are the Owners' alone, in the API too. */}
+            {me.activeWorkspace.role === "OWNER" ? (
+              <Link href="/settings/integrations">Integrations</Link>
+            ) : null}
           </nav>
           <div className="ml-auto">
             <DropdownMenu>

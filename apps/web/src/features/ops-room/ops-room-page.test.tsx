@@ -108,6 +108,12 @@ describe("OpsRoomPage", () => {
     });
 
     expect(screen.getByRole("status")).toHaveTextContent("Reconnecting…");
+    // Left to the browser: not closed, no new stream, and live once back.
+    expect(source.readyState).toBe(FakeEventSource.CONNECTING);
+    act(() => {
+      source.open();
+    });
+    expect(screen.getByRole("status")).toHaveTextContent("Live");
     expect(FakeEventSource.opened).toHaveLength(1);
   });
 

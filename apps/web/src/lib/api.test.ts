@@ -7,6 +7,7 @@ import { server } from "@/testing/server";
 import {
   api,
   ApiError,
+  apiText,
   refreshSession,
   SignedOutError,
   WorkspaceChangedError,
@@ -109,6 +110,29 @@ describe("api", () => {
     ]);
 
     expect(refreshes).toBe(1);
+  });
+
+  it("reads a text answer the same way, refreshing an expired session", async () => {
+    let signedIn = false;
+    server.use(
+      http.post("*/api/v1/auth/refresh", () => {
+        signedIn = true;
+        return new HttpResponse(null, { status: 204 });
+      }),
+      http.get("*/api/v1/report.csv", () =>
+        signedIn
+          ? new HttpResponse("metric,value\r\n", {
+              headers: { "content-type": "text/csv" },
+            })
+          : problem(401, "UNAUTHENTICATED"),
+      ),
+      http.get("*/api/v1/missing.csv", () =>
+        problem(409, "REPORT_NOT_AVAILABLE"),
+      ),
+    );
+
+    expect(await apiText("/report.csv")).toBe("metric,value\r\n");
+    await expect(apiText("/missing.csv")).rejects.toBeInstanceOf(ApiError);
   });
 
   it("gives up with SignedOutError when the refresh fails", async () => {
