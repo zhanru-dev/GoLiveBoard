@@ -63,7 +63,7 @@ export function Deliveries({ endpointId }: Readonly<{ endpointId: string }>) {
     return <p className="text-muted-foreground">Nothing sent yet.</p>;
   }
   return (
-    <Table>
+    <Table scrollLabel="Deliveries">
       <TableHeader>
         <TableRow>
           <TableHead>Event</TableHead>
@@ -95,7 +95,7 @@ export function Deliveries({ endpointId }: Readonly<{ endpointId: string }>) {
                   {delivery.attempts === 1 ? "attempt" : "attempts"}
                 </span>
               </TableCell>
-              <TableCell className="text-sm">
+              <TableCell className="text-sm whitespace-normal">
                 {last === undefined
                   ? "—"
                   : `${timeFormat.format(new Date(last.attemptedAt))}: ${

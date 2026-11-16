@@ -66,7 +66,11 @@ test("pages of the signed-in app have no WCAG 2.2 AA violations", async ({
     "/events",
     "/events/new",
     `/events/${event.id}`,
+    `/events/${event.id}/live`,
+    `/events/${event.id}/report`,
+    "/audit",
     "/settings/team",
+    "/settings/integrations",
   ]) {
     await expectNoViolations(page, path);
   }

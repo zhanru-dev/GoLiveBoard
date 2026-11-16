@@ -39,7 +39,7 @@ export function IntegrationsPage() {
         </h1>
         <p className="text-muted-foreground">
           OpsPilot sends a signed POST to each endpoint when what it subscribes
-          to happens, and retries for about two and a half hours.
+          to happens, and retries for about two hours.
         </p>
         {secret === undefined ? null : (
           <SecretNotice

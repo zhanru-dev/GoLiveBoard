@@ -18,10 +18,13 @@ import {
   WEBHOOKS_QUEUE,
 } from "../queues/queues.js";
 import { WebhookFanOut } from "../webhooks/webhook-fan-out.js";
+import { SecretResealer } from "../webhooks/secret-resealer.js";
 import { WebhookSender } from "../webhooks/webhook-sender.js";
 import { WORKER_OPTIONS, type WorkerOptions } from "./worker-options.js";
 
 const DELIVER_SCHEDULER_ID = "webhooks-deliver";
+const RESEAL_SCHEDULER_ID = "webhooks-reseal";
+const RESEAL_EVERY_MS = 10 * 60 * 1000;
 /** How often due deliveries are sent: the delay of a first attempt. */
 export const DELIVER_EVERY_MS = 5_000;
 
@@ -42,6 +45,7 @@ export class WebhooksConsumer
     @Inject(WORKER_OPTIONS) private readonly options: WorkerOptions,
     private readonly fanOut: WebhookFanOut,
     private readonly sender: WebhookSender,
+    private readonly resealer: SecretResealer,
     @InjectPinoLogger(WebhooksConsumer.name)
     private readonly logger: PinoLogger,
   ) {}
@@ -50,13 +54,17 @@ export class WebhooksConsumer
     if (!this.options.consume) {
       return;
     }
-    await this.queues
-      .get(WEBHOOKS_QUEUE)
-      ?.upsertJobScheduler(
-        DELIVER_SCHEDULER_ID,
-        { every: DELIVER_EVERY_MS },
-        { name: WEBHOOK_JOBS.deliver },
-      );
+    const queue = this.queues.get(WEBHOOKS_QUEUE);
+    await queue?.upsertJobScheduler(
+      DELIVER_SCHEDULER_ID,
+      { every: DELIVER_EVERY_MS },
+      { name: WEBHOOK_JOBS.deliver },
+    );
+    await queue?.upsertJobScheduler(
+      RESEAL_SCHEDULER_ID,
+      { every: RESEAL_EVERY_MS },
+      { name: WEBHOOK_JOBS.reseal },
+    );
     this.worker = new Worker(WEBHOOKS_QUEUE, (job) => this.process(job), {
       connection: consumerConnection(this.config),
       prefix: this.config.queues.prefix,
@@ -102,6 +110,13 @@ export class WebhooksConsumer
       }
       case WEBHOOK_JOBS.deliver: {
         await this.sender.sendDue();
+        return;
+      }
+      case WEBHOOK_JOBS.reseal: {
+        const resealed = await this.resealer.resealStale();
+        if (resealed > 0) {
+          this.logger.info({ resealed }, "Webhook secrets sealed again");
+        }
         return;
       }
       default:

@@ -263,18 +263,20 @@ OpsPilot-Signature: t=1795000000,v1=5f2c…
 - **Signature**: `v1` = hex HMAC-SHA256 of `"<t>.<raw body>"` with the endpoint's secret. Receivers should reject timestamps older than 5 minutes.
 - **Success** = any `2xx` within 10 seconds. Anything else, or a timeout, is a failure.
 - **Retries**: up to 5 attempts in total, at about 1 minute, 5 minutes, 30 minutes and 2 hours after the first, with jitter. Then the delivery is `FAILED` and can be resent manually.
-- **Ordering** is not guaranteed; receivers de-duplicate by `id`.
-- **Targets** must be `https` and resolve to public addresses (SSRF protection).
+- **Ordering** is not guaranteed; receivers de-duplicate by `id`, which is the same on every attempt and every manual resend (`OpsPilot-Event-Id` repeats it).
+- **Targets** must be `https` and resolve to public addresses (SSRF protection), checked when the endpoint is saved and again at every attempt. Redirects are not followed: a `3xx` is a failure.
+- **Endpoints** are managed by Owners only. The signing secret is returned once, on create and on rotation, and stored encrypted (AES-256-GCM, `WEBHOOK_ENCRYPTION_KEY`). A paused endpoint's deliveries wait and are sent when it is resumed; deleting an endpoint deletes its deliveries.
+- **Records**: each attempt is kept with its status code (or the reason it failed, never the response body) and duration; finished deliveries are deleted after 30 days.
 
 ### 6.2 Event types
 
-| Type                  | When                                                                                       |
-| --------------------- | ------------------------------------------------------------------------------------------ |
-| `event.ready`         | Event reached `READY`                                                                      |
-| `event.live`          | Event reached `LIVE`                                                                       |
-| `event.completed`     | Event reached `COMPLETED`                                                                  |
-| `event.cancelled`     | Event was cancelled                                                                        |
-| `attendee.registered` | An attendee verified their email (personal data included only if the workspace enables it) |
+| Type                  | When                                                                                                                                                                                                         |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `event.ready`         | Event reached `READY`                                                                                                                                                                                        |
+| `event.live`          | Event reached `LIVE`                                                                                                                                                                                         |
+| `event.completed`     | Event reached `COMPLETED`                                                                                                                                                                                    |
+| `event.cancelled`     | Event was cancelled                                                                                                                                                                                          |
+| `attendee.registered` | An attendee verified their email, once per attendee. `data`: `eventId`, `attendeeId`; with the workspace's personal-data setting on, also `name` and `email`, read when sending (never an erased attendee's) |
 
 ## 7. OpenAPI document
 

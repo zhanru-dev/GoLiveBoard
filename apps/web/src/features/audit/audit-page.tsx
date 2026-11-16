@@ -150,7 +150,7 @@ export function AuditPage() {
         <p className="text-muted-foreground">Nothing matches.</p>
       ) : null}
       {items.length === 0 ? null : (
-        <Table>
+        <Table scrollLabel="Audit entries">
           <TableHeader>
             <TableRow>
               <TableHead>When</TableHead>
@@ -168,10 +168,10 @@ export function AuditPage() {
                   </time>
                 </TableCell>
                 <TableCell>{actorName(entry)}</TableCell>
-                <TableCell className="font-mono text-sm">
+                <TableCell className="font-mono text-sm whitespace-normal">
                   {entry.action}
                 </TableCell>
-                <TableCell className="max-w-md text-sm break-words">
+                <TableCell className="max-w-md text-sm break-words whitespace-normal">
                   {change(entry)}
                 </TableCell>
               </TableRow>

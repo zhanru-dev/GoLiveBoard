@@ -47,6 +47,9 @@ export function ReportPage({ eventId }: Readonly<{ eventId: string }>) {
       >
         ← Launch Control
       </Link>
+      {report.data === undefined ? (
+        <h1 className="text-2xl font-semibold tracking-tight">Report</h1>
+      ) : null}
       {report.isPending ? <p>Loading…</p> : null}
       {report.isError ? <NoReport error={report.error} /> : null}
       {report.data === undefined ? null : (

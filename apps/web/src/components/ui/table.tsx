@@ -3,11 +3,23 @@
 import * as React from "react";
 import { cn } from "cn";
 
-function Table({ className, ...props }: React.ComponentProps<"table">) {
+/**
+ * `scrollLabel` names a table that may be wider than the screen: its
+ * scrolling container becomes a focusable region, so keyboard users can
+ * scroll it too (WCAG 2.1.1).
+ */
+function Table({
+  className,
+  scrollLabel,
+  ...props
+}: React.ComponentProps<"table"> & { scrollLabel?: string }) {
   return (
     <div
       data-slot="table-container"
       className="relative w-full overflow-x-auto"
+      {...(scrollLabel === undefined
+        ? {}
+        : { role: "region", "aria-label": scrollLabel, tabIndex: 0 })}
     >
       <table
         data-slot="table"

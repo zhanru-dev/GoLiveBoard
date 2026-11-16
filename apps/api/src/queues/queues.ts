@@ -44,6 +44,8 @@ export const WEBHOOK_JOBS = {
   fanOut: "fan-out",
   /** Every 5 seconds: sends the deliveries that are due. */
   deliver: "deliver",
+  /** Every 10 minutes: seals signing secrets again with the current key. */
+  reseal: "reseal",
 } as const;
 
 /** Every queue the worker consumes. */

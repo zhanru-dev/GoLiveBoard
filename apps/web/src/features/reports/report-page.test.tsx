@@ -107,6 +107,9 @@ describe("ReportPage", () => {
     renderScreen(<ReportPage eventId={EVENT_ID} />, OWNER);
 
     expect(await screen.findByText("No report yet")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(
+      "Report",
+    );
     expect(
       screen.getByText("An event has a report once it has completed."),
     ).toBeInTheDocument();

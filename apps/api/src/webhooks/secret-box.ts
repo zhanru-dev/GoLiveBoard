@@ -44,6 +44,11 @@ export class SecretBox {
     }
   }
 
+  /** The ID of the key `seal` uses. */
+  get currentKeyId(): string {
+    return keyIdOf(this.current);
+  }
+
   seal(secret: string): Sealed {
     const iv = randomBytes(IV_BYTES);
     const cipher = createCipheriv("aes-256-gcm", this.current, iv);
