@@ -126,6 +126,26 @@ describe("the daily retention job (FR-AD-6, docs/03 section 8)", () => {
       [event.workspaceId],
     );
 
+    const [hook] = await database.query<{ id: string }>(
+      `INSERT INTO webhook_endpoints (workspace_id, url, event_types, secret_ciphertext, secret_key_id)
+       VALUES ($1, 'https://hooks.example.com/in', '{event.live}', '\\x00', 'k') RETURNING id`,
+      [event.workspaceId],
+    );
+    await database.query(
+      `INSERT INTO webhook_deliveries
+         (endpoint_id, event_id, event_type, data, occurred_at, status, attempts, next_attempt_at, created_at)
+       VALUES ($1, gen_random_uuid(), 'old-done', '{}', now(), 'SUCCEEDED', 1, NULL, now() - interval '31 days'),
+              ($1, gen_random_uuid(), 'old-pending', '{}', now(), 'PENDING', 1, now(), now() - interval '31 days'),
+              ($1, gen_random_uuid(), 'new-done', '{}', now(), 'FAILED', 5, NULL, now() - interval '1 day')`,
+      [hook?.id],
+    );
+    await database.query(
+      `INSERT INTO webhook_attempts (delivery_id, attempted_at, duration_ms)
+       SELECT id, now() - interval '31 days', 10 FROM webhook_deliveries WHERE event_type = 'old-pending'
+       UNION ALL
+       SELECT id, now(), 10 FROM webhook_deliveries WHERE event_type = 'old-pending'`,
+    );
+
     await run();
 
     const left = async (sql: string, values: unknown[] = []) =>
@@ -142,6 +162,23 @@ describe("the daily retention job (FR-AD-6, docs/03 section 8)", () => {
         [attendee.id],
       ),
     ).toEqual(["live-session"]);
+    expect(
+      (
+        await left(
+          "SELECT event_type AS v FROM webhook_deliveries WHERE endpoint_id = $1",
+          [hook?.id],
+        )
+      ).sort(),
+    ).toEqual(["new-done", "old-pending"]);
+    expect(
+      await left(
+        `SELECT (attempted_at > now() - interval '2 days')::text AS v
+         FROM webhook_attempts AS attempt
+         JOIN webhook_deliveries AS delivery ON delivery.id = attempt.delivery_id
+         WHERE delivery.endpoint_id = $1`,
+        [hook?.id],
+      ),
+    ).toEqual(["true"]);
     expect(
       await left(
         "SELECT (checked_at > now() - interval '2 days')::text AS v FROM stream_checks WHERE event_id = $1",

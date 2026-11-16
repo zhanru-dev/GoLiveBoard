@@ -34,8 +34,24 @@ export const MAINTENANCE_JOBS = {
   retention: "retention",
 } as const;
 
+/**
+ * Webhooks (FR-RC-2), apart from maintenance: a send can take 10 seconds,
+ * which must not hold up reminders or the retention job.
+ */
+export const WEBHOOKS_QUEUE = "webhooks";
+export const WEBHOOK_JOBS = {
+  /** Turns one outbox message into a delivery per subscribed endpoint. */
+  fanOut: "fan-out",
+  /** Every 5 seconds: sends the deliveries that are due. */
+  deliver: "deliver",
+} as const;
+
 /** Every queue the worker consumes. */
-export const QUEUE_NAMES = [STREAM_CHECKS_QUEUE, MAINTENANCE_QUEUE] as const;
+export const QUEUE_NAMES = [
+  STREAM_CHECKS_QUEUE,
+  MAINTENANCE_QUEUE,
+  WEBHOOKS_QUEUE,
+] as const;
 export type QueueName = (typeof QUEUE_NAMES)[number];
 
 /** A queue command that has not answered by then fails (relay, scheduler). */

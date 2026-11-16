@@ -10,6 +10,8 @@ import {
   MAINTENANCE_QUEUE,
   STREAM_CHECK_JOBS,
   STREAM_CHECKS_QUEUE,
+  WEBHOOK_JOBS,
+  WEBHOOKS_QUEUE,
 } from "../queues/queues.js";
 
 export interface RelayedMessage {
@@ -20,7 +22,7 @@ export interface RelayedMessage {
 
 /**
  * The job an outbox message becomes, or `undefined` when nothing consumes
- * that type yet (`event.transitioned` gets its webhook job in milestone 7).
+ * that type.
  * The job ID is derived from the message ID, so relaying a message twice
  * enqueues one job.
  *
@@ -54,7 +56,15 @@ export function routeOutboxMessage(
         jobId: `outbox-${message.id}`,
       };
     case "event.transitioned":
-      return undefined;
+    case "attendee.verified":
+      // The fan-out reads the message itself, and decides whether any
+      // endpoint wants it.
+      return {
+        queue: WEBHOOKS_QUEUE,
+        name: WEBHOOK_JOBS.fanOut,
+        data: { outboxMessageId: message.id },
+        jobId: `outbox-${message.id}`,
+      };
     default:
       return messageType satisfies never;
   }

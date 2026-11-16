@@ -77,11 +77,13 @@ export {
 } from "./launch-control.js";
 export { HealthCheckResult, HealthReport, LivenessReport } from "./health.js";
 export {
+  AttendeeVerifiedPayload,
   CheckStreamJob,
   DemoEventsDeletedPayload,
   EventTransitionedPayload,
   OutboxMessageType,
   StreamCheckRequestedPayload,
+  WebhookFanOutJob,
 } from "./messages.js";
 export {
   PAGE_LIMIT_DEFAULT,

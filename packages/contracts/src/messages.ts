@@ -8,6 +8,7 @@ import { EventStatus } from "./events.js";
  */
 export const OutboxMessageType = z.enum([
   "event.transitioned",
+  "attendee.verified",
   "stream.check_requested",
   "demo.events_deleted",
 ]);
@@ -21,6 +22,22 @@ export const EventTransitionedPayload = z.object({
   occurredAt: z.iso.datetime(),
 });
 export type EventTransitionedPayload = z.infer<typeof EventTransitionedPayload>;
+
+/**
+ * An attendee confirmed their address for the first time: the
+ * `attendee.registered` webhook (docs/04, section 6.2). No personal data:
+ * the sender adds it when sending, if the workspace allows it.
+ */
+export const AttendeeVerifiedPayload = z.object({
+  eventId: z.uuid(),
+  attendeeId: z.uuid(),
+  occurredAt: z.iso.datetime(),
+});
+export type AttendeeVerifiedPayload = z.infer<typeof AttendeeVerifiedPayload>;
+
+/** A webhook fan-out job: the outbox message to send as webhooks. */
+export const WebhookFanOutJob = z.object({ outboxMessageId: z.uuid() });
+export type WebhookFanOutJob = z.infer<typeof WebhookFanOutJob>;
 
 /** A manager set the stream URL or asked for a check now. */
 export const StreamCheckRequestedPayload = z.object({

@@ -14,6 +14,7 @@ const BATCH = 500;
 
 /** docs/03, section 8. */
 const STREAM_CHECK_DAYS = 30;
+const WEBHOOK_DAYS = 30;
 const AUDIT_DAYS = 2 * 365;
 
 export interface RetentionOutcome {
@@ -29,8 +30,8 @@ export interface RetentionOutcome {
  *   period ago are anonymised, as an erasure on request would be, and each
  *   is audited as SYSTEM. So are those events' invitations.
  * - Used or expired links, expired sessions and stored idempotent responses,
- *   stream checks after 30 days and audit entries after two years are
- *   deleted.
+ *   stream checks and webhook deliveries after 30 days and audit entries
+ *   after two years are deleted.
  */
 @Injectable()
 export class RetentionJob {
@@ -93,6 +94,25 @@ export class RetentionJob {
       idempotencyRecords: (
         await this.prisma.idempotencyRecord.deleteMany({
           where: { expiresAt: { lte: now } },
+        })
+      ).count,
+      // Finished deliveries (their attempts go with them), and old attempts
+      // of a delivery resent since (docs/03 section 8).
+      webhookDeliveries: (
+        await this.prisma.webhookDelivery.deleteMany({
+          where: {
+            status: { not: "PENDING" },
+            createdAt: { lt: new Date(now.getTime() - WEBHOOK_DAYS * DAY_MS) },
+          },
+        })
+      ).count,
+      webhookAttempts: (
+        await this.prisma.webhookAttempt.deleteMany({
+          where: {
+            attemptedAt: {
+              lt: new Date(now.getTime() - WEBHOOK_DAYS * DAY_MS),
+            },
+          },
         })
       ).count,
       streamChecks: (

@@ -231,9 +231,12 @@ flowchart LR
   sched["Repeatable jobs"] --> sc["stream-checks · 30 s"]
   sched --> rem["reminders · every minute"]
   sched --> purge["file-purge · 5 min"]
+  sched --> deliver["webhooks deliver · 5 s"]
   sched --> ret["retention · daily 04:00 UK"]
   sched --> demo["demo-reset · nightly 03:00 UK"]
 ```
+
+Webhooks have a queue of their own, so a slow receiver (10 s per attempt) never holds up reminders or retention. An `event.transitioned` or `attendee.verified` message fans out to one delivery per subscribed, active endpoint (unique per endpoint and message). Every 5 s the worker takes due deliveries with `FOR UPDATE SKIP LOCKED`, moving each one's next attempt a minute ahead as a lease, so no other worker takes it while it is being sent. It then sends them signed, through the same address checks as stream checks, records the attempt, and schedules the next one (about 1, 5, 30 and 120 minutes) or marks the delivery failed after five.
 
 Every job is **idempotent**: it checks whether its effect already happened before acting. A reminder, for example, is recorded in `reminder_deliveries` (one row per attendee and kind) in the transaction that decides to send it, before it is sent, so a job that runs twice, or on two workers, sends it at most once. Failed jobs retry with exponential backoff; jobs that exhaust their retries are kept and visible to operators.
 

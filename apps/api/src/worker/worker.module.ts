@@ -9,6 +9,8 @@ import type { AppConfig } from "../config/app-config.js";
 import { ConfigModule } from "../config/config.module.js";
 import { DatabaseModule } from "../database/database.module.js";
 import { MaintenanceConsumer } from "./maintenance.consumer.js";
+import { WebhooksConsumer } from "./webhooks.consumer.js";
+import { WebhookDeliveryModule } from "../webhooks/webhook-delivery.module.js";
 import { DemoModule } from "../demo/demo.module.js";
 import { NetModule } from "../net/net.module.js";
 import type { SafeHttpOptions } from "../net/safe-http.js";
@@ -57,6 +59,7 @@ export class WorkerModule {
         MailModule,
         QueuesModule,
         RealtimeSignalsModule,
+        WebhookDeliveryModule,
       ],
       providers: [
         {
@@ -72,6 +75,7 @@ export class WorkerModule {
         ReminderSender,
         RetentionJob,
         MaintenanceConsumer,
+        WebhooksConsumer,
       ],
     };
   }

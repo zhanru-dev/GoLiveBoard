@@ -11,6 +11,7 @@ import {
 } from "../demo/demo-workspace.js";
 import { lockEventById } from "../events/event-lock.queries.js";
 import type { Prisma, PrismaClient } from "../generated/prisma/client.js";
+import { writeOutbox } from "../outbox/outbox.js";
 import { RealtimeSignals } from "../live/realtime-signals.js";
 import { RATE_LIMITS, RateLimiter } from "../rate-limit/rate-limiter.js";
 import { CLOCK, type Clock } from "../shared/clock.js";
@@ -309,6 +310,17 @@ export class RegistrationService {
         await tx.attendee.update({
           where: { id: attendee.id },
           data: { status: "VERIFIED", verifiedAt: now, updatedAt: now },
+        });
+        // The attendee.registered webhook, once per attendee (docs/04,
+        // section 6.2).
+        await writeOutbox(tx, {
+          workspaceId: event.workspaceId,
+          type: "attendee.verified",
+          payload: {
+            eventId: event.id,
+            attendeeId: attendee.id,
+            occurredAt: now.toISOString(),
+          },
         });
       }
       const sessionToken = generateToken();

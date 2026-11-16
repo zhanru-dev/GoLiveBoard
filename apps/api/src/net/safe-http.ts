@@ -203,6 +203,41 @@ export class SafeHttpClient {
     }
   }
 
+  /**
+   * Sends a POST, once: no redirect is followed (a redirect answer is
+   * returned as it is), and the same address rules apply as for GET.
+   *
+   * @throws SafeHttpError when no response arrived
+   */
+  async post(
+    url: string,
+    body: string,
+    headers: Readonly<Record<string, string>>,
+    timeoutMs: number,
+  ): Promise<{ readonly status: number }> {
+    // Tests shorten it with the client's own timeout.
+    const limitMs = Math.min(timeoutMs, this.options.timeoutMs ?? timeoutMs);
+    const deadline = Date.now() + limitMs;
+    const target = parseHttpsUrl(url);
+    const address = await this.resolveAllowed(target, deadline, timeoutMs);
+    const response = await this.fetchOnce(
+      target,
+      address,
+      deadline,
+      timeoutMs,
+      {
+        method: "POST",
+        headers: {
+          ...headers,
+          "content-length": String(Buffer.byteLength(body)),
+          "user-agent": USER_AGENT,
+        },
+        body,
+      },
+    );
+    return { status: response.status };
+  }
+
   /** Resolves the host before the deadline and checks every address. */
   private async resolveAllowed(
     url: URL,
@@ -249,6 +284,17 @@ export class SafeHttpClient {
     address: ResolvedAddress,
     deadline: number,
     timeoutMs: number,
+    send: {
+      readonly method: "GET" | "POST";
+      readonly headers: Readonly<Record<string, string>>;
+      readonly body?: string;
+    } = {
+      method: "GET",
+      headers: {
+        accept: "application/vnd.apple.mpegurl, application/x-mpegurl, */*",
+        "user-agent": USER_AGENT,
+      },
+    },
   ): Promise<{ status: number; body: string; location?: string }> {
     // The socket connects to the address checked above, whatever DNS says now.
     const pinnedLookup: LookupFunction = (_hostname, options, callback) => {
@@ -259,12 +305,9 @@ export class SafeHttpClient {
       }
     };
     const options: RequestOptions = {
-      method: "GET",
+      method: send.method,
       lookup: pinnedLookup,
-      headers: {
-        accept: "application/vnd.apple.mpegurl, application/x-mpegurl, */*",
-        "user-agent": USER_AGENT,
-      },
+      headers: { ...send.headers },
       ...(this.options.ca !== undefined && { ca: this.options.ca }),
     };
     return new Promise((resolve, reject) => {
@@ -308,7 +351,7 @@ export class SafeHttpClient {
               }),
         );
       });
-      outgoing.end();
+      outgoing.end(send.body);
     });
   }
 }

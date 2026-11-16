@@ -36,11 +36,22 @@ describe("routeOutboxMessage", () => {
     });
   });
 
-  it.each([
-    ["a type nothing consumes yet", "event.transitioned"],
-    ["an unknown type", "something.else"],
-  ])("routes %s nowhere", (_label, type) => {
-    expect(routeOutboxMessage({ id, type, payload: {} })).toBeUndefined();
+  it.each(["event.transitioned", "attendee.verified"])(
+    "turns %s into a webhook fan-out keyed by the message",
+    (type) => {
+      expect(routeOutboxMessage({ id, type, payload: {} })).toEqual({
+        queue: "webhooks",
+        name: "fan-out",
+        data: { outboxMessageId: id },
+        jobId: `outbox-${id}`,
+      });
+    },
+  );
+
+  it("routes an unknown type nowhere", () => {
+    expect(
+      routeOutboxMessage({ id, type: "something.else", payload: {} }),
+    ).toBeUndefined();
   });
 
   it("refuses a malformed payload", () => {
