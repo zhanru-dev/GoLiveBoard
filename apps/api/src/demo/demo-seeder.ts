@@ -208,6 +208,11 @@ export class DemoSeeder {
           timeZone: event.timeZone,
           ownerUserId: userId(event.owner),
           expectedAttendance: event.expectedAttendance,
+          // The demo's past events completed (the archived one too).
+          completedAt:
+            event.status === "COMPLETED" || event.status === "ARCHIVED"
+              ? event.endsAt
+              : null,
           runbookTasks: {
             create: event.tasks.map((task, index) => ({
               title: task.title,

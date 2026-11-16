@@ -193,6 +193,9 @@ model Event {
   questionsSequence     BigInt      @default(0) @map("questions_sequence")
   /// FR-RN-4: new questions wait for a moderator before others see them.
   questionsPreModerated Boolean     @default(false) @map("questions_pre_moderated")
+  /// When it moved to COMPLETED, kept when it is archived: whether it ever
+  /// completed (and so has a report) must outlive the audit trail.
+  completedAt           DateTime?   @map("completed_at") @db.Timestamptz(3)
   createdAt             DateTime    @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt             DateTime    @default(now()) @map("updated_at") @db.Timestamptz(3)
 

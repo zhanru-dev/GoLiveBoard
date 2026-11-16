@@ -76,7 +76,12 @@ export class TransitionsService {
 
       await tx.event.update({
         where: { id: eventId },
-        data: { status: to, version: { increment: 1 }, updatedAt: now },
+        data: {
+          status: to,
+          version: { increment: 1 },
+          updatedAt: now,
+          ...(to === "COMPLETED" && { completedAt: now }),
+        },
       });
       if (to === "COMPLETED") {
         // The audience figures, now final (FR-RC-3).

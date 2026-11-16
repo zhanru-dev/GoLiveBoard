@@ -35,12 +35,17 @@ export class ReportsService {
         startsAt: true,
         endsAt: true,
         timeZone: true,
+        completedAt: true,
       },
     });
     if (event === null) {
       throw new DomainError("NOT_FOUND");
     }
-    const stored = await this.stored(eventId, event.status);
+    const stored = await this.stored(
+      eventId,
+      // Completed, or archived after completing (not after a cancellation).
+      event.completedAt !== null || event.status === "COMPLETED",
+    );
     const audience = StoredReport.parse(stored.data);
     const [registered, verified, asked, answered, messages, incidents] =
       await Promise.all([
@@ -62,7 +67,11 @@ export class ReportsService {
     );
     return {
       event: {
-        ...event,
+        id: event.id,
+        slug: event.slug,
+        title: event.title,
+        status: event.status,
+        timeZone: event.timeZone,
         startsAt: event.startsAt.toISOString(),
         endsAt: event.endsAt.toISOString(),
       },
@@ -99,39 +108,20 @@ export class ReportsService {
    * gets it now: its minutes are still there, as they are deleted only 30
    * days after a report.
    */
-  private async stored(eventId: string, status: string) {
+  private async stored(eventId: string, completed: boolean) {
     const found = await this.prisma.eventReport.findUnique({
       where: { eventId },
     });
     if (found !== null) {
       return found;
     }
-    if (!(await this.completed(eventId, status))) {
+    if (!completed) {
       throw new DomainError("REPORT_NOT_AVAILABLE");
     }
     await this.prisma.$transaction(async (tx) => {
       await recordReport(tx, eventId, this.clock.now());
     });
     return this.prisma.eventReport.findUniqueOrThrow({ where: { eventId } });
-  }
-
-  /** Completed, or archived after completing (not after a cancellation). */
-  private async completed(eventId: string, status: string): Promise<boolean> {
-    if (status === "COMPLETED") {
-      return true;
-    }
-    if (status !== "ARCHIVED") {
-      return false;
-    }
-    const transition = await this.prisma.auditEntry.findFirst({
-      where: {
-        eventId,
-        action: "event.transitioned",
-        after: { path: ["status"], equals: "COMPLETED" },
-      },
-      select: { id: true },
-    });
-    return transition !== null;
   }
 
   private async incidents(eventId: string): Promise<Incident[]> {

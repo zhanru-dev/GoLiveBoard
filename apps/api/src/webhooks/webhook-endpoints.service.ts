@@ -107,7 +107,7 @@ export class WebhookEndpointsService {
       await this.assertDeliverable(changes.url);
     }
     return this.prisma.$transaction(async (tx) => {
-      const before = await this.find(tx, actor, endpointId);
+      const before = await this.lockOwn(tx, actor, endpointId);
       const { count } = await tx.webhookEndpoint.updateMany({
         where: {
           id: endpointId,
@@ -138,7 +138,7 @@ export class WebhookEndpointsService {
   /** @throws DomainError `NOT_FOUND` */
   async remove(actor: Actor, endpointId: string): Promise<void> {
     await this.prisma.$transaction(async (tx) => {
-      const before = await this.find(tx, actor, endpointId);
+      const before = await this.lockOwn(tx, actor, endpointId);
       // Its deliveries and attempts go with it.
       await tx.webhookEndpoint.delete({ where: { id: endpointId } });
       await recordAudit(tx, actor, {
@@ -161,7 +161,7 @@ export class WebhookEndpointsService {
     const secret = newSecret();
     const sealed = box.seal(secret);
     await this.prisma.$transaction(async (tx) => {
-      await this.find(tx, actor, endpointId);
+      await this.lockOwn(tx, actor, endpointId);
       await tx.webhookEndpoint.update({
         where: { id: endpointId },
         data: {
@@ -188,6 +188,24 @@ export class WebhookEndpointsService {
       });
     }
     return this.box;
+  }
+
+  /**
+   * Locks the endpoint's row, then reads it: every change does, so a change
+   * that waited for a delete finds nothing (`404`), not a vanished row.
+   *
+   * @throws DomainError `NOT_FOUND`
+   */
+  private async lockOwn(
+    tx: Prisma.TransactionClient,
+    actor: Actor,
+    endpointId: string,
+  ): Promise<EndpointRow> {
+    await tx.$queryRaw`
+      SELECT id FROM webhook_endpoints
+      WHERE id = ${endpointId}::uuid AND workspace_id = ${actor.workspaceId}::uuid
+      FOR UPDATE`;
+    return this.find(tx, actor, endpointId);
   }
 
   private async find(

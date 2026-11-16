@@ -142,14 +142,19 @@ describe("the audit trail's search (FR-RC-1)", { timeout: 30_000 }, () => {
   it("shows each workspace its own entries only, to every role", async () => {
     const client = api();
     const owner = await client.newOwner();
+    const manager = await memberOf(client, mailer, owner, "MANAGER");
     const analyst = await memberOf(client, mailer, owner, "ANALYST");
     const stranger = await client.newOwner("stranger");
     const event = await createEvent(client, owner);
     await createEvent(client, stranger);
 
-    expect(
-      (await search(client, analyst)).items.map(({ targetId }) => targetId),
-    ).toEqual([event.id]);
+    for (const session of [owner, manager, analyst]) {
+      expect(
+        (await search(client, session, `?eventId=${event.id}`)).items.map(
+          ({ targetId }) => targetId,
+        ),
+      ).toEqual([event.id]);
+    }
     // Another workspace's event: nothing, not an error that would confirm it.
     expect(
       (await search(client, stranger, `?eventId=${event.id}`)).items,

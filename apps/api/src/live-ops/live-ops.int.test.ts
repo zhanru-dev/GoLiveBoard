@@ -218,6 +218,7 @@ describe(
     it("shows another workspace's event to nobody, and the room to every role", async () => {
       const client = api();
       const owner = await client.newOwner();
+      const manager = await memberOf(client, mailer, owner, "MANAGER");
       const analyst = await memberOf(client, mailer, owner, "ANALYST");
       const stranger = await client.newOwner("stranger");
       const event = await openEvent(client, owner);
@@ -228,8 +229,6 @@ describe(
         `${url}/api/v1/events/${event.id}/live-ops/stream`,
         { "x-forwarded-for": newAddress() },
       );
-      const analysts = await open(analyst, event.id);
-      analysts.close();
 
       expect(ProblemDetails.parse(theirs.body).code).toBe("NOT_FOUND");
       expect(theirStream.status).toBe(404);
@@ -237,7 +236,35 @@ describe(
         "NOT_FOUND",
       );
       expect(anonymous.status).toBe(401);
-      expect(analysts.status).toBe(200);
+      for (const session of [owner, manager, analyst]) {
+        const room = await client.get(session, `/events/${event.id}/live-ops`);
+        expect(room.status, room.text).toBe(200);
+        expect(LiveOps.parse(room.body).event.id).toBe(event.id);
+        const stream = await open(session, event.id);
+        try {
+          expect(stream.status).toBe(200);
+          expect(
+            LiveOps.parse((await stream.next("snapshot")).data).event.id,
+          ).toBe(event.id);
+        } finally {
+          stream.close();
+        }
+      }
+    });
+
+    it("ends the stream within a second of the event being deleted", async () => {
+      const client = api();
+      const owner = await client.newOwner();
+      const event = await openEvent(client, owner);
+      const stream = await open(owner, event.id);
+      await stream.next("snapshot");
+
+      // As the demo reset deletes its events.
+      await database.query("DELETE FROM events WHERE id = $1", [event.id]);
+
+      const started = Date.now();
+      await stream.ended;
+      expect(Date.now() - started).toBeLessThan(1_500);
     });
 
     it("streams a snapshot, then each change within a second, with increasing IDs", async () => {
@@ -410,6 +437,46 @@ describe(
         for (const stream of streams) {
           stream.close();
         }
+      }
+    });
+
+    it("brings each change within 2 seconds at the production timing (FR-RN-7)", async () => {
+      const real = await createTestApp({
+        env: {
+          DATABASE_URL: database.url,
+          VALKEY_URL: inject("valkeyUrl"),
+          TRUST_PROXY_HOPS: "1",
+        },
+      });
+      try {
+        const realUrl = await listen(real);
+        const client = new ApiClient(real, newAddress());
+        const owner = await client.newOwner();
+        const event = await openEvent(client, owner);
+        const stream = await SseClient.open(
+          `${realUrl}/api/v1/events/${event.id}/live-ops/stream`,
+          {
+            cookie: cookieHeader({ [ACCESS_COOKIE]: owner.access }),
+            "x-forwarded-for": newAddress(),
+          },
+        );
+        try {
+          await stream.next("snapshot");
+          // Each made just after the last arrived, so a slower look shows.
+          const delays: number[] = [];
+          for (let check = 1; check <= 3; check += 1) {
+            const before = stream.messages.length;
+            const started = Date.now();
+            await checked(event.id, true, new Date(Date.now() + check * 1_000));
+            await stream.next("stream.status", before, 4_000);
+            delays.push(Date.now() - started);
+          }
+          expect(Math.max(...delays)).toBeLessThan(2_000);
+        } finally {
+          stream.close();
+        }
+      } finally {
+        await real.close();
       }
     });
 

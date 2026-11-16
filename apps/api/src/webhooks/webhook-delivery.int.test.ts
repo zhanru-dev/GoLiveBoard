@@ -27,7 +27,7 @@ import { TestReceiver } from "../testing/test-receiver.js";
 import { createTestApp, createTestWorker } from "../testing/test-app.js";
 import { SIGNATURE_TOLERANCE_SECONDS, verifySignature } from "./signing.js";
 import { WebhookFanOut } from "./webhook-fan-out.js";
-import { WebhookSender } from "./webhook-sender.js";
+import { DELIVERY_TIMEOUT_MS, WebhookSender } from "./webhook-sender.js";
 import { WebhooksConsumer } from "../worker/webhooks.consumer.js";
 
 let addressCounter = 0;
@@ -348,6 +348,8 @@ describe(
         await expect
           .poll(() => requestsTo("/slow").length, { timeout: 5_000 })
           .toBe(2);
+        // As late as the send may still be under way: its lease holds.
+        clock.advance(DELIVERY_TIMEOUT_MS);
         await other.get(WebhookSender).sendDue();
         await sending;
 

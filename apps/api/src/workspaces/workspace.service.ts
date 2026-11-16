@@ -28,6 +28,9 @@ export class WorkspaceService {
   /** Audited: retention and personal data in webhooks are privacy settings. */
   update(actor: Actor, changes: UpdateWorkspaceRequest): Promise<Workspace> {
     return this.prisma.$transaction(async (tx) => {
+      // Locked before reading: of two changes at once, each records what
+      // it actually changed, from the value the other left.
+      await tx.$queryRaw`SELECT id FROM workspaces WHERE id = ${actor.workspaceId}::uuid FOR UPDATE`;
       const before = await tx.workspace.findUniqueOrThrow({
         where: { id: actor.workspaceId },
         select: WORKSPACE_FIELDS,

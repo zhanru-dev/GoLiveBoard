@@ -19,6 +19,7 @@ import type { SafeHttpOptions } from "../net/safe-http.js";
 import { ApiClient, type TestSession } from "../testing/api-client.js";
 import {
   blockWrites,
+  holdLock,
   createTestDatabase,
   type TestDatabase,
 } from "../testing/database.js";
@@ -233,6 +234,40 @@ describe(
         }
 
         expect(statuses.sort()).toEqual([200, 412]);
+      });
+
+      it("answers 404, not an error, to a rotation that waited for a delete", async () => {
+        const client = api();
+        const owner = await client.newOwner();
+        const { endpoint } = await created(client, owner);
+        const block = await holdLock(
+          database.url,
+          "SELECT id FROM webhook_endpoints WHERE id = $1 FOR UPDATE",
+          [endpoint.id],
+        );
+        let statuses: number[];
+        try {
+          // The delete queues first, then the rotation.
+          const deleting = Promise.resolve(
+            client.send(owner, "delete", `/webhook-endpoints/${endpoint.id}`),
+          );
+          await block.waitForWaiters(1);
+          const rotating = Promise.resolve(
+            client.send(
+              owner,
+              "post",
+              `/webhook-endpoints/${endpoint.id}/rotate-secret`,
+            ),
+          );
+          await block.waitForWaiters(2);
+          await block.release();
+          statuses = [(await deleting).status, (await rotating).status];
+        } catch (error) {
+          await block.release().catch(() => undefined);
+          throw error;
+        }
+
+        expect(statuses).toEqual([204, 404]);
       });
 
       it("rotates the secret, returning the new one once", async () => {
@@ -507,6 +542,55 @@ describe(
     });
 
     describe("the workspace's personal-data switch", () => {
+      it("audits each of two changes made at the same moment, from the value the other left", async () => {
+        const client = api();
+        const owner = await client.newOwner();
+        const workspaceId = (await client.me(owner)).activeWorkspace
+          .workspaceId;
+        const block = await holdLock(
+          database.url,
+          "SELECT id FROM workspaces WHERE id = $1 FOR UPDATE",
+          [workspaceId],
+        );
+        let statuses: number[];
+        try {
+          const on = Promise.resolve(
+            client.send(owner, "patch", "/workspace", {
+              webhooksIncludePersonalData: true,
+            }),
+          );
+          await block.waitForWaiters(1);
+          const off = Promise.resolve(
+            client.send(owner, "patch", "/workspace", {
+              webhooksIncludePersonalData: false,
+            }),
+          );
+          await block.waitForWaiters(2);
+          await block.release();
+          statuses = [(await on).status, (await off).status];
+        } catch (error) {
+          await block.release().catch(() => undefined);
+          throw error;
+        }
+
+        expect(statuses).toEqual([200, 200]);
+        const entries = AuditPage.parse(
+          (await client.get(owner, "/audit-entries?action=workspace.updated"))
+            .body,
+        ).items;
+        // Newest first.
+        expect(entries.map(({ before, after }) => [before, after])).toEqual([
+          [
+            { webhooksIncludePersonalData: true },
+            { webhooksIncludePersonalData: false },
+          ],
+          [
+            { webhooksIncludePersonalData: false },
+            { webhooksIncludePersonalData: true },
+          ],
+        ]);
+      });
+
       it("is the Owner's, off by default, and audited", async () => {
         const client = api();
         const owner = await client.newOwner();

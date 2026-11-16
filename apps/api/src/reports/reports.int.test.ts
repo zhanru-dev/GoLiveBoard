@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { readFile } from "node:fs/promises";
 
 import type { NestExpressApplication } from "@nestjs/platform-express";
 import { EventReport, ProblemDetails } from "@opspilot/contracts";
@@ -6,7 +7,11 @@ import { afterAll, beforeAll, describe, expect, inject, it } from "vitest";
 
 import { ApiClient, type TestSession } from "../testing/api-client.js";
 import { seedAttendee, seedEvent } from "../testing/audience-seed.js";
-import { createTestDatabase, type TestDatabase } from "../testing/database.js";
+import {
+  blockWrites,
+  createTestDatabase,
+  type TestDatabase,
+} from "../testing/database.js";
 import { memberOf } from "../testing/events.js";
 import { CapturingMailer } from "../testing/fakes.js";
 import { createTestApp } from "../testing/test-app.js";
@@ -15,6 +20,27 @@ let addressCounter = 0;
 const newAddress = () => `198.18.9.${String((addressCounter += 1) % 250)}`;
 
 const MINUTE_MS = 60_000;
+
+/** The UPDATE statements of the migration that added `completed_at`. */
+async function backfill(): Promise<string[]> {
+  const sql = await readFile(
+    new URL(
+      "../../prisma/migrations/20261117090000_event_completed_at/migration.sql",
+      import.meta.url,
+    ),
+    "utf8",
+  );
+  return sql
+    .split(";")
+    .map((statement) =>
+      statement
+        .split("\n")
+        .filter((line) => !line.trimStart().startsWith("--"))
+        .join("\n")
+        .trim(),
+    )
+    .filter((statement) => statement.startsWith("UPDATE"));
+}
 
 describe("the post-event report (FR-RC-3)", { timeout: 30_000 }, () => {
   let database: TestDatabase;
@@ -251,7 +277,7 @@ describe("the post-event report (FR-RC-3)", { timeout: 30_000 }, () => {
     ).toEqual([]);
   });
 
-  it("makes the report of an event that completed before reports were stored", async () => {
+  it("makes the report of an event that completed before reports were stored, once, also when asked twice at once", async () => {
     const client = api();
     const owner = await client.newOwner();
     const workspaceId = (await client.me(owner)).activeWorkspace.workspaceId;
@@ -263,46 +289,131 @@ describe("the post-event report (FR-RC-3)", { timeout: 30_000 }, () => {
       status: "COMPLETED",
       workspaceId,
     });
-    const archived = await seedEvent(database, {
-      startsAt,
-      status: "ARCHIVED",
-      workspaceId,
-    });
-    const neverCompleted = await seedEvent(database, {
-      startsAt,
-      status: "ARCHIVED",
-      workspaceId,
-    });
-    await database.query(
-      `INSERT INTO audit_entries (workspace_id, actor_kind, action, target_type, target_id, event_id, before, after)
-       VALUES ($1, 'SYSTEM', 'event.transitioned', 'event', $2, $2, '{"status":"LIVE"}', '{"status":"COMPLETED"}'),
-              ($1, 'SYSTEM', 'event.transitioned', 'event', $3, $3, '{"status":"READY"}', '{"status":"CANCELLED"}')`,
-      [workspaceId, archived.eventId, neverCompleted.eventId],
-    );
     const attendee = await seedAttendee(database, completed.eventId);
     await database.query(
       "INSERT INTO attendance_minutes (event_id, attendee_id, minute) VALUES ($1, $2, $3)",
       [completed.eventId, attendee.id, startsAt],
     );
 
-    const first = await report(client, owner, completed.eventId);
-    const again = await report(client, owner, completed.eventId);
-    const fromAudit = await client.get(
-      owner,
-      `/events/${archived.eventId}/report`,
+    // Both first requests make the report at the same moment.
+    const block = await blockWrites(database.url, "event_reports");
+    let both: EventReport[];
+    try {
+      const asking = Promise.all([
+        report(client, owner, completed.eventId),
+        report(client, owner, completed.eventId),
+      ]);
+      await block.waitForWaiters(2);
+      await block.release();
+      both = await asking;
+    } catch (error) {
+      await block.release().catch(() => undefined);
+      throw error;
+    }
+
+    expect(both.map(({ funnel }) => funnel.attended)).toEqual([1, 1]);
+    expect(both[0]?.audience.peak).toBe(1);
+    expect(both[1]?.generatedAt).toBe(both[0]?.generatedAt);
+    expect(
+      await database.query("SELECT 1 FROM event_reports WHERE event_id = $1", [
+        completed.eventId,
+      ]),
+    ).toHaveLength(1);
+  });
+
+  it("keeps an archived event's report once its audit trail is gone, and gives none to one archived after a cancellation", async () => {
+    const client = api();
+    const owner = await client.newOwner();
+    const done = await liveEvent(client, owner);
+    await transition(client, owner, done.eventId, "COMPLETED");
+    await transition(client, owner, done.eventId, "ARCHIVED");
+    const dropped = await liveEvent(client, owner);
+    await transition(client, owner, dropped.eventId, "CANCELLED");
+    await transition(client, owner, dropped.eventId, "ARCHIVED");
+    // Two years on: the retention job has deleted the audit trail, and an
+    // event completed before reports were stored has none yet.
+    await database.query(
+      "DELETE FROM audit_entries WHERE event_id = ANY($1::uuid[])",
+      [[done.eventId, dropped.eventId]],
     );
-    const refused = await client.get(
-      owner,
-      `/events/${neverCompleted.eventId}/report`,
+    await database.query("DELETE FROM event_reports WHERE event_id = $1", [
+      done.eventId,
+    ]);
+
+    const kept = await client.get(owner, `/events/${done.eventId}/report`);
+    const none = await client.get(owner, `/events/${dropped.eventId}/report`);
+
+    expect(kept.status, kept.text).toBe(200);
+    expect(ProblemDetails.parse(none.body).code).toBe("REPORT_NOT_AVAILABLE");
+  });
+
+  it("lets only a completed or archived event have a completion time (CHECK)", async () => {
+    const client = api();
+    const owner = await client.newOwner();
+    const { eventId } = await liveEvent(client, owner);
+
+    await expect(
+      database.query("UPDATE events SET completed_at = now() WHERE id = $1", [
+        eventId,
+      ]),
+    ).rejects.toThrow(/events_completed_at_status/);
+    await database.query(
+      "UPDATE events SET status = 'ARCHIVED', completed_at = now() WHERE id = $1",
+      [eventId],
+    );
+  });
+
+  it("records when events completed before the column existed (the migration's backfill)", async () => {
+    const client = api();
+    const owner = await client.newOwner();
+    const workspaceId = (await client.me(owner)).activeWorkspace.workspaceId;
+    const startsAt = new Date(Date.now() - 400 * 24 * 60 * MINUTE_MS);
+    const seeded = async (status: string) =>
+      (await seedEvent(database, { startsAt, status, workspaceId })).eventId;
+    const archivedAudited = await seeded("ARCHIVED");
+    const archivedReported = await seeded("ARCHIVED");
+    const archivedAfterCancel = await seeded("ARCHIVED");
+    const stillCompleted = await seeded("COMPLETED");
+    const cancelled = await seeded("CANCELLED");
+    const ids = [
+      archivedAudited,
+      archivedReported,
+      archivedAfterCancel,
+      stillCompleted,
+      cancelled,
+    ];
+    // As they were before the migration.
+    await database.query(
+      "UPDATE events SET completed_at = NULL, updated_at = '2025-10-01T12:00:00Z' WHERE id = ANY($1::uuid[])",
+      [ids],
+    );
+    await database.query(
+      `INSERT INTO audit_entries (workspace_id, actor_kind, action, target_type, target_id, event_id, before, after, created_at)
+       VALUES ($1, 'SYSTEM', 'event.transitioned', 'event', $2, $2, '{"status":"LIVE"}', '{"status":"COMPLETED"}', '2025-09-01T10:00:00Z'),
+              ($1, 'SYSTEM', 'event.transitioned', 'event', $3, $3, '{"status":"READY"}', '{"status":"CANCELLED"}', '2025-09-01T10:00:00Z')`,
+      [workspaceId, archivedAudited, archivedAfterCancel],
+    );
+    await database.query(
+      `INSERT INTO event_reports (event_id, generated_at, data)
+       VALUES ($1, '2025-09-02T10:00:00Z', '{}')`,
+      [archivedReported],
     );
 
-    expect(first.funnel.attended).toBe(1);
-    expect(first.audience.peak).toBe(1);
-    expect(again.generatedAt).toBe(first.generatedAt);
-    expect(fromAudit.status, fromAudit.text).toBe(200);
-    expect(ProblemDetails.parse(refused.body).code).toBe(
-      "REPORT_NOT_AVAILABLE",
-    );
+    for (const statement of await backfill()) {
+      await database.query(statement);
+    }
+
+    const rows = await database.query<{
+      id: string;
+      completed_at: Date | null;
+    }>("SELECT id, completed_at FROM events WHERE id = ANY($1::uuid[])", [ids]);
+    const at = (id: string) =>
+      rows.find((row) => row.id === id)?.completed_at?.toISOString() ?? null;
+    expect(at(archivedAudited)).toBe("2025-09-01T10:00:00.000Z");
+    expect(at(archivedReported)).toBe("2025-09-02T10:00:00.000Z");
+    expect(at(stillCompleted)).toBe("2025-10-01T12:00:00.000Z");
+    expect(at(archivedAfterCancel)).toBeNull();
+    expect(at(cancelled)).toBeNull();
   });
 
   it("exports the report as CSV, safe to open in a spreadsheet", async () => {
@@ -334,6 +445,7 @@ describe("the post-event report (FR-RC-3)", { timeout: 30_000 }, () => {
   it("shows each workspace its own reports only, to every role", async () => {
     const client = api();
     const owner = await client.newOwner();
+    const manager = await memberOf(client, mailer, owner, "MANAGER");
     const analyst = await memberOf(client, mailer, owner, "ANALYST");
     const stranger = await client.newOwner("stranger");
     const { eventId } = await liveEvent(client, owner);
@@ -345,7 +457,12 @@ describe("the post-event report (FR-RC-3)", { timeout: 30_000 }, () => {
       `/events/${eventId}/report.csv`,
     );
 
-    expect((await report(client, analyst, eventId)).event.id).toBe(eventId);
+    for (const session of [owner, manager, analyst]) {
+      expect((await report(client, session, eventId)).event.id).toBe(eventId);
+      const csv = await client.get(session, `/events/${eventId}/report.csv`);
+      expect(csv.status, csv.text).toBe(200);
+      expect(csv.text.startsWith("metric,value\r\n")).toBe(true);
+    }
     expect(ProblemDetails.parse(theirs.body).code).toBe("NOT_FOUND");
     expect(theirCsv.status).toBe(404);
   });
