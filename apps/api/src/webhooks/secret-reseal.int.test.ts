@@ -206,14 +206,22 @@ describe("rotating the webhook encryption key", { timeout: 60_000 }, () => {
     }
   });
 
-  it("does nothing without a previous key", async () => {
+  it("seals nothing without a previous key, and counts the secrets no key opens", async () => {
     const created = await endpoint("/no-previous");
     const only = await workerWith(newKey);
 
+    // Every endpoint so far was sealed with the old key, now removed.
+    const [{ lost: expected } = { lost: -1 }] = await database.query<{
+      lost: number;
+    }>(
+      "SELECT count(*)::int AS lost FROM webhook_endpoints WHERE secret_key_id <> $1",
+      [keyIdOf(newKey)],
+    );
+    expect(expected).toBeGreaterThan(0);
     expect(await only.get(SecretResealer).resealStale()).toEqual({
       resealed: 0,
       unreadable: 0,
-      lost: 0,
+      lost: expected,
     });
     expect(await keyIdIn(created.endpoint.id)).toBe(keyIdOf(oldKey));
   });

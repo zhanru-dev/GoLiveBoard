@@ -283,7 +283,7 @@ describe(
         expect(statuses).toEqual([204, 404]);
       });
 
-      it("edits an endpoint while a delivery to it is being written", async () => {
+      it("edits and rotates an endpoint while a delivery to it is being written", async () => {
         const client = api();
         const owner = await client.newOwner();
         const { endpoint } = await created(client, owner);
@@ -303,6 +303,14 @@ describe(
             .set("If-Match", '"1"')
             .timeout(5_000);
           expect(edited.status, edited.text).toBe(200);
+          const rotated = await client
+            .send(
+              owner,
+              "post",
+              `/webhook-endpoints/${endpoint.id}/rotate-secret`,
+            )
+            .timeout(5_000);
+          expect(rotated.status, rotated.text).toBe(200);
         } finally {
           await block.release();
         }
@@ -578,13 +586,18 @@ describe(
             expect(response.status).toBe(403);
           }
         }
-        const [list, , update, rotate, remove, deliveries, redeliver] =
-          await Promise.all(requests(stranger));
-        expect(z.array(WebhookEndpoint).parse(list?.body)).toEqual([]);
+        // The stranger's reads first: its own create would otherwise race
+        // its list, which then shows the endpoint it just made.
+        const listed = await client.get(stranger, "/webhook-endpoints");
+        const delivered = await client.get(stranger, "/webhook-deliveries");
+        const [, , update, rotate, remove, , redeliver] = await Promise.all(
+          requests(stranger),
+        );
+        expect(z.array(WebhookEndpoint).parse(listed.body)).toEqual([]);
         for (const response of [update, rotate, remove, redeliver]) {
           expect(response?.status).toBe(404);
         }
-        expect(WebhookDeliveryPage.parse(deliveries?.body).items).toEqual([]);
+        expect(WebhookDeliveryPage.parse(delivered.body).items).toEqual([]);
         const [row] = await database.query<{ active: boolean }>(
           "SELECT active FROM webhook_endpoints WHERE id = $1",
           [endpoint.id],

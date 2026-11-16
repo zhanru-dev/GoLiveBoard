@@ -21,7 +21,7 @@ const BATCH = 100;
  * notice nothing, and once none is left under the old key it can be
  * removed. A secret rotated meanwhile is left alone: the update only
  * replaces the exact ciphertext it read. Without a previous key there is
- * nothing to do.
+ * nothing to seal, but secrets under another key are still counted.
  */
 @Injectable()
 export class SecretResealer {
@@ -41,9 +41,18 @@ export class SecretResealer {
    */
   async resealStale(): Promise<ResealOutcome> {
     const box = this.box;
-    const previousKeyId = box?.previousKeyId;
-    if (box === null || previousKeyId === undefined) {
+    if (box === null) {
       return { resealed: 0, unreadable: 0, lost: 0 };
+    }
+    const previousKeyId = box.previousKeyId;
+    if (previousKeyId === undefined) {
+      // Nothing to seal again; but secrets under any other key are lost,
+      // e.g. when the previous key was removed before this finished.
+      const lost = await this.prisma.webhookEndpoint.count({
+        where: { secretKeyId: { not: box.currentKeyId } },
+      });
+      this.warnIfAny(0, lost);
+      return { resealed: 0, unreadable: 0, lost };
     }
     let resealed = 0;
     let unreadable = 0;
@@ -85,12 +94,16 @@ export class SecretResealer {
     const lost = await this.prisma.webhookEndpoint.count({
       where: { secretKeyId: { notIn: [box.currentKeyId, previousKeyId] } },
     });
+    this.warnIfAny(unreadable, lost);
+    return { resealed, unreadable, lost };
+  }
+
+  private warnIfAny(unreadable: number, lost: number): void {
     if (unreadable > 0 || lost > 0) {
       this.logger.warn(
         { unreadable, lost },
         "Webhook secrets that cannot be sealed again",
       );
     }
-    return { resealed, unreadable, lost };
   }
 }
