@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 
 import { type AppConfig, loadConfig } from "../config/app-config.js";
 
@@ -21,6 +21,8 @@ export const TEST_ENV: Readonly<Record<string, string>> = {
   // One per test file (each file loads this module afresh): the apps of a
   // file share real-time traffic, files running side by side do not.
   REALTIME_CHANNEL_PREFIX: `test-${randomUUID().slice(0, 8)}`,
+  // Generated per run: no key-looking literal in the repository.
+  WEBHOOK_ENCRYPTION_KEY: randomBytes(32).toString("base64"),
 };
 
 export function loadTestConfig(

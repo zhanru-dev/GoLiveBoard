@@ -25,6 +25,8 @@ x-app-environment: &app-environment
   VALKEY_URL: redis://valkey:6379
   APP_ORIGIN: https://${STACK_SITE_HOST:-opspilot.localhost}:${STACK_HTTPS_PORT:-3443}
   JWT_SECRET: ${STACK_JWT_SECRET:-stack-local-only-signing-key-not-a-secret}
+  # Base64 of "stack-local-only-key-not-secret!" (32 bytes).
+  WEBHOOK_ENCRYPTION_KEY: ${STACK_WEBHOOK_ENCRYPTION_KEY:-c3RhY2stbG9jYWwtb25seS1rZXktbm90LXNlY3JldCE=}
   SMTP_URL: smtp://mailpit:1025
   MAIL_FROM: OpsPilot <no-reply@opspilot.localhost>
   S3_ENDPOINT: http://s3:8333

@@ -150,3 +150,4 @@ export {
   WatchHeartbeat,
   WatchInfo,
 } from "./realtime.js";
+export { WebhookEventType } from "./webhooks.js";

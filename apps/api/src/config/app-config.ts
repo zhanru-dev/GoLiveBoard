@@ -31,6 +31,14 @@ function optional<Schema extends z.ZodType>(schema: Schema) {
   );
 }
 
+/** 32 bytes, base64: an AES-256 key. */
+const EncryptionKey = z
+  .string()
+  .transform((value) => Buffer.from(value, "base64"))
+  .refine((key) => key.length === 32, {
+    error: "Must be 32 bytes, base64 (openssl rand -base64 32)",
+  });
+
 const Secret = z
   .string()
   .min(MIN_SECRET_LENGTH, `Must be at least ${MIN_SECRET_LENGTH} characters`);
@@ -91,6 +99,14 @@ const AppConfigSchema = z
      * until they expire, so rotating the key signs nobody out.
      */
     JWT_SECRET_PREVIOUS: Secret.optional(),
+    /**
+     * Seals webhook signing secrets at rest (AES-256-GCM): 32 random bytes,
+     * base64 (`openssl rand -base64 32`). Without it, webhook endpoints
+     * cannot be created. The previous key keeps opening what it sealed
+     * during a rotation.
+     */
+    WEBHOOK_ENCRYPTION_KEY: EncryptionKey.optional(),
+    WEBHOOK_ENCRYPTION_KEY_PREVIOUS: EncryptionKey.optional(),
     /**
      * Prefix of every BullMQ key in Valkey. Tests give each file its own, so
      * their queues never share jobs.
@@ -166,6 +182,10 @@ const AppConfigSchema = z
     auth: {
       jwtSecret: env.JWT_SECRET,
       jwtPreviousSecret: env.JWT_SECRET_PREVIOUS,
+    },
+    webhooks: {
+      encryptionKey: env.WEBHOOK_ENCRYPTION_KEY,
+      previousEncryptionKey: env.WEBHOOK_ENCRYPTION_KEY_PREVIOUS,
     },
     mail: { smtpUrl: env.SMTP_URL, from: env.MAIL_FROM },
     demo: { enabled: env.DEMO_MODE },

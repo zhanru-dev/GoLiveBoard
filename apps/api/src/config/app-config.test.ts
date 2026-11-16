@@ -18,6 +18,7 @@ describe("loadConfig", () => {
       environment: "development",
       api: { host: "127.0.0.1", port: 4301, trustProxyHops: 0 },
       realtime: { sweepMs: 30_000, channelPrefix: "opspilot" },
+      webhooks: { encryptionKey: undefined, previousEncryptionKey: undefined },
       log: { level: "info", format: "json" },
       database: { url: REQUIRED.DATABASE_URL },
       valkey: { url: REQUIRED.VALKEY_URL },
@@ -182,5 +183,22 @@ describe("loadConfig", () => {
     expect(() =>
       loadConfig({ ...REQUIRED, DATABASE_URL: "mysql://admin:hunter2@db/x" }),
     ).toThrow(/^(?![\s\S]*hunter2)/);
+  });
+
+  it("reads webhook encryption keys as 32 bytes of base64, and refuses any other size", () => {
+    const key = Buffer.alloc(32, 7);
+
+    const config = loadConfig({
+      ...REQUIRED,
+      WEBHOOK_ENCRYPTION_KEY: key.toString("base64"),
+    });
+
+    expect(config.webhooks.encryptionKey?.equals(key)).toBe(true);
+    expect(() =>
+      loadConfig({
+        ...REQUIRED,
+        WEBHOOK_ENCRYPTION_KEY: Buffer.alloc(16).toString("base64"),
+      }),
+    ).toThrow(/WEBHOOK_ENCRYPTION_KEY/);
   });
 });

@@ -52,19 +52,25 @@ model User {
 }
 
 model Workspace {
-  id            String   @id @default(dbgenerated("uuidv7()")) @db.Uuid
-  name          String
+  id                          String   @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  name                        String
   /// Days that attendee personal data is kept after an event ends.
-  retentionDays Int      @default(90) @map("retention_days")
-  isDemo        Boolean  @default(false) @map("is_demo")
-  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  retentionDays               Int      @default(90) @map("retention_days")
+  isDemo                      Boolean  @default(false) @map("is_demo")
+  /**
+   * FR-RC-2 / docs/04 section 6.2: whether `attendee.registered` webhooks
+   * carry the attendee's name and address. Off by default.
+   */
+  webhooksIncludePersonalData Boolean  @default(false) @map("webhooks_include_personal_data")
+  createdAt                   DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
 
-  memberships    Membership[]
-  invitations    TeamInvitation[]
-  activeSessions Session[]
-  events         Event[]
-  auditEntries   AuditEntry[]
-  outboxMessages OutboxMessage[]
+  memberships      Membership[]
+  webhookEndpoints WebhookEndpoint[]
+  invitations      TeamInvitation[]
+  activeSessions   Session[]
+  events           Event[]
+  auditEntries     AuditEntry[]
+  outboxMessages   OutboxMessage[]
 
   @@map("workspaces")
 }
@@ -686,6 +692,87 @@ model RealtimeJournal {
 
   @@id([eventId, channel, sequence])
   @@map("realtime_journal")
+}
+
+enum WebhookDeliveryStatus {
+  /// Waiting for its next attempt.
+  PENDING
+  SUCCEEDED
+  /// Gave up after the last attempt; can be resent by hand.
+  FAILED
+
+  @@map("webhook_delivery_status")
+}
+
+/// Where a workspace's Owner wants events sent (FR-RC-2).
+model WebhookEndpoint {
+  id               String   @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  workspaceId      String   @map("workspace_id") @db.Uuid
+  /// HTTPS only; whether it resolves to a public address is checked at every
+  /// delivery (SSRF protection).
+  url              String
+  /// The event types it receives (docs/04 section 6.2).
+  eventTypes       String[] @map("event_types")
+  /// The signing secret, encrypted with AES-256-GCM (docs/02 section 7.8).
+  secretCiphertext Bytes    @map("secret_ciphertext")
+  /// Which encryption key sealed it, so keys can be rotated.
+  secretKeyId      String   @map("secret_key_id")
+  active           Boolean  @default(true)
+  description      String   @default("")
+  version          Int      @default(1)
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt        DateTime @default(now()) @map("updated_at") @db.Timestamptz(3)
+
+  workspace  Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  deliveries WebhookDelivery[]
+
+  @@index([workspaceId])
+  @@map("webhook_endpoints")
+}
+
+/// One event for one endpoint: sent until it succeeds or attempts run out.
+model WebhookDelivery {
+  id            String                @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  endpointId    String                @map("endpoint_id") @db.Uuid
+  /// The webhook's `id`, which receivers de-duplicate by: the outbox
+  /// message it came from, the same for every endpoint and every attempt.
+  eventId       String                @map("event_id") @db.Uuid
+  eventType     String                @map("event_type")
+  /// `data` as first built, without personal data (added when sending, if
+  /// the workspace allows it and the attendee is not erased).
+  data          Json
+  occurredAt    DateTime              @map("occurred_at") @db.Timestamptz(3)
+  status        WebhookDeliveryStatus @default(PENDING)
+  /// Attempts so far, in this round (a manual resend starts a new round).
+  attempts      Int                   @default(0)
+  nextAttemptAt DateTime?             @map("next_attempt_at") @db.Timestamptz(3)
+  createdAt     DateTime              @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  endpoint WebhookEndpoint  @relation(fields: [endpointId], references: [id], onDelete: Cascade)
+  history  WebhookAttempt[]
+
+  /// One delivery per event and endpoint, however often the outbox relays.
+  @@unique([endpointId, eventId])
+  @@index([nextAttemptAt], map: "webhook_deliveries_due_idx", where: { status: "PENDING" })
+  @@index([endpointId, createdAt(sort: Desc)])
+  @@map("webhook_deliveries")
+}
+
+/// One try at sending a delivery, kept for the integrations screen.
+model WebhookAttempt {
+  id          String   @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  deliveryId  String   @map("delivery_id") @db.Uuid
+  attemptedAt DateTime @map("attempted_at") @db.Timestamptz(3)
+  /// The receiver's HTTP status, if it answered.
+  statusCode  Int?     @map("status_code")
+  durationMs  Int      @map("duration_ms")
+  /// Why it failed, in words fit to show the Owner; null on success.
+  error       String?
+
+  delivery WebhookDelivery @relation(fields: [deliveryId], references: [id], onDelete: Cascade)
+
+  @@index([deliveryId, attemptedAt])
+  @@map("webhook_attempts")
 }
 
 /// A change to who may take part in live interaction, written in the
