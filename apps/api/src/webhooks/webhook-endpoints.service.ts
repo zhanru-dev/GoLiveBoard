@@ -138,7 +138,9 @@ export class WebhookEndpointsService {
   /** @throws DomainError `NOT_FOUND` */
   async remove(actor: Actor, endpointId: string): Promise<void> {
     await this.prisma.$transaction(async (tx) => {
-      const before = await this.lockOwn(tx, actor, endpointId);
+      // FOR UPDATE: a resend, which holds the endpoint against deletion,
+      // waits behind the delete instead of slipping in before it.
+      const before = await this.lockOwn(tx, actor, endpointId, "delete");
       // Its deliveries and attempts go with it.
       await tx.webhookEndpoint.delete({ where: { id: endpointId } });
       await recordAudit(tx, actor, {
@@ -192,7 +194,9 @@ export class WebhookEndpointsService {
 
   /**
    * Locks the endpoint's row, then reads it: every change does, so a change
-   * that waited for a delete finds nothing (`404`), not a vanished row.
+   * that waited for a delete finds nothing (`404`), not a vanished row. An
+   * edit takes NO KEY UPDATE, so deliveries pointing at it are still written
+   * meanwhile; a delete takes the full lock.
    *
    * @throws DomainError `NOT_FOUND`
    */
@@ -200,11 +204,19 @@ export class WebhookEndpointsService {
     tx: Prisma.TransactionClient,
     actor: Actor,
     endpointId: string,
+    purpose: "edit" | "delete" = "edit",
   ): Promise<EndpointRow> {
-    await tx.$queryRaw`
-      SELECT id FROM webhook_endpoints
-      WHERE id = ${endpointId}::uuid AND workspace_id = ${actor.workspaceId}::uuid
-      FOR UPDATE`;
+    if (purpose === "delete") {
+      await tx.$queryRaw`
+        SELECT id FROM webhook_endpoints
+        WHERE id = ${endpointId}::uuid AND workspace_id = ${actor.workspaceId}::uuid
+        FOR UPDATE`;
+    } else {
+      await tx.$queryRaw`
+        SELECT id FROM webhook_endpoints
+        WHERE id = ${endpointId}::uuid AND workspace_id = ${actor.workspaceId}::uuid
+        FOR NO KEY UPDATE`;
+    }
     return this.find(tx, actor, endpointId);
   }
 

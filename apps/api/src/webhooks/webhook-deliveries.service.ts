@@ -97,11 +97,16 @@ export class WebhookDeliveriesService {
    */
   async redeliver(actor: Actor, deliveryId: string): Promise<WebhookDelivery> {
     return this.prisma.$transaction(async (tx) => {
-      const found = await tx.webhookDelivery.findFirst({
-        where: { id: deliveryId, endpoint: { workspaceId: actor.workspaceId } },
-        select: { id: true },
-      });
-      if (found === null) {
+      // Its endpoint may not be deleted under it: a resend that waited for
+      // the delete finds nothing (`404`), not a delivery "still pending".
+      const found = await tx.$queryRaw<{ id: string }[]>`
+        SELECT delivery.id
+        FROM webhook_deliveries AS delivery
+        JOIN webhook_endpoints AS endpoint ON endpoint.id = delivery.endpoint_id
+        WHERE delivery.id = ${deliveryId}::uuid
+          AND endpoint.workspace_id = ${actor.workspaceId}::uuid
+        FOR KEY SHARE OF endpoint`;
+      if (found.length === 0) {
         throw new DomainError("NOT_FOUND");
       }
       const { count } = await tx.webhookDelivery.updateMany({

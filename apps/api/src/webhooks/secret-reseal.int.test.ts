@@ -93,7 +93,7 @@ describe("rotating the webhook encryption key", { timeout: 60_000 }, () => {
     const rotating = await workerWith(newKey, oldKey);
 
     await rotating.get(WebhooksConsumer).process({ name: "reseal" });
-    const again = await rotating.get(SecretResealer).resealStale();
+    const again = (await rotating.get(SecretResealer).resealStale()).resealed;
 
     expect(await keyIdIn(created.endpoint.id)).toBe(keyIdOf(newKey));
     expect(again).toBe(0);
@@ -134,7 +134,10 @@ describe("rotating the webhook encryption key", { timeout: 60_000 }, () => {
     );
     let first: Promise<number>;
     try {
-      first = rotating.get(SecretResealer).resealStale();
+      first = rotating
+        .get(SecretResealer)
+        .resealStale()
+        .then(({ resealed }) => resealed);
       await block.waitForWaiters(1);
       await block.run(
         "UPDATE webhook_endpoints SET secret_ciphertext = $2 WHERE id = $1",
@@ -149,7 +152,7 @@ describe("rotating the webhook encryption key", { timeout: 60_000 }, () => {
     expect(await first).toBe(0);
     expect(await keyIdIn(created.endpoint.id)).toBe(keyIdOf(oldKey));
 
-    expect(await rotating.get(SecretResealer).resealStale()).toBe(1);
+    expect((await rotating.get(SecretResealer).resealStale()).resealed).toBe(1);
     const [row] = await database.query<{
       secret_ciphertext: Buffer;
       secret_key_id: string;
@@ -163,5 +166,55 @@ describe("rotating the webhook encryption key", { timeout: 60_000 }, () => {
         keyId: row?.secret_key_id ?? "",
       }),
     ).toBe("whsec_rotated-meanwhile");
+  });
+
+  it("is not held up by secrets it cannot open, however many come first", async () => {
+    const created = await endpoint("/after-the-broken");
+    const workspaceId = (
+      await database.query<{ workspace_id: string }>(
+        "SELECT workspace_id FROM webhook_endpoints WHERE id = $1",
+        [created.endpoint.id],
+      )
+    )[0]?.workspace_id;
+    // 101 secrets under the old key's ID that it cannot open (altered),
+    // all ordered before the readable one.
+    await database.query(
+      `INSERT INTO webhook_endpoints (id, workspace_id, url, event_types, secret_ciphertext, secret_key_id)
+       SELECT ('00000000-0000-7000-8000-' || lpad(n::text, 12, '0'))::uuid, $1,
+              'https://hooks.example.com/broken', '{event.live}', '\\x00', $2
+       FROM generate_series(1, 101) AS n`,
+      [workspaceId, keyIdOf(oldKey)],
+    );
+    const rotating = await workerWith(newKey, oldKey);
+    try {
+      // And one under a key neither knows: counted apart, left alone.
+      await database.query(
+        `INSERT INTO webhook_endpoints (workspace_id, url, event_types, secret_ciphertext, secret_key_id)
+         VALUES ($1, 'https://hooks.example.com/broken', '{event.live}', '\\x00', 'some-other-key')`,
+        [workspaceId],
+      );
+      expect(await rotating.get(SecretResealer).resealStale()).toEqual({
+        resealed: 1,
+        unreadable: 101,
+        lost: 1,
+      });
+      expect(await keyIdIn(created.endpoint.id)).toBe(keyIdOf(newKey));
+    } finally {
+      await database.query(
+        "DELETE FROM webhook_endpoints WHERE url = 'https://hooks.example.com/broken'",
+      );
+    }
+  });
+
+  it("does nothing without a previous key", async () => {
+    const created = await endpoint("/no-previous");
+    const only = await workerWith(newKey);
+
+    expect(await only.get(SecretResealer).resealStale()).toEqual({
+      resealed: 0,
+      unreadable: 0,
+      lost: 0,
+    });
+    expect(await keyIdIn(created.endpoint.id)).toBe(keyIdOf(oldKey));
   });
 });

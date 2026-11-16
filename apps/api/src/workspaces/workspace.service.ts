@@ -29,8 +29,11 @@ export class WorkspaceService {
   update(actor: Actor, changes: UpdateWorkspaceRequest): Promise<Workspace> {
     return this.prisma.$transaction(async (tx) => {
       // Locked before reading: of two changes at once, each records what
-      // it actually changed, from the value the other left.
-      await tx.$queryRaw`SELECT id FROM workspaces WHERE id = ${actor.workspaceId}::uuid FOR UPDATE`;
+      // it actually changed, from the value the other left. NO KEY UPDATE,
+      // as for events (event-lock.queries.ts): rows that point at the
+      // workspace (audit entries, sessions, events) are written meanwhile
+      // without waiting for it.
+      await tx.$queryRaw`SELECT id FROM workspaces WHERE id = ${actor.workspaceId}::uuid FOR NO KEY UPDATE`;
       const before = await tx.workspace.findUniqueOrThrow({
         where: { id: actor.workspaceId },
         select: WORKSPACE_FIELDS,

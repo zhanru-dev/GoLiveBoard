@@ -27,7 +27,7 @@ import { memberOf } from "../testing/events.js";
 import { CapturingMailer, TestClock } from "../testing/fakes.js";
 import { listen } from "../testing/realtime.js";
 import { SseClient } from "../testing/sse.js";
-import { createTestApp } from "../testing/test-app.js";
+import { createTestApp, LogCapture } from "../testing/test-app.js";
 import {
   LiveOpsStreams,
   LiveOpsTiming,
@@ -54,6 +54,7 @@ describe(
     let app: NestExpressApplication;
     let url: string;
     const mailer = new CapturingMailer();
+    const logs = new LogCapture();
     // Frozen in the middle of a minute: seeded minutes stay where they are.
     const clock = new TestClock(
       new Date(Math.floor(Date.now() / MINUTE_MS) * MINUTE_MS + 30_000),
@@ -69,6 +70,7 @@ describe(
         },
         mailer,
         clock,
+        logs,
         replace: [[LiveOpsTiming, FastTiming]],
       });
       url = await listen(app);
@@ -259,12 +261,18 @@ describe(
       const stream = await open(owner, event.id);
       await stream.next("snapshot");
 
+      const logged = logs.lines.length;
+
       // As the demo reset deletes its events.
       await database.query("DELETE FROM events WHERE id = $1", [event.id]);
 
       const started = Date.now();
       await stream.ended;
       expect(Date.now() - started).toBeLessThan(1_500);
+      // Ended as an event no longer there, not as a stream that failed.
+      expect(
+        logs.lines.slice(logged).filter((line) => line.includes('"level":40')),
+      ).toEqual([]);
     });
 
     it("streams a snapshot, then each change within a second, with increasing IDs", async () => {

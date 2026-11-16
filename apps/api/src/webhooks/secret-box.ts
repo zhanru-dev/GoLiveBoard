@@ -27,6 +27,8 @@ export function keyIdOf(key: Buffer): string {
  */
 export class SecretBox {
   private readonly keys: Map<string, Buffer>;
+  /** The ID of the previous key, if one is configured. */
+  readonly previousKeyId: string | undefined;
 
   constructor(
     private readonly current: Buffer,
@@ -39,6 +41,7 @@ export class SecretBox {
       throw new Error("AES-256-GCM keys are 32 bytes");
     }
     this.keys = new Map([[keyIdOf(current), current]]);
+    this.previousKeyId = previous === undefined ? undefined : keyIdOf(previous);
     if (previous !== undefined) {
       this.keys.set(keyIdOf(previous), previous);
     }

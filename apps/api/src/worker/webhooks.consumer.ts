@@ -113,7 +113,7 @@ export class WebhooksConsumer
         return;
       }
       case WEBHOOK_JOBS.reseal: {
-        const resealed = await this.resealer.resealStale();
+        const { resealed } = await this.resealer.resealStale();
         if (resealed > 0) {
           this.logger.info({ resealed }, "Webhook secrets sealed again");
         }

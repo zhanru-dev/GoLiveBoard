@@ -91,6 +91,33 @@ describe(
       return WebhookEndpointCreated.parse(response.body);
     }
 
+    /**
+     * Holds the endpoint's row as a delete would, queues `first` and then
+     * `second` behind it, and lets them go in that order.
+     */
+    async function inTurn(
+      endpointId: string,
+      first: () => PromiseLike<{ status: number }>,
+      second: () => PromiseLike<{ status: number }>,
+    ): Promise<number[]> {
+      const block = await holdLock(
+        database.url,
+        "SELECT id FROM webhook_endpoints WHERE id = $1 FOR UPDATE",
+        [endpointId],
+      );
+      try {
+        const one = Promise.resolve(first());
+        await block.waitForWaiters(1);
+        const two = Promise.resolve(second());
+        await block.waitForWaiters(2);
+        await block.release();
+        return [(await one).status, (await two).status];
+      } catch (error) {
+        await block.release().catch(() => undefined);
+        throw error;
+      }
+    }
+
     async function delivery(endpointId: string, status = "FAILED") {
       const [row] = await database.query<{ id: string }>(
         `INSERT INTO webhook_deliveries
@@ -236,6 +263,51 @@ describe(
         expect(statuses.sort()).toEqual([200, 412]);
       });
 
+      it("answers 404, not 412, to an edit that waited for a delete", async () => {
+        const client = api();
+        const owner = await client.newOwner();
+        const { endpoint } = await created(client, owner);
+
+        const statuses = await inTurn(
+          endpoint.id,
+          () =>
+            client.send(owner, "delete", `/webhook-endpoints/${endpoint.id}`),
+          () =>
+            client
+              .send(owner, "patch", `/webhook-endpoints/${endpoint.id}`, {
+                description: "Too late",
+              })
+              .set("If-Match", '"1"'),
+        );
+
+        expect(statuses).toEqual([204, 404]);
+      });
+
+      it("edits an endpoint while a delivery to it is being written", async () => {
+        const client = api();
+        const owner = await client.newOwner();
+        const { endpoint } = await created(client, owner);
+        // A fan-out's insert, not yet committed: it holds a key-share lock.
+        const block = await holdLock(
+          database.url,
+          `INSERT INTO webhook_deliveries
+             (endpoint_id, event_id, event_type, data, occurred_at, status, attempts, next_attempt_at)
+           VALUES ($1, gen_random_uuid(), 'event.live', '{}', now(), 'PENDING', 0, now())`,
+          [endpoint.id],
+        );
+        try {
+          const edited = await client
+            .send(owner, "patch", `/webhook-endpoints/${endpoint.id}`, {
+              description: "Not kept waiting",
+            })
+            .set("If-Match", '"1"')
+            .timeout(5_000);
+          expect(edited.status, edited.text).toBe(200);
+        } finally {
+          await block.release();
+        }
+      });
+
       it("answers 404, not an error, to a rotation that waited for a delete", async () => {
         const client = api();
         const owner = await client.newOwner();
@@ -360,6 +432,27 @@ describe(
     });
 
     describe("deliveries", () => {
+      it("answers 404, not 409, to a resend that waited for its endpoint's delete", async () => {
+        const client = api();
+        const owner = await client.newOwner();
+        const { endpoint } = await created(client, owner);
+        const deliveryId = await delivery(endpoint.id);
+
+        const statuses = await inTurn(
+          endpoint.id,
+          () =>
+            client.send(owner, "delete", `/webhook-endpoints/${endpoint.id}`),
+          () =>
+            client.send(
+              owner,
+              "post",
+              `/webhook-deliveries/${deliveryId}/redeliver`,
+            ),
+        );
+
+        expect(statuses).toEqual([204, 404]);
+      });
+
       it("lists an endpoint's deliveries with every attempt", async () => {
         const client = api();
         const owner = await client.newOwner();
@@ -542,6 +635,30 @@ describe(
     });
 
     describe("the workspace's personal-data switch", () => {
+      it("is changed while an audited write in the workspace is still open", async () => {
+        const client = api();
+        const owner = await client.newOwner();
+        const workspaceId = (await client.me(owner)).activeWorkspace
+          .workspaceId;
+        // Any audited change in the workspace, not yet committed.
+        const block = await holdLock(
+          database.url,
+          `INSERT INTO audit_entries (workspace_id, actor_kind, action, target_type, target_id)
+           VALUES ($1, 'SYSTEM', 'test.open', 'x', gen_random_uuid())`,
+          [workspaceId],
+        );
+        try {
+          const changed = await client
+            .send(owner, "patch", "/workspace", {
+              webhooksIncludePersonalData: true,
+            })
+            .timeout(5_000);
+          expect(changed.status, changed.text).toBe(200);
+        } finally {
+          await block.release();
+        }
+      });
+
       it("audits each of two changes made at the same moment, from the value the other left", async () => {
         const client = api();
         const owner = await client.newOwner();

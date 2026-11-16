@@ -66,7 +66,11 @@ describe("the post-event report (FR-RC-3)", { timeout: 30_000 }, () => {
 
   const api = () => new ApiClient(app, newAddress());
 
-  async function liveEvent(client: ApiClient, owner: TestSession) {
+  async function liveEvent(
+    client: ApiClient,
+    owner: TestSession,
+    status = "LIVE",
+  ) {
     const workspaceId = (await client.me(owner)).activeWorkspace.workspaceId;
     // Two hours ago, on the minute, for an hour.
     const startsAt = new Date(
@@ -74,18 +78,28 @@ describe("the post-event report (FR-RC-3)", { timeout: 30_000 }, () => {
     );
     const event = await seedEvent(database, {
       startsAt,
-      status: "LIVE",
+      status,
       workspaceId,
     });
     return { ...event, startsAt };
   }
 
-  const transition = (
+  /** A transition that must succeed: a refused one would hide in a 409. */
+  async function transition(
     client: ApiClient,
     session: TestSession,
     eventId: string,
     to: string,
-  ) => client.send(session, "post", `/events/${eventId}/transitions`, { to });
+  ) {
+    const response = await client.send(
+      session,
+      "post",
+      `/events/${eventId}/transitions`,
+      { to },
+    );
+    expect(response.status, response.text).toBe(200);
+    return response;
+  }
 
   async function report(
     client: ApiClient,
@@ -260,7 +274,7 @@ describe("the post-event report (FR-RC-3)", { timeout: 30_000 }, () => {
   it("has no report for an event that never completed, archived or not", async () => {
     const client = api();
     const owner = await client.newOwner();
-    const { eventId } = await liveEvent(client, owner);
+    const { eventId } = await liveEvent(client, owner, "READY");
     await transition(client, owner, eventId, "CANCELLED");
     const cancelled = await client.get(owner, `/events/${eventId}/report`);
     await transition(client, owner, eventId, "ARCHIVED");
@@ -327,7 +341,7 @@ describe("the post-event report (FR-RC-3)", { timeout: 30_000 }, () => {
     const done = await liveEvent(client, owner);
     await transition(client, owner, done.eventId, "COMPLETED");
     await transition(client, owner, done.eventId, "ARCHIVED");
-    const dropped = await liveEvent(client, owner);
+    const dropped = await liveEvent(client, owner, "READY");
     await transition(client, owner, dropped.eventId, "CANCELLED");
     await transition(client, owner, dropped.eventId, "ARCHIVED");
     // Two years on: the retention job has deleted the audit trail, and an
