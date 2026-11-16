@@ -3,6 +3,7 @@ import { APP_FILTER, APP_PIPE } from "@nestjs/core";
 import { LoggerModule } from "nestjs-pino";
 import type { DestinationStream } from "pino";
 
+import { AuditModule } from "./audit/audit.module.js";
 import { AttendeesModule } from "./attendees/attendees.module.js";
 import { AssetsModule } from "./assets/assets.module.js";
 import { AuthModule } from "./auth/auth.module.js";
@@ -58,6 +59,7 @@ export class AppModule {
         AssetsModule,
         AttendeesModule,
         LiveModule,
+        AuditModule,
       ],
       providers: [
         { provide: APP_FILTER, useClass: ProblemDetailsFilter },

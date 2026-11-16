@@ -151,3 +151,4 @@ export {
   WatchInfo,
 } from "./realtime.js";
 export { WebhookEventType } from "./webhooks.js";
+export { AuditEntry, AuditPage, AuditQuery } from "./audit.js";

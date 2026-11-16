@@ -8,6 +8,7 @@ import type {
 } from "@opspilot/contracts";
 import { z } from "zod";
 
+import { auditableUrl } from "../audit/redact.js";
 import { recordAudit } from "../audit/audit.js";
 import type { Actor } from "../auth/actor.js";
 import { PRISMA } from "../database/prisma.js";
@@ -64,8 +65,9 @@ export class StreamsService {
         targetType: "event",
         targetId: eventId,
         eventId,
-        before: { streamUrl: before.streamUrl },
-        after: { streamUrl: url },
+        // Without credentials or the query string: tokens live there.
+        before: { streamUrl: auditableUrl(before.streamUrl) },
+        after: { streamUrl: auditableUrl(url) },
       });
       await this.requestCheckIn(tx, actor, eventId, now);
       return this.events.getWith(tx, actor, eventId);
