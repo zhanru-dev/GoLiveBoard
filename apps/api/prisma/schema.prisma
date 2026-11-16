@@ -601,6 +601,8 @@ model ChatMessage {
   deletedBy      User?     @relation("ChatDeletedBy", fields: [deletedById], references: [id], onDelete: SetNull)
 
   @@unique([eventId, sequence])
+  /// Messages per minute: the operations room and the report.
+  @@index([eventId, createdAt])
   @@index([authorAttendeeId])
   @@index([authorUserId])
   @@index([deletedById])
@@ -653,6 +655,8 @@ model Question {
   /// FR-RN-5: one question per pin slot and event (with the 1–3 CHECK).
   @@unique([eventId, pinSlot], map: "questions_pin_slot_key", where: { pinSlot: { not: null } })
   @@index([eventId, status, voteCount(sort: Desc)])
+  /// Questions per minute: the operations room and the report.
+  @@index([eventId, createdAt])
   @@index([authorAttendeeId])
   @@index([authorUserId])
   @@index([mergedIntoId])

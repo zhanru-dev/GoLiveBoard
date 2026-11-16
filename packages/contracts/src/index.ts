@@ -122,6 +122,13 @@ export {
 } from "./workspace.js";
 export { QuestionStatus, RealtimeChannel } from "./live.js";
 export {
+  LiveOps,
+  LiveOpsAudience,
+  LiveOpsMoment,
+  LiveOpsRates,
+  LiveOpsStreamStatus,
+} from "./live-ops.js";
+export {
   AskQuestionRequest,
   ChannelJoin,
   ChannelJoinAck,

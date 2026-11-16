@@ -234,7 +234,11 @@ A refused message is acked `{ ok: false, error }`, with `error` one of `UNAUTHEN
 | `rates.updated`                         | `{ messagesPerMinute, questionsPerMinute }` | Every 30 s              |
 | `incident.opened` · `incident.resolved` | The incident                                | On change               |
 
-Each message has an increasing `id:`. On reconnect the browser sends `Last-Event-ID`; the server sends a fresh `snapshot` if it cannot replay. A comment line is sent every 15 seconds to keep proxies from closing idle connections.
+Each message has an increasing `id:`. On reconnect the browser sends `Last-Event-ID`; the server does not replay, and starts again with a fresh `snapshot` numbered after that ID. A change of the event's status also sends a fresh `snapshot` (it carries the status and the timeline). A comment line is sent after 15 seconds without a message, to keep proxies from closing idle connections; `retry: 2000` asks the browser to wait 2 seconds before reconnecting.
+
+Each stream looks at the database every second, from whichever instance holds it, so a change reaches the browser within about a second and no message can be lost between instances. At each look it also re-checks the viewer's session, membership and active workspace, and ends the stream as soon as one no longer allows it. A session may hold 5 streams on one instance (`429 RATE_LIMITED` beyond). Errors before the stream starts are ordinary problem documents (`401`, `404`).
+
+The snapshot (`GET /events/:id/live-ops` returns the same) holds the event, the latest stream check, the audience (`current`: attendees with a heartbeat this minute or the last; `peak`: the most in one minute; `series`: viewers per minute up to now), the rates over the last 60 seconds, the open incidents and the timeline of status changes and incidents.
 
 ## 6. Webhooks
 
