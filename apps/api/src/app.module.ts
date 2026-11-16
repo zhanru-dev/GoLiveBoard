@@ -20,6 +20,7 @@ import { ProblemDetailsFilter } from "./http/problem-details.filter.js";
 import { createValidationPipe } from "./http/request-validation.js";
 import { createLogger } from "./observability/logger.js";
 import { type Clock, ClockModule } from "./shared/clock.js";
+import { WebhooksModule } from "./webhooks/webhooks.module.js";
 import { WorkspacesModule } from "./workspaces/workspaces.module.js";
 import { ObservabilityModule } from "./observability/observability.module.js";
 
@@ -60,6 +61,7 @@ export class AppModule {
         AttendeesModule,
         LiveModule,
         AuditModule,
+        WebhooksModule,
       ],
       providers: [
         { provide: APP_FILTER, useClass: ProblemDetailsFilter },

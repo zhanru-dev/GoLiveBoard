@@ -10,6 +10,8 @@ export const Workspace = z.object({
   id: z.uuid(),
   name: z.string(),
   retentionDays: z.int(),
+  /** Whether attendee.registered webhooks carry name and address. */
+  webhooksIncludePersonalData: z.boolean(),
 });
 export type Workspace = z.infer<typeof Workspace>;
 
@@ -17,6 +19,7 @@ export const UpdateWorkspaceRequest = z
   .object({
     name: z.string().trim().min(1).max(100),
     retentionDays: z.int().min(RETENTION_DAYS_MIN).max(RETENTION_DAYS_MAX),
+    webhooksIncludePersonalData: z.boolean(),
   })
   .partial()
   .refine((body) => Object.keys(body).length > 0, {

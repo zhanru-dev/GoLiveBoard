@@ -150,5 +150,18 @@ export {
   WatchHeartbeat,
   WatchInfo,
 } from "./realtime.js";
-export { WebhookEventType } from "./webhooks.js";
+export {
+  CreateWebhookEndpointRequest,
+  UpdateWebhookEndpointRequest,
+  WebhookAttempt,
+  WebhookDelivery,
+  WebhookDeliveryPage,
+  WebhookDeliveryQuery,
+  WebhookDeliveryStatus,
+  WebhookEndpoint,
+  WebhookEndpointCreated,
+  WebhookEventType,
+  WebhookSecret,
+  WebhookUrl,
+} from "./webhooks.js";
 export { AuditEntry, AuditPage, AuditQuery } from "./audit.js";

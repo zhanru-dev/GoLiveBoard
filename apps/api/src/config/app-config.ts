@@ -32,12 +32,17 @@ function optional<Schema extends z.ZodType>(schema: Schema) {
 }
 
 /** 32 bytes, base64: an AES-256 key. */
-const EncryptionKey = z
-  .string()
-  .transform((value) => Buffer.from(value, "base64"))
-  .refine((key) => key.length === 32, {
-    error: "Must be 32 bytes, base64 (openssl rand -base64 32)",
-  });
+const EncryptionKey = z.preprocess(
+  // Empty means not set, as in an .env line left blank.
+  (value) => (value === "" ? undefined : value),
+  z
+    .string()
+    .transform((value) => Buffer.from(value, "base64"))
+    .refine((key) => key.length === 32, {
+      error: "Must be 32 bytes, base64 (openssl rand -base64 32)",
+    })
+    .optional(),
+);
 
 const Secret = z
   .string()
@@ -105,8 +110,8 @@ const AppConfigSchema = z
      * cannot be created. The previous key keeps opening what it sealed
      * during a rotation.
      */
-    WEBHOOK_ENCRYPTION_KEY: EncryptionKey.optional(),
-    WEBHOOK_ENCRYPTION_KEY_PREVIOUS: EncryptionKey.optional(),
+    WEBHOOK_ENCRYPTION_KEY: EncryptionKey,
+    WEBHOOK_ENCRYPTION_KEY_PREVIOUS: EncryptionKey,
     /**
      * Prefix of every BullMQ key in Valkey. Tests give each file its own, so
      * their queues never share jobs.

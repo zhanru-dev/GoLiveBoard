@@ -35,6 +35,7 @@ export const ErrorCode = z.enum([
   "QUESTION_NOT_PINNABLE",
   "PIN_LIMIT_REACHED",
   "QUESTION_NOT_VOTABLE",
+  "DELIVERY_PENDING",
   "RATE_LIMITED",
   "INTERNAL_ERROR",
   "SERVICE_UNAVAILABLE",
@@ -148,6 +149,10 @@ export const ERROR_DEFINITIONS = {
   QUESTION_NOT_VOTABLE: {
     status: 409,
     title: "Only published questions take votes",
+  },
+  DELIVERY_PENDING: {
+    status: 409,
+    title: "The delivery is still being tried; wait for it to finish",
   },
   RATE_LIMITED: { status: 429, title: "Too many requests" },
   INTERNAL_ERROR: { status: 500, title: "Something went wrong on our side" },
