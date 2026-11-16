@@ -83,7 +83,16 @@ test("an Owner's integrations screen refuses a receiver on a private address", a
   await page.getByLabel(/An event completes/).check();
   await page.getByRole("button", { name: "Add endpoint" }).click();
 
-  await expect(page.getByText(/public internet/)).toBeVisible();
+  // The API's refusal, not the field's hint (which also says "public").
+  await expect(
+    page.getByText(
+      "10.0.0.7 resolves to an address that is not on the public internet",
+    ),
+  ).toBeVisible();
+  await expect(page.getByLabel("Receiver URL")).toHaveAttribute(
+    "aria-invalid",
+    "true",
+  );
   await expect(page.getByText("No endpoints yet.")).toBeVisible();
 });
 
