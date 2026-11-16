@@ -49,6 +49,7 @@ export class LiveOpsService {
         status: true,
         startsAt: true,
         endsAt: true,
+        timeZone: true,
       },
     });
     if (event === null) {
@@ -109,6 +110,7 @@ export class LiveOpsService {
         status: event.status,
         startsAt: event.startsAt.toISOString(),
         endsAt: event.endsAt.toISOString(),
+        timeZone: event.timeZone,
       },
       stream,
       audience,

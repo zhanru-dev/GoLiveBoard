@@ -92,6 +92,29 @@ describe("LaunchControlPage", () => {
     ).toHaveAttribute("href", "#access-policy");
   });
 
+  it("links to the operations room, and to the report once completed", async () => {
+    serveEvent();
+    const { unmount } = renderScreen(
+      <LaunchControlPage eventId={EVENT_ID} />,
+      OWNER,
+    );
+    const pages = await screen.findByRole("navigation", {
+      name: "Event pages",
+    });
+    expect(
+      within(pages).getByRole("link", { name: "Operations room" }),
+    ).toHaveAttribute("href", `/events/${EVENT_ID}/live`);
+    expect(within(pages).queryByRole("link", { name: "Report" })).toBeNull();
+    unmount();
+
+    serveEvent(anEvent({ status: "COMPLETED", allowedTransitions: [] }));
+    renderScreen(<LaunchControlPage eventId={EVENT_ID} />, OWNER);
+    expect(await screen.findByRole("link", { name: "Report" })).toHaveAttribute(
+      "href",
+      `/events/${EVENT_ID}/report`,
+    );
+  });
+
   it("lists the blockers when going ready is refused", async () => {
     serveEvent();
     server.use(

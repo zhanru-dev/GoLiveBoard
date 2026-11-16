@@ -88,6 +88,16 @@ export function EventHeader({
         {formatInZone(event.startsAt, event.timeZone)} –{" "}
         {formatInZone(event.endsAt, event.timeZone)}
       </p>
+      <nav aria-label="Event pages" className="flex flex-wrap gap-4 text-sm">
+        <Link href={`/events/${event.id}/live`} className="underline">
+          Operations room
+        </Link>
+        {event.status === "COMPLETED" || event.status === "ARCHIVED" ? (
+          <Link href={`/events/${event.id}/report`} className="underline">
+            Report
+          </Link>
+        ) : null}
+      </nav>
       {control.canEdit && event.allowedTransitions.length > 0 ? (
         <div
           className="flex flex-wrap gap-2"

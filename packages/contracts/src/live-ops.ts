@@ -57,6 +57,8 @@ export const LiveOps = z.object({
     status: EventStatus,
     startsAt: z.iso.datetime(),
     endsAt: z.iso.datetime(),
+    /** Times are shown in the event's zone, as in Launch Control. */
+    timeZone: z.string(),
   }),
   stream: LiveOpsStreamStatus.nullable(),
   audience: LiveOpsAudience.extend({

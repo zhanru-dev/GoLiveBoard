@@ -150,6 +150,15 @@ export function formatInZone(iso: string, timeZone: string): string {
   }).format(new Date(iso));
 }
 
+/** The time of day in the zone, e.g. "17:05", for charts and timelines. */
+export function timeInZone(iso: string, timeZone: string): string {
+  return new Intl.DateTimeFormat("en-GB", {
+    timeZone,
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(new Date(iso));
+}
+
 /** Every zone the browser knows, for the time-zone picker. */
 export function timeZones(): string[] {
   return Intl.supportedValuesOf("timeZone");

@@ -5,6 +5,7 @@ import {
   offsetLabel,
   offsetMinutes,
   resolveZonedTime,
+  timeInZone,
   timeZones,
   utcToZoned,
 } from "./time";
@@ -194,6 +195,17 @@ describe("offsetLabel", () => {
     );
     expect(offsetLabel("2026-11-01T06:30:00.000Z", "America/New_York")).toBe(
       "UTC−05:00",
+    );
+  });
+});
+
+describe("timeInZone", () => {
+  it("shows the time of day in the event's zone", () => {
+    expect(timeInZone("2026-12-01T17:05:00.000Z", "America/New_York")).toBe(
+      "12:05",
+    );
+    expect(timeInZone("2026-07-01T17:05:00.000Z", "Europe/London")).toBe(
+      "18:05",
     );
   });
 });
