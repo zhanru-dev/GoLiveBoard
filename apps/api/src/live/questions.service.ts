@@ -200,7 +200,7 @@ export class QuestionsService {
       ) {
         throw new DomainError("NOT_FOUND");
       }
-      if (!isVotable(question.status)) {
+      if (!isVotable(question)) {
         throw new DomainError("QUESTION_NOT_VOTABLE");
       }
       await this.rateLimiter.consumeOrThrow(
@@ -312,6 +312,74 @@ export class QuestionsService {
   }
 
   /**
+   * Merges questions into others (AI triage, FR-RN-6), in the caller's
+   * transaction, which holds the event's row lock. A merged question leaves
+   * the public list (its author and moderators still see it, marked), loses
+   * its pin, and its votes move to the question it was merged into, each
+   * attendee counted once. One that was merged meanwhile is left alone.
+   *
+   * @returns the journal entries to announce once the transaction commits
+   */
+  async mergeIn(
+    tx: Prisma.TransactionClient,
+    eventId: string,
+    merges: readonly { readonly questionId: string; readonly into: string }[],
+  ): Promise<Announcement[]> {
+    const announcements: Announcement[] = [];
+    const representatives = new Set<string>();
+    for (const { questionId, into } of merges) {
+      const { count } = await tx.question.updateMany({
+        where: { id: questionId, eventId, mergedIntoId: null },
+        data: {
+          mergedIntoId: into,
+          pinSlot: null,
+          voteCount: 0,
+          version: { increment: 1 },
+          updatedAt: this.clock.now(),
+        },
+      });
+      if (count === 0) {
+        continue;
+      }
+      await tx.$executeRaw`
+        INSERT INTO question_votes (question_id, attendee_id, created_at)
+        SELECT ${into}::uuid, attendee_id, created_at FROM question_votes
+        WHERE question_id = ${questionId}::uuid
+        ON CONFLICT DO NOTHING`;
+      await tx.questionVote.deleteMany({ where: { questionId } });
+      representatives.add(into);
+      announcements.push({
+        sequence: await this.journal(tx, eventId, "UPDATED", questionId),
+        kind: "UPDATED",
+        questionId,
+      });
+    }
+    for (const questionId of representatives) {
+      await tx.$executeRaw`
+        UPDATE questions SET vote_count = (
+          SELECT count(*) FROM question_votes WHERE question_id = ${questionId}::uuid
+        )
+        WHERE id = ${questionId}::uuid`;
+      announcements.push({
+        sequence: await this.journal(tx, eventId, "VOTED", questionId),
+        kind: "VOTED",
+        questionId,
+      });
+    }
+    return announcements;
+  }
+
+  /** Sends committed journal entries to everyone on the event's Q&A. */
+  async announce(
+    eventId: string,
+    announcements: readonly Announcement[],
+  ): Promise<void> {
+    for (const { sequence, kind, questionId } of announcements) {
+      await this.broadcast(eventId, sequence, kind, questionId);
+    }
+  }
+
+  /**
    * The questions this viewer may see: published and answered ones, their
    * own, and every one for moderators. Pinned first, then by votes.
    *
@@ -334,7 +402,10 @@ export class QuestionsService {
           ? {}
           : {
               OR: [
-                { status: { in: ["PUBLISHED", "ANSWERED"] } },
+                {
+                  status: { in: ["PUBLISHED", "ANSWERED"] },
+                  mergedIntoId: null,
+                },
                 ...(who.attendeeId === undefined
                   ? []
                   : [{ authorAttendeeId: who.attendeeId }]),
@@ -490,6 +561,13 @@ export class QuestionsService {
       withdrawn(sequence, row),
     );
   }
+}
+
+/** A journal entry to send once its transaction has committed. */
+export interface Announcement {
+  readonly sequence: number;
+  readonly kind: QuestionsEventKind;
+  readonly questionId: string;
 }
 
 /** What isQuestionVisibleTo needs to know about a participant. */

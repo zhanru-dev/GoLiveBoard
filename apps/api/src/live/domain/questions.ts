@@ -23,19 +23,21 @@ export interface QuestionViewer {
 
 export interface QuestionAuthorship {
   readonly status: QuestionStatus;
+  readonly mergedIntoId: string | null;
   readonly authorAttendeeId: string | null;
   readonly authorUserId: string | null;
 }
 
 /**
- * Published and answered questions are for everyone; a pending or hidden one
- * only for its author and moderators.
+ * Published and answered questions are for everyone, unless merged into
+ * another (FR-RN-6); a pending, hidden or merged one only for its author
+ * and moderators.
  */
 export function isQuestionVisibleTo(
   question: QuestionAuthorship,
   viewer: QuestionViewer,
 ): boolean {
-  if (question.status === "PUBLISHED" || question.status === "ANSWERED") {
+  if (isPublicQuestion(question)) {
     return true;
   }
   if (viewer.moderator) {
@@ -48,9 +50,21 @@ export function isQuestionVisibleTo(
   );
 }
 
-/** Whether attendees may vote for a question in this status. */
-export function isVotable(status: QuestionStatus): boolean {
-  return status === "PUBLISHED";
+/** For everyone: published or answered, and not merged into another. */
+export function isPublicQuestion(
+  question: Pick<QuestionAuthorship, "status" | "mergedIntoId">,
+): boolean {
+  return (
+    (question.status === "PUBLISHED" || question.status === "ANSWERED") &&
+    question.mergedIntoId === null
+  );
+}
+
+/** Whether attendees may vote for it: published, and not merged. */
+export function isVotable(
+  question: Pick<QuestionAuthorship, "status" | "mergedIntoId">,
+): boolean {
+  return question.status === "PUBLISHED" && question.mergedIntoId === null;
 }
 
 const TRANSITIONS: Readonly<Record<QuestionStatus, readonly QuestionStatus[]>> =

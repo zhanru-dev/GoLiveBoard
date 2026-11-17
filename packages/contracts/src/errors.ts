@@ -35,6 +35,7 @@ export const ErrorCode = z.enum([
   "TRIAGE_UNAVAILABLE",
   "TRIAGE_BUDGET_SPENT",
   "TRIAGE_ALREADY_DECIDED",
+  "TRIAGE_NOTHING_TO_SORT",
   "QUESTION_STATUS_INVALID",
   "QUESTION_NOT_PINNABLE",
   "PIN_LIMIT_REACHED",
@@ -145,6 +146,10 @@ export const ERROR_DEFINITIONS = {
   TRIAGE_ALREADY_DECIDED: {
     status: 409,
     title: "These suggestions were already decided, or are not ready",
+  },
+  TRIAGE_NOTHING_TO_SORT: {
+    status: 409,
+    title: "There are no open questions to sort",
   },
   REPORT_NOT_AVAILABLE: {
     status: 409,

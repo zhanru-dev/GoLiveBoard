@@ -866,6 +866,9 @@ model TriageRun {
   requestedBy User? @relation("TriageRequestedBy", fields: [requestedById], references: [id], onDelete: SetNull)
   decidedBy   User? @relation("TriageDecidedBy", fields: [decidedById], references: [id], onDelete: SetNull)
 
+  /// One run at a time per event: a second request while one is queued or
+  /// running gets that one.
+  @@unique([eventId], map: "triage_runs_one_active_key", where: raw("status = ANY (ARRAY['QUEUED'::triage_run_status, 'RUNNING'::triage_run_status])"))
   @@index([eventId, createdAt(sort: Desc)])
   /// The demo's daily budget sums the day's runs.
   @@index([createdAt])

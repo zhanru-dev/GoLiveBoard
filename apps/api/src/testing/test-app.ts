@@ -13,6 +13,7 @@ import {
   type HealthIndicator,
 } from "../health/health-indicator.js";
 import { APP_CONFIG, type AppConfig } from "../config/app-config.js";
+import { TRIAGE_MODEL, type TriageModel } from "../triage/triage-model.js";
 import { Mailer } from "../mail/mailer.js";
 import {
   ObjectStorage,
@@ -46,6 +47,8 @@ export interface TestAppOptions {
    * that pauses at a chosen point to force an interleaving.
    */
   readonly replace?: readonly (readonly [Type, Type])[];
+  /** The AI triage model, in place of the one AI_PROVIDER names. */
+  readonly triageModel?: TriageModel | null;
 }
 
 class DiscardingMailer extends Mailer {
@@ -88,6 +91,9 @@ export async function createTestApp(
   }
   for (const [original, replacement] of options.replace ?? []) {
     builder.overrideProvider(original).useClass(replacement);
+  }
+  if (options.triageModel !== undefined) {
+    builder.overrideProvider(TRIAGE_MODEL).useValue(options.triageModel);
   }
   const { storageTimeouts } = options;
   if (storageTimeouts !== undefined) {
@@ -149,6 +155,8 @@ export interface TestWorkerOptions {
   readonly consume?: boolean;
   /** Receives the mail the worker sends; discarded by default. */
   readonly mailer?: Mailer;
+  /** The AI triage model, in place of the one AI_PROVIDER names. */
+  readonly triageModel?: TriageModel | null;
 }
 
 /**
@@ -160,7 +168,7 @@ export async function createTestWorker(
   options: TestWorkerOptions = {},
 ): Promise<INestApplicationContext> {
   const config = loadTestConfig({ LOG_LEVEL: "silent", ...options.env });
-  const moduleRef = await Test.createTestingModule({
+  const builder = Test.createTestingModule({
     imports: [
       WorkerModule.forRoot(config, {
         clock: options.clock,
@@ -170,8 +178,11 @@ export async function createTestWorker(
     ],
   })
     .overrideProvider(Mailer)
-    .useValue(options.mailer ?? new DiscardingMailer())
-    .compile();
+    .useValue(options.mailer ?? new DiscardingMailer());
+  if (options.triageModel !== undefined) {
+    builder.overrideProvider(TRIAGE_MODEL).useValue(options.triageModel);
+  }
+  const moduleRef = await builder.compile();
   await moduleRef.init();
   return moduleRef;
 }

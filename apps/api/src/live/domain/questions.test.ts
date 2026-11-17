@@ -24,8 +24,9 @@ describe("initialQuestionStatus (FR-RN-4)", () => {
 });
 
 describe("isQuestionVisibleTo", () => {
-  const by = (status: QuestionStatus) => ({
+  const by = (status: QuestionStatus, mergedIntoId: string | null = null) => ({
     status,
+    mergedIntoId,
     authorAttendeeId: "author",
     authorUserId: null,
   });
@@ -54,9 +55,23 @@ describe("isQuestionVisibleTo", () => {
     }
   });
 
+  it("shows a merged question only to its author and moderators, even if published", () => {
+    for (const status of ["PUBLISHED", "ANSWERED"] as const) {
+      const merged = by(status, "another");
+      expect(
+        isQuestionVisibleTo(merged, { attendeeId: "other", moderator: false }),
+      ).toBe(false);
+      expect(
+        isQuestionVisibleTo(merged, { attendeeId: "author", moderator: false }),
+      ).toBe(true);
+      expect(isQuestionVisibleTo(merged, { moderator: true })).toBe(true);
+    }
+  });
+
   it("recognises a staff author by user", () => {
     const question = {
       status: "PENDING" as const,
+      mergedIntoId: null,
       authorAttendeeId: null,
       authorUserId: "ada",
     };
@@ -71,7 +86,12 @@ describe("isQuestionVisibleTo", () => {
 
 describe("isVotable", () => {
   it("takes votes on published questions only", () => {
-    expect(STATUSES.filter(isVotable)).toEqual(["PUBLISHED"]);
+    expect(
+      STATUSES.filter((status) => isVotable({ status, mergedIntoId: null })),
+    ).toEqual(["PUBLISHED"]);
+    expect(isVotable({ status: "PUBLISHED", mergedIntoId: "another" })).toBe(
+      false,
+    );
   });
 });
 

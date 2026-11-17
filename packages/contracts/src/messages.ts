@@ -9,6 +9,7 @@ import { EventStatus } from "./events.js";
 export const OutboxMessageType = z.enum([
   "event.transitioned",
   "attendee.verified",
+  "triage.requested",
   "stream.check_requested",
   "demo.events_deleted",
 ]);
@@ -34,6 +35,10 @@ export const AttendeeVerifiedPayload = z.object({
   occurredAt: z.iso.datetime(),
 });
 export type AttendeeVerifiedPayload = z.infer<typeof AttendeeVerifiedPayload>;
+
+/** A moderator asked for AI triage (FR-RN-6): the run to carry out. */
+export const TriageRequestedPayload = z.object({ runId: z.uuid() });
+export type TriageRequestedPayload = z.infer<typeof TriageRequestedPayload>;
 
 /** A webhook fan-out job: the outbox message to send as webhooks. */
 export const WebhookFanOutJob = z.object({ outboxMessageId: z.uuid() });

@@ -1,0 +1,816 @@
+import type { INestApplicationContext } from "@nestjs/common";
+import type { NestExpressApplication } from "@nestjs/platform-express";
+import {
+  AuditPage,
+  ChannelJoined,
+  ProblemDetails,
+  Question,
+  QuestionList,
+  type QuestionsEvent,
+  TriageRun,
+  TriageRunStarted,
+} from "@opspilot/contracts";
+import { afterAll, beforeAll, describe, expect, inject, it } from "vitest";
+
+import { ATTENDEE_COOKIE } from "../attendees/attendee-cookies.js";
+import { openEvent, PublicClient, registration } from "../testing/admission.js";
+import {
+  ApiClient,
+  type TestSession,
+  tokenFromEmail,
+  uniqueEmail,
+} from "../testing/api-client.js";
+import {
+  createTestDatabase,
+  holdLock,
+  type TestDatabase,
+} from "../testing/database.js";
+import { memberOf } from "../testing/events.js";
+import { CapturingMailer } from "../testing/fakes.js";
+import { cookieHeader } from "../testing/cookies.js";
+import { listen, RealtimeClient } from "../testing/realtime.js";
+import { createTestApp, createTestWorker } from "../testing/test-app.js";
+import { TriageConsumer } from "../worker/triage.consumer.js";
+import type { ModelTriage } from "./domain/prompt.js";
+import {
+  type TriageAnswer,
+  TriageModel,
+  TriageModelError,
+} from "./triage-model.js";
+import { TriageRunner } from "./triage-runner.js";
+
+let addressCounter = 0;
+const newAddress = () => `198.18.11.${String((addressCounter += 1) % 250)}`;
+
+/** A model whose answer each test sets; it records what it was sent. */
+class ScriptedModel extends TriageModel {
+  readonly sent: string[] = [];
+  answer: (questions: string, signal: AbortSignal) => Promise<TriageAnswer> =
+    () => Promise.reject(new Error("No answer set"));
+
+  triage(questions: string, signal: AbortSignal): Promise<TriageAnswer> {
+    this.sent.push(questions);
+    return this.answer(questions, signal);
+  }
+}
+
+/** The label the prompt gave a question, found by its text. */
+function labelOf(prompt: string, text: string): string {
+  const line = prompt
+    .split("\n")
+    .find((candidate) => candidate.endsWith(`: ${text}`));
+  const label = line?.split(":")[0];
+  if (label === undefined) {
+    throw new Error(`"${text}" was not sent`);
+  }
+  return label;
+}
+
+const answered = (
+  output: ModelTriage,
+  model = "claude-opus-5-5",
+): TriageAnswer => ({
+  output,
+  model,
+  usage: { inputTokens: 1_000, outputTokens: 100 },
+});
+
+describe("AI question triage (FR-RN-6, ADR-0012)", { timeout: 60_000 }, () => {
+  let database: TestDatabase;
+  let app: NestExpressApplication;
+  let worker: INestApplicationContext;
+  let url: string;
+  const clients: RealtimeClient[] = [];
+  const mailer = new CapturingMailer();
+  const model = new ScriptedModel();
+
+  beforeAll(async () => {
+    database = await createTestDatabase();
+    const env = {
+      DATABASE_URL: database.url,
+      VALKEY_URL: inject("valkeyUrl"),
+      TRUST_PROXY_HOPS: "1",
+    };
+    app = await createTestApp({ env, mailer, triageModel: model });
+    url = await listen(app);
+    worker = await createTestWorker({ env, triageModel: model });
+  });
+
+  afterAll(async () => {
+    for (const client of clients) {
+      client.close();
+    }
+    await worker.close();
+    await app.close();
+    await database.drop();
+  });
+
+  const api = () => new ApiClient(app, newAddress());
+
+  async function attendee(slug: string) {
+    const email = uniqueEmail("att");
+    const browser = new PublicClient(app, newAddress());
+    await browser.register(slug, registration(email));
+    const verified = await browser.verify(
+      tokenFromEmail(mailer.to(email).at(-1)?.text ?? ""),
+    );
+    if (verified.attendee?.cookie(ATTENDEE_COOKIE) === undefined) {
+      throw new Error(`Verification failed: ${verified.response.text}`);
+    }
+    return verified.attendee;
+  }
+  type Browser = Awaited<ReturnType<typeof attendee>>;
+
+  async function asked(browser: Browser, slug: string, body: string) {
+    const response = await browser.post(`/public/events/${slug}/questions`, {
+      body,
+    });
+    expect(response.status, response.text).toBe(201);
+    return Question.parse(response.body);
+  }
+
+  const vote = (browser: Browser, slug: string, id: string) =>
+    browser.put(`/public/events/${slug}/questions/${id}/vote`);
+
+  /** An event with an attendee and these questions, asked by them. */
+  async function withQuestions(texts: readonly string[]) {
+    const client = api();
+    const owner = await client.newOwner();
+    const event = await openEvent(client, owner);
+    const asker = await attendee(event.slug);
+    const questions: Question[] = [];
+    for (const text of texts) {
+      questions.push(await asked(asker, event.slug, text));
+    }
+    return { client, owner, event, asker, questions };
+  }
+
+  async function started(
+    client: ApiClient,
+    owner: TestSession,
+    eventId: string,
+  ) {
+    const response = await client.send(
+      owner,
+      "post",
+      `/events/${eventId}/question-triage-runs`,
+    );
+    expect(response.status, response.text).toBe(202);
+    return TriageRunStarted.parse(response.body).id;
+  }
+
+  async function runOf(client: ApiClient, owner: TestSession, runId: string) {
+    const response = await client.get(owner, `/question-triage-runs/${runId}`);
+    expect(response.status, response.text).toBe(200);
+    return TriageRun.parse(response.body);
+  }
+
+  const decide = (
+    client: ApiClient,
+    owner: TestSession,
+    runId: string,
+    acceptedGroups: number[],
+  ) =>
+    client.send(owner, "post", `/question-triage-runs/${runId}/decision`, {
+      acceptedGroups,
+    });
+
+  /** Asks for a run, and carries it out as the worker would. */
+  async function triaged(
+    client: ApiClient,
+    owner: TestSession,
+    eventId: string,
+  ) {
+    const runId = await started(client, owner, eventId);
+    await worker.get(TriageRunner).run(runId);
+    return runOf(client, owner, runId);
+  }
+
+  const pricing = [
+    "How much does it cost?",
+    "What is the price?",
+    "Is there a free tier?",
+  ];
+
+  it("suggests groups, and merges an accepted one in one go: votes, lists and the record", async () => {
+    const { client, owner, event, asker, questions } =
+      await withQuestions(pricing);
+    const [howMuch, price, free] = questions;
+    // Two attendees: one voted for both duplicates, one for the second only.
+    const other = await attendee(event.slug);
+    await vote(asker, event.slug, howMuch?.id ?? "");
+    await vote(asker, event.slug, price?.id ?? "");
+    await vote(other, event.slug, price?.id ?? "");
+    model.answer = (prompt) => {
+      const a = labelOf(prompt, "How much does it cost?");
+      const b = labelOf(prompt, "What is the price?");
+      const c = labelOf(prompt, "Is there a free tier?");
+      return Promise.resolve(
+        answered({
+          groups: [
+            {
+              representative: a,
+              questions: [a, b],
+              reason: "Both ask the price",
+            },
+          ],
+          answer_order: [a, c],
+        }),
+      );
+    };
+
+    const run = await triaged(client, owner, event.id);
+
+    expect(run).toMatchObject({
+      status: "SUCCEEDED",
+      decision: "PENDING",
+      questionCount: 3,
+      suggestions: {
+        groups: [
+          {
+            representativeId: howMuch?.id,
+            questionIds: [howMuch?.id, price?.id],
+            reason: "Both ask the price",
+          },
+        ],
+        answerOrder: [howMuch?.id, free?.id],
+      },
+    });
+    // Nothing changed yet.
+    expect(
+      await database.query(
+        "SELECT 1 FROM questions WHERE merged_into_id IS NOT NULL AND event_id = $1",
+        [event.id],
+      ),
+    ).toEqual([]);
+
+    const decided = await decide(client, owner, run.id, [0]);
+
+    expect(decided.status, decided.text).toBe(200);
+    expect(TriageRun.parse(decided.body).decision).toBe("ACCEPTED");
+    const [merged] = await database.query<{
+      merged_into_id: string;
+      vote_count: number;
+    }>("SELECT merged_into_id, vote_count FROM questions WHERE id = $1", [
+      price?.id,
+    ]);
+    expect(merged).toEqual({ merged_into_id: howMuch?.id, vote_count: 0 });
+    const [kept] = await database.query<{ vote_count: number }>(
+      "SELECT vote_count FROM questions WHERE id = $1",
+      [howMuch?.id],
+    );
+    // Each attendee counted once.
+    expect(kept?.vote_count).toBe(2);
+    // An attendee who did not ask it no longer sees the merged question...
+    const theirs = QuestionList.parse(
+      (await other.get(`/public/events/${event.slug}/questions`)).body,
+    );
+    expect(theirs.items.map(({ id }) => id).sort()).toEqual(
+      [howMuch?.id, free?.id].sort(),
+    );
+    // ...its author and moderators do, marked as merged.
+    const mine = QuestionList.parse(
+      (await asker.get(`/public/events/${event.slug}/questions`)).body,
+    );
+    expect(mine.items.find(({ id }) => id === price?.id)?.mergedIntoId).toBe(
+      howMuch?.id,
+    );
+    const moderators = QuestionList.parse(
+      (await client.get(owner, `/events/${event.id}/questions`)).body,
+    );
+    expect(
+      moderators.items.find(({ id }) => id === price?.id)?.mergedIntoId,
+    ).toBe(howMuch?.id);
+    // Nobody votes for a merged question.
+    expect((await vote(other, event.slug, price?.id ?? "")).status).toBe(404);
+    // Audited.
+    const [entry] = AuditPage.parse(
+      (
+        await client.get(
+          owner,
+          `/audit-entries?eventId=${event.id}&action=question_triage.decided`,
+        )
+      ).body,
+    ).items;
+    expect(entry?.after).toEqual({
+      decision: "ACCEPTED",
+      acceptedGroups: [0],
+      merged: [{ questionId: price?.id, into: howMuch?.id }],
+    });
+    // On the real-time journal: the merged question, then the new count.
+    const journal = await database.query<{ kind: string; entity_id: string }>(
+      `SELECT kind, entity_id FROM realtime_journal
+       WHERE event_id = $1 AND channel = 'QUESTIONS' ORDER BY sequence DESC LIMIT 2`,
+      [event.id],
+    );
+    expect(journal.reverse()).toEqual([
+      { kind: "UPDATED", entity_id: price?.id },
+      { kind: "VOTED", entity_id: howMuch?.id },
+    ]);
+  });
+
+  it("tells everyone on the Q&A: the merged question leaves, the kept one counts its votes", async () => {
+    const { client, owner, event, questions } = await withQuestions(pricing);
+    const [howMuch, price] = questions;
+    // An attendee who did not ask, listening.
+    const listener = await attendee(event.slug);
+    await vote(listener, event.slug, price?.id ?? "");
+    const live = await RealtimeClient.connect(url, {
+      cookie: cookieHeader({
+        [ATTENDEE_COOKIE]: listener.cookie(ATTENDEE_COOKIE) ?? "",
+      }),
+      ip: newAddress(),
+    });
+    clients.push(live);
+    const received: QuestionsEvent[] = [];
+    live.onQuestions((change) => received.push(change));
+    ChannelJoined.parse(await live.join(event.slug, 0, "QUESTIONS"));
+    model.answer = (prompt) => {
+      const a = labelOf(prompt, "How much does it cost?");
+      const b = labelOf(prompt, "What is the price?");
+      return Promise.resolve(
+        answered({
+          groups: [{ representative: a, questions: [a, b], reason: "" }],
+          answer_order: [],
+        }),
+      );
+    };
+    const run = await triaged(client, owner, event.id);
+
+    await decide(client, owner, run.id, [0]);
+
+    await expect
+      .poll(() => received.length, { timeout: 5_000 })
+      .toBeGreaterThanOrEqual(2);
+    const [gone, counted] = received.slice(-2);
+    expect(gone).toMatchObject({ kind: "WITHDRAWN", questionId: price?.id });
+    expect(counted).toMatchObject({
+      kind: "VOTED",
+      question: { id: howMuch?.id, voteCount: 1, mergedIntoId: null },
+    });
+    expect((counted?.sequence ?? 0) - (gone?.sequence ?? 0)).toBe(1);
+  });
+
+  it("sends the model only labels and the questions' text", async () => {
+    const { client, owner, event, questions } = await withQuestions([
+      "Will there be a recording?",
+      "Who are the speakers?",
+    ]);
+    model.answer = () =>
+      Promise.resolve(answered({ groups: [], answer_order: [] }));
+
+    await triaged(client, owner, event.id);
+
+    const prompt = model.sent.at(-1) ?? "";
+    expect(prompt).toContain(": Will there be a recording?");
+    for (const question of questions) {
+      expect(prompt).not.toContain(question.id);
+    }
+    // The asker's name and address are not in it.
+    expect(prompt).not.toContain("Ada Lovelace");
+    expect(prompt).not.toMatch(/@/);
+  });
+
+  it("records the model, latency, tokens and cost of each run", async () => {
+    const { client, owner, event } = await withQuestions([
+      "What time does it start?",
+    ]);
+    model.answer = () =>
+      Promise.resolve(
+        answered({ groups: [], answer_order: [] }, "claude-opus-5-5"),
+      );
+
+    const run = await triaged(client, owner, event.id);
+
+    expect(run).toMatchObject({
+      status: "SUCCEEDED",
+      model: "claude-opus-5-5",
+      inputTokens: 1_000,
+      outputTokens: 100,
+      // 1,000 × $4/M + 100 × $20/M = $0.006.
+      costMicros: 6_000,
+    });
+    expect(run.latencyMs).toBeGreaterThanOrEqual(0);
+    expect(run.finishedAt).not.toBeNull();
+  });
+
+  it("gives up after 8 seconds, and Q&A carries on as if nothing happened (the exit criterion)", async () => {
+    const { client, owner, event, asker } = await withQuestions([
+      "Is it recorded?",
+    ]);
+    // A provider that never answers.
+    model.answer = (_prompt, signal) =>
+      new Promise((_, reject) => {
+        signal.addEventListener("abort", () => {
+          reject(new Error("aborted"));
+        });
+      });
+    const startedAt = Date.now();
+
+    const run = await triaged(client, owner, event.id);
+
+    expect(Date.now() - startedAt).toBeLessThan(12_000);
+    expect(run).toMatchObject({
+      status: "TIMED_OUT",
+      suggestions: null,
+      failure: "The AI model did not answer within 8 seconds",
+    });
+    expect(run.latencyMs).toBeGreaterThanOrEqual(8_000);
+    // Asking, voting and listing work as before.
+    const later = await asked(asker, event.slug, "And slides?");
+    expect((await vote(asker, event.slug, later.id)).status).toBe(200);
+    expect(
+      QuestionList.parse(
+        (await client.get(owner, `/events/${event.id}/questions`)).body,
+      ).items,
+    ).toHaveLength(2);
+    // And another run may start.
+    model.answer = () =>
+      Promise.resolve(answered({ groups: [], answer_order: [] }));
+    expect((await triaged(client, owner, event.id)).status).toBe("SUCCEEDED");
+  });
+
+  it.each([
+    [
+      "a provider error",
+      () =>
+        Promise.reject(
+          new TriageModelError("UNAVAILABLE", "The AI provider answered 529"),
+        ),
+      "The AI provider answered 529",
+    ],
+    [
+      "a refusal",
+      () =>
+        Promise.reject(
+          new TriageModelError(
+            "REFUSED",
+            "The AI model declined to sort these questions",
+          ),
+        ),
+      "The AI model declined to sort these questions",
+    ],
+    [
+      "suggestions naming a question it was not given",
+      (prompt: string) => {
+        const a = labelOf(prompt, "Can I bring a guest?");
+        return Promise.resolve(
+          answered({
+            groups: [{ representative: a, questions: [a, "q99"], reason: "" }],
+            answer_order: [],
+          }),
+        );
+      },
+      "The AI model's suggestions did not match the questions",
+    ],
+    [
+      "something unexpected",
+      () => Promise.reject(new Error("boom")),
+      "AI suggestions are unavailable",
+    ],
+  ])(
+    "records %s as a failure, and changes nothing",
+    async (_label, answer, failure) => {
+      const { client, owner, event } = await withQuestions([
+        "Can I bring a guest?",
+      ]);
+      model.answer = answer;
+
+      const run = await triaged(client, owner, event.id);
+
+      expect(run).toMatchObject({
+        status: "FAILED",
+        suggestions: null,
+        failure,
+      });
+      expect((await decide(client, owner, run.id, [])).status).toBe(409);
+    },
+  );
+
+  it("is unavailable, and Q&A unaffected, when no model is configured", async () => {
+    const off = await createTestApp({
+      env: {
+        DATABASE_URL: database.url,
+        VALKEY_URL: inject("valkeyUrl"),
+        TRUST_PROXY_HOPS: "1",
+      },
+      mailer,
+      triageModel: null,
+    });
+    try {
+      const client = new ApiClient(off, newAddress());
+      const owner = await client.newOwner();
+      const event = await openEvent(client, owner);
+
+      const refused = await client.send(
+        owner,
+        "post",
+        `/events/${event.id}/question-triage-runs`,
+      );
+
+      expect(ProblemDetails.parse(refused.body).code).toBe(
+        "TRIAGE_UNAVAILABLE",
+      );
+      expect(refused.status).toBe(503);
+      expect(
+        (await client.get(owner, `/events/${event.id}/questions`)).status,
+      ).toBe(200);
+    } finally {
+      await off.close();
+    }
+  });
+
+  it("runs one at a time per event: asking again, even at once, gets the same run", async () => {
+    const { client, owner, event } = await withQuestions([
+      "Where are the slides?",
+    ]);
+
+    const ids = await Promise.all([
+      started(client, owner, event.id),
+      started(client, owner, event.id),
+      started(client, owner, event.id),
+    ]);
+
+    expect(new Set(ids).size).toBe(1);
+    expect(
+      await database.query("SELECT 1 FROM triage_runs WHERE event_id = $1", [
+        event.id,
+      ]),
+    ).toHaveLength(1);
+  });
+
+  it("refuses to sort nothing", async () => {
+    const client = api();
+    const owner = await client.newOwner();
+    const event = await openEvent(client, owner);
+
+    const refused = await client.send(
+      owner,
+      "post",
+      `/events/${event.id}/question-triage-runs`,
+    );
+
+    expect(ProblemDetails.parse(refused.body).code).toBe(
+      "TRIAGE_NOTHING_TO_SORT",
+    );
+  });
+
+  it("is decided once, only once it has suggestions, and only with its own groups", async () => {
+    const { client, owner, event } = await withQuestions(pricing);
+    model.answer = (prompt) => {
+      const a = labelOf(prompt, "How much does it cost?");
+      const b = labelOf(prompt, "What is the price?");
+      return Promise.resolve(
+        answered({
+          groups: [{ representative: a, questions: [a, b], reason: "" }],
+          answer_order: [],
+        }),
+      );
+    };
+    const queued = await started(client, owner, event.id);
+    const early = await decide(client, owner, queued, []);
+    await worker.get(TriageRunner).run(queued);
+
+    const unknown = await decide(client, owner, queued, [1]);
+    const rejected = await decide(client, owner, queued, []);
+    const again = await decide(client, owner, queued, [0]);
+
+    expect(ProblemDetails.parse(early.body).code).toBe(
+      "TRIAGE_ALREADY_DECIDED",
+    );
+    expect(ProblemDetails.parse(unknown.body).code).toBe("VALIDATION_FAILED");
+    expect(TriageRun.parse(rejected.body).decision).toBe("REJECTED");
+    expect(ProblemDetails.parse(again.body).code).toBe(
+      "TRIAGE_ALREADY_DECIDED",
+    );
+    expect(
+      await database.query(
+        "SELECT 1 FROM questions WHERE merged_into_id IS NOT NULL AND event_id = $1",
+        [event.id],
+      ),
+    ).toEqual([]);
+  });
+
+  it("merges against the questions as they are when decided", async () => {
+    const { client, owner, event, questions } = await withQuestions(pricing);
+    const [howMuch, price, free] = questions;
+    model.answer = (prompt) => {
+      const a = labelOf(prompt, "How much does it cost?");
+      const b = labelOf(prompt, "What is the price?");
+      const c = labelOf(prompt, "Is there a free tier?");
+      return Promise.resolve(
+        answered({
+          groups: [{ representative: a, questions: [a, b, c], reason: "" }],
+          answer_order: [],
+        }),
+      );
+    };
+    const run = await triaged(client, owner, event.id);
+    // Since the run, one of them was deleted.
+    await database.query("DELETE FROM questions WHERE id = $1", [free?.id]);
+
+    const decided = await decide(client, owner, run.id, [0]);
+
+    expect(TriageRun.parse(decided.body).decision).toBe("ACCEPTED");
+    const rows = await database.query<{
+      id: string;
+      merged_into_id: string | null;
+    }>(
+      "SELECT id, merged_into_id FROM questions WHERE event_id = $1 ORDER BY created_at",
+      [event.id],
+    );
+    expect(rows).toEqual([
+      { id: howMuch?.id, merged_into_id: null },
+      { id: price?.id, merged_into_id: howMuch?.id },
+    ]);
+  });
+
+  it("leaves merged questions out of the next run", async () => {
+    const { client, owner, event, questions } = await withQuestions(pricing);
+    const [howMuch, price, free] = questions;
+    model.answer = (prompt) => {
+      const a = labelOf(prompt, "How much does it cost?");
+      const b = labelOf(prompt, "What is the price?");
+      return Promise.resolve(
+        answered({
+          groups: [{ representative: a, questions: [a, b], reason: "" }],
+          answer_order: [],
+        }),
+      );
+    };
+    const first = await triaged(client, owner, event.id);
+    await decide(client, owner, first.id, [0]);
+    model.answer = () =>
+      Promise.resolve(answered({ groups: [], answer_order: [] }));
+
+    const second = await triaged(client, owner, event.id);
+
+    expect(second.questionCount).toBe(2);
+    const [row] = await database.query<{ question_ids: string[] }>(
+      "SELECT question_ids FROM triage_runs WHERE id = $1",
+      [second.id],
+    );
+    expect([...(row?.question_ids ?? [])].sort()).toEqual(
+      [howMuch?.id, free?.id].sort(),
+    );
+    expect(model.sent.at(-1)).not.toContain("What is the price?");
+    expect(price).toBeDefined();
+  });
+
+  it("changes nothing in an archived event", async () => {
+    const { client, owner, event } = await withQuestions(pricing);
+    model.answer = (prompt) => {
+      const a = labelOf(prompt, "How much does it cost?");
+      const b = labelOf(prompt, "What is the price?");
+      return Promise.resolve(
+        answered({
+          groups: [{ representative: a, questions: [a, b], reason: "" }],
+          answer_order: [],
+        }),
+      );
+    };
+    const run = await triaged(client, owner, event.id);
+    for (const to of ["CANCELLED", "ARCHIVED"]) {
+      const moved = await client.send(
+        owner,
+        "post",
+        `/events/${event.id}/transitions`,
+        { to },
+      );
+      expect(moved.status, moved.text).toBe(200);
+    }
+
+    const decided = await decide(client, owner, run.id, [0]);
+    const restarted = await client.send(
+      owner,
+      "post",
+      `/events/${event.id}/question-triage-runs`,
+    );
+
+    expect(ProblemDetails.parse(decided.body).code).toBe("EVENT_ARCHIVED");
+    expect(ProblemDetails.parse(restarted.body).code).toBe("EVENT_ARCHIVED");
+    expect(
+      await database.query(
+        "SELECT 1 FROM questions WHERE merged_into_id IS NOT NULL AND event_id = $1",
+        [event.id],
+      ),
+    ).toEqual([]);
+  });
+
+  it("refuses a vote that waited for the merge of its question", async () => {
+    const { client, owner, event, asker, questions } =
+      await withQuestions(pricing);
+    const [howMuch, price] = questions;
+    model.answer = (prompt) => {
+      const a = labelOf(prompt, "How much does it cost?");
+      const b = labelOf(prompt, "What is the price?");
+      return Promise.resolve(
+        answered({
+          groups: [{ representative: a, questions: [a, b], reason: "" }],
+          answer_order: [],
+        }),
+      );
+    };
+    const run = await triaged(client, owner, event.id);
+    const block = await holdLock(
+      database.url,
+      "SELECT id FROM events WHERE id = $1 FOR UPDATE",
+      [event.id],
+    );
+    let statuses: number[];
+    try {
+      const deciding = Promise.resolve(decide(client, owner, run.id, [0]));
+      await block.waitForWaiters(1);
+      const voting = Promise.resolve(vote(asker, event.slug, price?.id ?? ""));
+      await block.waitForWaiters(2);
+      await block.release();
+      statuses = [(await deciding).status, (await voting).status];
+    } catch (error) {
+      await block.release().catch(() => undefined);
+      throw error;
+    }
+
+    // The asker still sees the merged question (theirs), but may not vote.
+    expect(statuses).toEqual([200, 409]);
+    const [kept] = await database.query<{ vote_count: number }>(
+      "SELECT vote_count FROM questions WHERE id = $1",
+      [howMuch?.id],
+    );
+    expect(kept?.vote_count).toBe(0);
+  });
+
+  it("is for Managers and Owners of the event's workspace only", async () => {
+    const { client, owner, event } = await withQuestions(["Is there parking?"]);
+    const manager = await memberOf(client, mailer, owner, "MANAGER");
+    const analyst = await memberOf(client, mailer, owner, "ANALYST");
+    const stranger = await client.newOwner("stranger");
+    model.answer = () =>
+      Promise.resolve(answered({ groups: [], answer_order: [] }));
+    const runId = await started(client, manager, event.id);
+    await worker.get(TriageRunner).run(runId);
+
+    const calls = (session: TestSession) => [
+      client.send(session, "post", `/events/${event.id}/question-triage-runs`),
+      client.get(session, `/question-triage-runs/${runId}`),
+      decide(client, session, runId, []),
+    ];
+    const analysts = await Promise.all(calls(analyst));
+    const strangers = await Promise.all(calls(stranger));
+
+    expect(analysts.map(({ status }) => status)).toEqual([403, 403, 403]);
+    expect(strangers.map(({ status }) => status)).toEqual([404, 404, 404]);
+    expect((await runOf(client, manager, runId)).status).toBe("SUCCEEDED");
+    expect((await decide(client, owner, runId, [])).status).toBe(200);
+  });
+
+  it("runs as the worker's job, from the outbox", async () => {
+    const { client, owner, event } = await withQuestions(["Is it free?"]);
+    model.answer = () =>
+      Promise.resolve(answered({ groups: [], answer_order: [] }));
+    const runId = await started(client, owner, event.id);
+    const [message] = await database.query<{ payload: { runId: string } }>(
+      "SELECT payload FROM outbox_messages WHERE type = 'triage.requested' AND payload->>'runId' = $1",
+      [runId],
+    );
+
+    await worker
+      .get(TriageConsumer)
+      .process({ name: "run", data: message?.payload });
+    // Run twice (a retried job): nothing more happens.
+    await worker
+      .get(TriageConsumer)
+      .process({ name: "run", data: message?.payload });
+
+    expect((await runOf(client, owner, runId)).status).toBe("SUCCEEDED");
+    await expect(
+      worker.get(TriageConsumer).process({ name: "other" }),
+    ).rejects.toThrow(/Unknown triage job/);
+  });
+
+  it("closes runs a worker left unfinished, so the event can triage again", async () => {
+    const { client, owner, event } = await withQuestions(["Lunch?"]);
+    const runId = await started(client, owner, event.id);
+    await database.query(
+      "UPDATE triage_runs SET status = 'RUNNING', started_at = now() - interval '2 minutes' WHERE id = $1",
+      [runId],
+    );
+    const other = await withQuestions(["Dinner?"]);
+    const queuedId = await started(other.client, other.owner, other.event.id);
+    await database.query(
+      "UPDATE triage_runs SET created_at = now() - interval '6 minutes' WHERE id = $1",
+      [queuedId],
+    );
+
+    await worker.get(TriageConsumer).process({ name: "sweep" });
+
+    expect(await runOf(client, owner, runId)).toMatchObject({
+      status: "TIMED_OUT",
+      failure: "The run was interrupted",
+    });
+    expect(await runOf(other.client, other.owner, queuedId)).toMatchObject({
+      status: "FAILED",
+      failure: "The run never started",
+    });
+    expect(await started(client, owner, event.id)).not.toBe(runId);
+  });
+});

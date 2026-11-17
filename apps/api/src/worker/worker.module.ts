@@ -10,6 +10,8 @@ import { ConfigModule } from "../config/config.module.js";
 import { DatabaseModule } from "../database/database.module.js";
 import { MaintenanceConsumer } from "./maintenance.consumer.js";
 import { WebhooksConsumer } from "./webhooks.consumer.js";
+import { TriageConsumer } from "./triage.consumer.js";
+import { TriageWorkerModule } from "../triage/triage-worker.module.js";
 import { WebhookDeliveryModule } from "../webhooks/webhook-delivery.module.js";
 import { DemoModule } from "../demo/demo.module.js";
 import { NetModule } from "../net/net.module.js";
@@ -60,6 +62,7 @@ export class WorkerModule {
         QueuesModule,
         RealtimeSignalsModule,
         WebhookDeliveryModule,
+        TriageWorkerModule,
       ],
       providers: [
         {
@@ -76,6 +79,7 @@ export class WorkerModule {
         RetentionJob,
         MaintenanceConsumer,
         WebhooksConsumer,
+        TriageConsumer,
       ],
     };
   }

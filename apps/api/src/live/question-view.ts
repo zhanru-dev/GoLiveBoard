@@ -3,6 +3,7 @@ import type { Question, QuestionsEvent } from "@opspilot/contracts";
 import type { Prisma } from "../generated/prisma/client.js";
 import { FORMER_STAFF_NAME } from "./chat-view.js";
 import {
+  isPublicQuestion,
   isQuestionVisibleTo,
   type QuestionViewer,
 } from "./domain/questions.js";
@@ -14,6 +15,7 @@ export const QUESTION_SELECT = {
   status: true,
   pinSlot: true,
   voteCount: true,
+  mergedIntoId: true,
   version: true,
   createdAt: true,
   firstPublishedAt: true,
@@ -39,6 +41,7 @@ export function toQuestion(row: QuestionRow): Question {
         : { kind: "ATTENDEE", name: row.authorAttendee.name },
     pinSlot: row.pinSlot,
     voteCount: row.voteCount,
+    mergedIntoId: row.mergedIntoId,
     version: row.version,
     createdAt: row.createdAt.toISOString(),
   };
@@ -56,8 +59,10 @@ export function authorKeyOf(row: {
 }
 
 /** Whether everyone on the channel may see a question in this state. */
-export function isPublic(row: Pick<QuestionRow, "status">): boolean {
-  return row.status === "PUBLISHED" || row.status === "ANSWERED";
+export function isPublic(
+  row: Pick<QuestionRow, "status" | "mergedIntoId">,
+): boolean {
+  return isPublicQuestion(row);
 }
 
 /**

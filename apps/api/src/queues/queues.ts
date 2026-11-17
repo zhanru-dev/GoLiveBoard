@@ -48,11 +48,24 @@ export const WEBHOOK_JOBS = {
   reseal: "reseal",
 } as const;
 
+/**
+ * AI question triage (FR-RN-6): a run waits up to 8 seconds for the model,
+ * on a queue of its own so nothing else waits behind it.
+ */
+export const TRIAGE_QUEUE = "ai-triage";
+export const TRIAGE_JOBS = {
+  /** Carries out one requested run. */
+  run: "run",
+  /** Every minute: closes runs a worker left unfinished. */
+  sweep: "sweep",
+} as const;
+
 /** Every queue the worker consumes. */
 export const QUEUE_NAMES = [
   STREAM_CHECKS_QUEUE,
   MAINTENANCE_QUEUE,
   WEBHOOKS_QUEUE,
+  TRIAGE_QUEUE,
 ] as const;
 export type QueueName = (typeof QUEUE_NAMES)[number];
 

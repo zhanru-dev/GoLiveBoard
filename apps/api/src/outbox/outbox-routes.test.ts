@@ -48,6 +48,18 @@ describe("routeOutboxMessage", () => {
     },
   );
 
+  it("turns a triage request into its run job, keyed by the message", () => {
+    const runId = "0193f2a4-1111-7b2a-9d1f-3e5c7a9b1d2f";
+    expect(
+      routeOutboxMessage({ id, type: "triage.requested", payload: { runId } }),
+    ).toEqual({
+      queue: "ai-triage",
+      name: "run",
+      data: { runId },
+      jobId: `outbox-${id}`,
+    });
+  });
+
   it("routes an unknown type nowhere", () => {
     expect(
       routeOutboxMessage({ id, type: "something.else", payload: {} }),

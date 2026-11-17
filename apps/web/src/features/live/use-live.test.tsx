@@ -17,6 +17,9 @@ const question = (id: string, changes: Partial<Question> = {}): Question => ({
   author: { kind: "ATTENDEE", name: "Ada" },
   pinSlot: null,
   voteCount: 0,
+
+  mergedIntoId: null,
+
   version: 1,
   createdAt: `2026-11-15T12:00:0${id}.000Z`,
   ...changes,

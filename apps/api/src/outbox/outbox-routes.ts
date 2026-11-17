@@ -1,5 +1,6 @@
 import {
   DemoEventsDeletedPayload,
+  TriageRequestedPayload,
   OutboxMessageType,
   StreamCheckRequestedPayload,
 } from "@opspilot/contracts";
@@ -10,6 +11,8 @@ import {
   MAINTENANCE_QUEUE,
   STREAM_CHECK_JOBS,
   STREAM_CHECKS_QUEUE,
+  TRIAGE_JOBS,
+  TRIAGE_QUEUE,
   WEBHOOK_JOBS,
   WEBHOOKS_QUEUE,
 } from "../queues/queues.js";
@@ -63,6 +66,13 @@ export function routeOutboxMessage(
         queue: WEBHOOKS_QUEUE,
         name: WEBHOOK_JOBS.fanOut,
         data: { outboxMessageId: message.id },
+        jobId: `outbox-${message.id}`,
+      };
+    case "triage.requested":
+      return {
+        queue: TRIAGE_QUEUE,
+        name: TRIAGE_JOBS.run,
+        data: TriageRequestedPayload.parse(message.payload),
         jobId: `outbox-${message.id}`,
       };
     default:

@@ -125,6 +125,12 @@ export const Question = z.object({
   /** 1 to 3 while pinned (FR-RN-5). */
   pinSlot: z.int().min(1).max(3).nullable(),
   voteCount: z.int().min(0),
+  /**
+   * Set when a moderator merged it into another question (AI triage,
+   * FR-RN-6). Only moderators and its author still see it; its votes moved
+   * to that question.
+   */
+  mergedIntoId: z.uuid().nullable(),
   /** Sent back in If-Match by moderators; votes do not change it. */
   version: z.int().min(1),
   createdAt: z.iso.datetime(),

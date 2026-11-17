@@ -49,6 +49,6 @@ import { WatchService } from "./watch.service.js";
     WatchService,
     ConnectionSlots,
   ],
-  exports: [RealtimeGateway],
+  exports: [RealtimeGateway, QuestionsService],
 })
 export class LiveModule {}

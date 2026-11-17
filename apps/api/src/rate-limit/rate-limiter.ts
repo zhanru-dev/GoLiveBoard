@@ -102,6 +102,17 @@ export const RATE_LIMITS = {
     limit: 60,
     windowMs: MINUTE_MS,
   },
+  /**
+   * AI triage runs on one event (FR-RN-6): each costs money, and one runs
+   * at a time anyway.
+   */
+  triagePerEvent: {
+    name: "triage:event",
+    limit: 10,
+    windowMs: 10 * MINUTE_MS,
+    // A run costs money: no Valkey, no count, no run.
+    failClosed: true,
+  },
   /** "Check now" on one event's stream; checks already run every 30 s. */
   streamCheckPerEvent: {
     name: "stream-check:event",
