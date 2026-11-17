@@ -548,6 +548,33 @@ describe("AI question triage (FR-RN-6, ADR-0012)", { timeout: 60_000 }, () => {
     },
   );
 
+  it("records the last model to answer, and every attempt's cost, for a refusal after a fallback", async () => {
+    const { client, owner, event } = await withQuestions([
+      "Can I bring a guest?",
+    ]);
+    model.answer = () =>
+      Promise.reject(
+        new TriageModelError(
+          "REFUSED",
+          "The AI model declined to sort these questions",
+          [
+            { model: "claude-opus-5-5", inputTokens: 1_000, outputTokens: 100 },
+            { model: "claude-opus-4-8", inputTokens: 1_000, outputTokens: 100 },
+          ],
+        ),
+      );
+
+    const run = await triaged(client, owner, event.id);
+
+    // $4/M and $20/M, then $5/M and $25/M.
+    expect(run).toMatchObject({
+      model: "claude-opus-4-8",
+      inputTokens: 2_000,
+      outputTokens: 200,
+      costMicros: 6_000 + 7_500,
+    });
+  });
+
   it("is unavailable, and Q&A unaffected, when no model is configured", async () => {
     const off = await createTestApp({
       env: {
@@ -1202,21 +1229,86 @@ describe("AI question triage (FR-RN-6, ADR-0012)", { timeout: 60_000 }, () => {
     });
   });
 
-  it("counts the reservation of a run deleted with its event as spent, once", async () => {
+  it("counts the reservation of a run deleted with its event as spent, once, and only that", async () => {
     const { client, owner, event } = await withQuestions(["Is there lunch?"]);
+    // A run that ended earlier today: its reservation was settled, though
+    // the run still records it.
+    model.answer = () =>
+      Promise.resolve(answered({ groups: [], answer_order: [] }));
+    expect((await triaged(client, owner, event.id)).status).toBe("SUCCEEDED");
+    // A run still waiting, counted yesterday, in another of its events.
+    const other = await openEvent(client, owner);
+    await database.query(
+      `INSERT INTO triage_runs (event_id, question_ids, reserved_micros, spend_day)
+       VALUES ($1, ARRAY[uuidv7()], 1000000, (now() AT TIME ZONE 'Europe/London')::date - 1)`,
+      [other.id],
+    );
+    const workspaceId = (await client.me(owner)).activeWorkspace.workspaceId;
+    await database.query(
+      `INSERT INTO triage_spend (workspace_id, day, runs, reserved_micros)
+       VALUES ($1, (now() AT TIME ZONE 'Europe/London')::date - 1, 1, 1000000)`,
+      [workspaceId],
+    );
     const runId = await started(client, owner, event.id);
-    const { reserved } = await spentToday(client, owner);
+    const { reserved, spent } = await spentToday(client, owner);
     // What the demo's reset does: the run goes with its event, unsettled.
     await database.query("DELETE FROM triage_runs WHERE id = $1", [runId]);
 
     await worker.get(TriageConsumer).process({ name: "sweep" });
     await worker.get(TriageConsumer).process({ name: "sweep" });
 
+    expect(spent).toBe(6_000);
     expect(await spentToday(client, owner)).toEqual({
-      runs: 1,
-      spent: reserved,
+      runs: 2,
+      spent: 6_000 + reserved,
       reserved: 0,
     });
+    const [yesterday] = await database.query<{
+      spent: string;
+      reserved: string;
+    }>(
+      `SELECT spent_micros::text AS spent, reserved_micros::text AS reserved
+       FROM triage_spend WHERE workspace_id = $1
+       AND day = (now() AT TIME ZONE 'Europe/London')::date - 1`,
+      [workspaceId],
+    );
+    expect(yesterday).toEqual({ spent: "0", reserved: "1000000" });
+  });
+
+  it("counts an orphaned reservation once when two sweeps overlap, keeping a live run's", async () => {
+    const { client, owner, event } = await withQuestions(["Is there lunch?"]);
+    const second = await openEvent(client, owner);
+    await asked(await attendee(second.slug), second.slug, "Is there dinner?");
+    const orphan = await started(client, owner, event.id);
+    const { reserved: orphaned } = await spentToday(client, owner);
+    const live = await started(client, owner, second.id);
+    const { reserved: both } = await spentToday(client, owner);
+    await database.query("DELETE FROM triage_runs WHERE id = $1", [orphan]);
+    const workspaceId = (await client.me(owner)).activeWorkspace.workspaceId;
+    const block = await holdLock(
+      database.url,
+      `SELECT 1 FROM triage_spend WHERE workspace_id = $1
+       AND day = (now() AT TIME ZONE 'Europe/London')::date FOR UPDATE`,
+      [workspaceId],
+    );
+    let sweeps: Promise<unknown>;
+    try {
+      sweeps = Promise.all([
+        worker.get(TriageConsumer).process({ name: "sweep" }),
+        worker.get(TriageConsumer).process({ name: "sweep" }),
+      ]);
+      await block.waitForWaiters(2);
+    } finally {
+      await block.release();
+    }
+    await sweeps;
+
+    expect(await spentToday(client, owner)).toEqual({
+      runs: 2,
+      spent: orphaned,
+      reserved: both - orphaned,
+    });
+    expect((await runOf(client, owner, live)).status).toBe("QUEUED");
   });
 
   it("keeps a reservation made while the sweep counts what was orphaned", async () => {

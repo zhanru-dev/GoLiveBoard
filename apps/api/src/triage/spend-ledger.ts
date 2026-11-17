@@ -1,4 +1,4 @@
-import type { Prisma } from "../generated/prisma/client.js";
+import type { Prisma, PrismaClient } from "../generated/prisma/client.js";
 import type { Spent } from "./domain/budget.js";
 
 /** A UK calendar day as the `date` column stores it. */
@@ -64,35 +64,44 @@ export async function settle(
       AND spend.day = run.spend_day`;
 }
 
+/** Sweeps that count orphaned reservations take this lock, one at a time. */
+const ORPHANS_LOCK = "opspilot:triage-orphans";
+
 /**
  * Counts as spent what runs deleted unsettled still hold (their event was
  * deleted while they ran, as the demo's reset does): they may have been
- * billed. One statement, so the day's reservations and its active runs are
- * read from one snapshot, and the change is applied relative to the row as
- * it is then: a reservation made or settled meanwhile is kept.
+ * billed.
+ *
+ * Sweeps take a lock first, one at a time: two that overlapped would each
+ * count the same orphaned amount. The statement then starts after the
+ * previous sweep committed, and reads the day's reservations and its active
+ * runs from one snapshot. It applies the change relative to the row as it
+ * is then, so a start or a settlement committed meanwhile, which changes
+ * only its own run's reservation, is kept.
  *
  * @returns how many days it corrected
  */
-export function settleOrphans(prisma: {
-  $executeRaw: Prisma.TransactionClient["$executeRaw"];
-}): Promise<number> {
-  return prisma.$executeRaw`
-    UPDATE triage_spend AS spend
-    SET reserved_micros = spend.reserved_micros - orphaned.micros,
-        spent_micros = spend.spent_micros + orphaned.micros
-    FROM (
-      SELECT day_row.workspace_id, day_row.day,
-             day_row.reserved_micros - coalesce(sum(run.reserved_micros), 0) AS micros
-      FROM triage_spend AS day_row
-      LEFT JOIN events AS event ON event.workspace_id = day_row.workspace_id
-      LEFT JOIN triage_runs AS run
-        ON run.event_id = event.id
-       AND run.spend_day = day_row.day
-       AND run.status IN ('QUEUED', 'RUNNING')
-      WHERE day_row.reserved_micros > 0
-      GROUP BY day_row.workspace_id, day_row.day, day_row.reserved_micros
-    ) AS orphaned
-    WHERE spend.workspace_id = orphaned.workspace_id
-      AND spend.day = orphaned.day
-      AND orphaned.micros > 0`;
+export function settleOrphans(prisma: PrismaClient): Promise<number> {
+  return prisma.$transaction(async (tx) => {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${ORPHANS_LOCK}, 0))`;
+    return tx.$executeRaw`
+      UPDATE triage_spend AS spend
+      SET reserved_micros = spend.reserved_micros - orphaned.micros,
+          spent_micros = spend.spent_micros + orphaned.micros
+      FROM (
+        SELECT day_row.workspace_id, day_row.day,
+               day_row.reserved_micros - coalesce(sum(run.reserved_micros), 0) AS micros
+        FROM triage_spend AS day_row
+        LEFT JOIN events AS event ON event.workspace_id = day_row.workspace_id
+        LEFT JOIN triage_runs AS run
+          ON run.event_id = event.id
+         AND run.spend_day = day_row.day
+         AND run.status IN ('QUEUED', 'RUNNING')
+        WHERE day_row.reserved_micros > 0
+        GROUP BY day_row.workspace_id, day_row.day, day_row.reserved_micros
+      ) AS orphaned
+      WHERE spend.workspace_id = orphaned.workspace_id
+        AND spend.day = orphaned.day
+        AND orphaned.micros > 0`;
+  });
 }
