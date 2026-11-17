@@ -67,7 +67,7 @@ for (const [index, evalCase] of EVAL_CASES.entries()) {
         evalCase.mustStayAlone,
       ).score
     : 0;
-  totalMicros += costMicros(answer.model, answer.usage) ?? 0;
+  totalMicros += costMicros(answer.attempts);
   process.stdout.write(
     `${evalCase.name}: score ${score.toFixed(2)}, ${String(latencyMs)} ms, ${answer.model}\n`,
   );

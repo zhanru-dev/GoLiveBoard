@@ -154,6 +154,11 @@ const AppConfigSchema = z
     /** Another endpoint for the Anthropic API (tests, proxies). */
     ANTHROPIC_BASE_URL: optional(z.url({ protocol: /^https?$/ })),
     AI_TRIAGE_MODEL: z.string().min(1).max(100).default("claude-opus-5-5"),
+    /**
+     * What each real workspace may spend on AI triage per UK day, in US
+     * dollars; no limit when unset (the demo always has its own).
+     */
+    TRIAGE_DAILY_BUDGET_USD: optional(z.coerce.number().positive().max(10_000)),
     /** Where errors are reported; reporting is off when unset. */
     SENTRY_DSN: optional(z.url({ protocol: /^https?$/ })),
     /** Defaults to NODE_ENV. */
@@ -218,6 +223,10 @@ const AppConfigSchema = z
       apiKey: env.ANTHROPIC_API_KEY,
       baseUrl: env.ANTHROPIC_BASE_URL,
       model: env.AI_TRIAGE_MODEL,
+      dailyBudgetMicros:
+        env.TRIAGE_DAILY_BUDGET_USD === undefined
+          ? undefined
+          : Math.round(env.TRIAGE_DAILY_BUDGET_USD * 1_000_000),
     },
     errorReporting: {
       dsn: env.SENTRY_DSN,

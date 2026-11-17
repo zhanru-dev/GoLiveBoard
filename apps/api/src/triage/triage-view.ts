@@ -15,6 +15,7 @@ export const TRIAGE_RUN_SELECT = {
   inputTokens: true,
   outputTokens: true,
   costMicros: true,
+  mergedCount: true,
   createdAt: true,
   finishedAt: true,
 } as const satisfies Prisma.TriageRunSelect;
@@ -40,6 +41,7 @@ export function toTriageRun(row: TriageRunRow): TriageRun {
     inputTokens: row.inputTokens,
     outputTokens: row.outputTokens,
     costMicros: row.costMicros,
+    mergedCount: row.mergedCount,
     createdAt: row.createdAt.toISOString(),
     finishedAt: row.finishedAt?.toISOString() ?? null,
   };

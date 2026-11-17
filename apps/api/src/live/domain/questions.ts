@@ -107,7 +107,12 @@ export type ModerationPlan =
  * @param usedSlots the slots other questions of the event hold
  */
 export function planModeration(
-  current: { readonly status: QuestionStatus; readonly pinSlot: number | null },
+  current: {
+    readonly status: QuestionStatus;
+    readonly pinSlot: number | null;
+    /** A question merged into another is never pinned (FR-RN-6). */
+    readonly mergedIntoId?: string | null;
+  },
   change: ModerationChange,
   usedSlots: readonly number[],
 ): ModerationPlan {
@@ -118,7 +123,9 @@ export function planModeration(
   ) {
     return { allowed: false, reason: "ILLEGAL_TRANSITION" };
   }
-  const visible = status === "PUBLISHED" || status === "ANSWERED";
+  const visible =
+    (status === "PUBLISHED" || status === "ANSWERED") &&
+    (current.mergedIntoId ?? null) === null;
   const wantsPin = change.pinned ?? current.pinSlot !== null;
   if (!wantsPin || !visible) {
     if (change.pinned === true) {

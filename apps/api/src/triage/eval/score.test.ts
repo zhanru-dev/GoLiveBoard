@@ -39,6 +39,14 @@ describe("scoreCase", () => {
     expect(result.score).toBeCloseTo(1 / 3);
   });
 
+  it("counts what a cautious grouping missed: right pairs only, but too few", () => {
+    // Expected pairs: ab, ac, bc. Found: ab only. Precision 1, recall 1/3.
+    const result = scoreCase([["a", "b", "c"]], grouping(["a", "b"]), same);
+    expect(result.precision).toBe(1);
+    expect(result.recall).toBeCloseTo(1 / 3);
+    expect(result.score).toBeCloseTo(0.5);
+  });
+
   it("scores nothing found 0 when something was expected", () => {
     expect(scoreCase([["a", "b"]], grouping(), same).score).toBe(0);
   });

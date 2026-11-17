@@ -9,7 +9,7 @@ During busy events, hundreds of questions arrive and many repeat each other. Mod
 
 ## Decision
 
-- Triage runs as a background job started by a moderator. It sends **only question IDs and texts**, never names or emails.
+- Triage runs as a background job started by a moderator. It sends **only questions' text, under short labels** (q1, q2…), never IDs, names or emails; angle brackets in the text are escaped, so a question cannot close the block it is sent in.
 - The model is called through the official Anthropic SDK, behind OpsPilot's own `TriageModel` interface, with a Zod schema for structured output (groups, representative question, reason, suggested order). Questions are named by short labels (q1, q2…), never by their IDs. The result is validated again: every question must be one of those sent, none in two groups.
 - **Nothing changes until a moderator confirms**; confirmed merges are applied in one transaction and audited.
 - An 8-second timeout and any provider error leave Q&A fully usable, with the panel showing that suggestions are unavailable.

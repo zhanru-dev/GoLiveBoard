@@ -1,15 +1,13 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { betaZodOutputFormat } from "@anthropic-ai/sdk/helpers/beta/zod";
 
+import type { Attempt } from "./domain/pricing.js";
 import { ModelTriage, TRIAGE_SYSTEM_PROMPT } from "./domain/prompt.js";
 import {
   type TriageAnswer,
   TriageModel,
   TriageModelError,
 } from "./triage-model.js";
-
-/** Room for 200 questions' groups and reasons. */
-const MAX_OUTPUT_TOKENS = 8_000;
 
 /**
  * Claude through the Anthropic SDK, with structured output (the reply must
@@ -33,13 +31,17 @@ export class AnthropicTriageModel extends TriageModel {
     });
   }
 
-  async triage(questions: string, signal: AbortSignal): Promise<TriageAnswer> {
+  async triage(
+    questions: string,
+    signal: AbortSignal,
+    maxOutputTokens = 8_000,
+  ): Promise<TriageAnswer> {
     let response;
     try {
       response = await this.client.beta.messages.parse(
         {
           model: this.model,
-          max_tokens: MAX_OUTPUT_TOKENS,
+          max_tokens: maxOutputTokens,
           betas: ["server-side-fallback-2026-07-01"],
           fallbacks: "default",
           output_config: {
@@ -91,16 +93,71 @@ export class AnthropicTriageModel extends TriageModel {
         "The AI model's answer was incomplete",
       );
     }
+    const attempts = attemptsOf(response, this.model);
     return {
       output: response.parsed_output,
       model: response.model,
       usage: {
-        inputTokens:
-          response.usage.input_tokens +
-          (response.usage.cache_creation_input_tokens ?? 0) +
-          (response.usage.cache_read_input_tokens ?? 0),
-        outputTokens: response.usage.output_tokens,
+        inputTokens: attempts.reduce(
+          (sum, { inputTokens }) => sum + inputTokens,
+          0,
+        ),
+        outputTokens: attempts.reduce(
+          (sum, { outputTokens }) => sum + outputTokens,
+          0,
+        ),
       },
+      attempts,
     };
   }
+}
+
+interface UsageCounts {
+  readonly input_tokens: number;
+  readonly output_tokens: number;
+  readonly cache_creation_input_tokens?: number | null;
+  readonly cache_read_input_tokens?: number | null;
+}
+
+/**
+ * What each model's attempt used. With the API's fallback, `iterations`
+ * lists the declined attempt and the fallback's; otherwise the top-level
+ * usage is the one attempt. Cache tokens count as input (at full price:
+ * an overestimate, never an underestimate).
+ */
+function attemptsOf(
+  response: {
+    readonly model: string;
+    readonly usage: UsageCounts & {
+      readonly iterations?:
+        | readonly (UsageCounts & {
+            readonly type: string;
+            readonly model?: string | null;
+          })[]
+        | null;
+    };
+  },
+  requested: string,
+): Attempt[] {
+  const input = (usage: UsageCounts) =>
+    usage.input_tokens +
+    (usage.cache_creation_input_tokens ?? 0) +
+    (usage.cache_read_input_tokens ?? 0);
+  const iterations = (response.usage.iterations ?? []).filter(
+    ({ type }) => type === "message" || type === "fallback_message",
+  );
+  if (iterations.length === 0) {
+    return [
+      {
+        model: response.model,
+        inputTokens: input(response.usage),
+        outputTokens: response.usage.output_tokens,
+      },
+    ];
+  }
+  return iterations.map((iteration) => ({
+    model: iteration.model ?? requested,
+    inputTokens: input(iteration),
+    outputTokens: iteration.output_tokens,
+  }));
 }

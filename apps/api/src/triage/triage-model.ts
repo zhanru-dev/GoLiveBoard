@@ -1,12 +1,15 @@
 import type { ModelTriage } from "./domain/prompt.js";
-import type { TokenUsage } from "./domain/pricing.js";
+import type { Attempt, TokenUsage } from "./domain/pricing.js";
 
 /** What a model answered, and what it took. */
 export interface TriageAnswer {
   readonly output: ModelTriage;
   /** The model that actually answered (a fallback, possibly). */
   readonly model: string;
+  /** All attempts' tokens together. */
   readonly usage: TokenUsage;
+  /** Each model's attempt, a declined one too: what the request cost. */
+  readonly attempts: readonly Attempt[];
 }
 
 /** Why a model gave no usable answer, in words fit for a moderator. */
@@ -32,6 +35,7 @@ export abstract class TriageModel {
   abstract triage(
     questions: string,
     signal: AbortSignal,
+    maxOutputTokens?: number,
   ): Promise<TriageAnswer>;
 }
 

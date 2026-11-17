@@ -7,20 +7,20 @@
       {
         "representative": "q3",
         "questions": ["q1", "q2", "q3"],
-        "reason": "All three ask about the product's price."
+        "reason": "All ask about the product's price; q3 is the most specific."
       },
       {
         "representative": "q5",
         "questions": ["q4", "q5", "q6"],
-        "reason": "All three ask when or whether dark mode is coming."
+        "reason": "All ask whether and when dark mode will arrive."
       }
     ],
     "answer_order": ["q3", "q5"]
   },
   "usage": {
     "inputTokens": 785,
-    "outputTokens": 108
+    "outputTokens": 116
   },
-  "latencyMs": 2150,
-  "recordedAt": "2026-11-17T12:52:57.369Z"
+  "latencyMs": 2089,
+  "recordedAt": "2026-11-17T17:11:21.375Z"
 }

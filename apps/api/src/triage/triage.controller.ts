@@ -31,6 +31,14 @@ export class TriageController {
     return this.triage.start(actor, eventId);
   }
 
+  @Get("events/:eventId/question-triage-runs/latest")
+  latest(
+    @CurrentActor() actor: Actor,
+    @Param("eventId", ParseUUIDPipe) eventId: string,
+  ): Promise<TriageRun> {
+    return this.triage.latest(actor, eventId);
+  }
+
   @Get("question-triage-runs/:runId")
   get(
     @CurrentActor() actor: Actor,

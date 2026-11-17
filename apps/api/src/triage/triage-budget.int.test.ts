@@ -5,6 +5,7 @@ import { afterAll, beforeAll, describe, expect, inject, it } from "vitest";
 
 import { ACCESS_COOKIE, REFRESH_COOKIE } from "../auth/cookies.js";
 import { DEMO_PEOPLE, DEMO_WORKSPACE } from "../demo/demo-accounts.js";
+import { openEvent } from "../testing/admission.js";
 import { ApiClient, type TestSession } from "../testing/api-client.js";
 import { TEST_S3_BUCKET, TEST_S3_CREDENTIALS } from "../testing/containers.js";
 import { setCookies } from "../testing/cookies.js";
@@ -16,6 +17,8 @@ import {
 import { CapturingMailer } from "../testing/fakes.js";
 import { createTestApp, TEST_ORIGIN } from "../testing/test-app.js";
 import {
+  dateIn,
+  DEMO_TIME_ZONE,
   DEMO_TRIAGE_DAILY_MICROS,
   DEMO_TRIAGE_DAILY_RUNS,
 } from "./domain/budget.js";
@@ -30,28 +33,30 @@ class NeverCalled extends TriageModel {
   }
 }
 
-/** docs/06 section 10: the shared demo's daily budget for AI triage. */
-describe("the demo's AI budget", { timeout: 60_000 }, () => {
+/** docs/06 section 10: what a workspace may spend on AI triage each day. */
+describe("the AI budget", { timeout: 60_000 }, () => {
   let database: TestDatabase;
   let app: NestExpressApplication;
   let demo: TestSession;
   let events: { id: string }[];
+  const today = () => dateIn(new Date(), DEMO_TIME_ZONE);
+
+  const env = () => ({
+    DATABASE_URL: database.url,
+    VALKEY_URL: inject("valkeyUrl"),
+    TRUST_PROXY_HOPS: "1",
+    S3_ENDPOINT: inject("s3Endpoint"),
+    S3_BUCKET: TEST_S3_BUCKET,
+    S3_ACCESS_KEY_ID: TEST_S3_CREDENTIALS.accessKeyId,
+    S3_SECRET_ACCESS_KEY: TEST_S3_CREDENTIALS.secretAccessKey,
+    S3_FORCE_PATH_STYLE: "true",
+    S3_CREATE_BUCKET: "true",
+  });
 
   beforeAll(async () => {
     database = await createTestDatabase();
     app = await createTestApp({
-      env: {
-        DATABASE_URL: database.url,
-        VALKEY_URL: inject("valkeyUrl"),
-        DEMO_MODE: "true",
-        TRUST_PROXY_HOPS: "1",
-        S3_ENDPOINT: inject("s3Endpoint"),
-        S3_BUCKET: TEST_S3_BUCKET,
-        S3_ACCESS_KEY_ID: TEST_S3_CREDENTIALS.accessKeyId,
-        S3_SECRET_ACCESS_KEY: TEST_S3_CREDENTIALS.secretAccessKey,
-        S3_FORCE_PATH_STYLE: "true",
-        S3_CREATE_BUCKET: "true",
-      },
+      env: { ...env(), DEMO_MODE: "true" },
       mailer: new CapturingMailer(),
       triageModel: new NeverCalled(),
     });
@@ -66,7 +71,6 @@ describe("the demo's AI budget", { timeout: 60_000 }, () => {
       access: cookies.get(ACCESS_COOKIE)?.value ?? "",
       refresh: cookies.get(REFRESH_COOKIE)?.value ?? "",
     };
-    // The seed's events that are not archived, each with a question.
     events = await database.query<{ id: string }>(
       "SELECT id FROM events WHERE workspace_id = $1 AND status <> 'ARCHIVED' ORDER BY id",
       [DEMO_WORKSPACE.id],
@@ -85,61 +89,117 @@ describe("the demo's AI budget", { timeout: 60_000 }, () => {
     await database.drop();
   });
 
-  /** Finished runs on the first event, `ago` before now. */
-  async function spent(runs: number, costMicros: number, ago = "1 minute") {
-    await database.query(
-      `INSERT INTO triage_runs (event_id, question_ids, status, failure, finished_at, cost_micros, created_at)
-       SELECT $1, ARRAY[gen_random_uuid()], 'FAILED', 'x', now(), $2, now() - $3::interval
-       FROM generate_series(1, $4)`,
-      [events[0]?.id, costMicros, ago, runs],
+  /** The demo's spend for a day, as the ledger holds it. */
+  const spend = (
+    day: string,
+    values: { runs?: number; spent?: number; reserved?: number },
+  ) =>
+    database.query(
+      `INSERT INTO triage_spend (workspace_id, day, runs, spent_micros, reserved_micros)
+       VALUES ($1, $2::date, $3, $4, $5)
+       ON CONFLICT (workspace_id, day) DO UPDATE
+       SET runs = $3, spent_micros = $4, reserved_micros = $5`,
+      [
+        DEMO_WORKSPACE.id,
+        day,
+        values.runs ?? 0,
+        values.spent ?? 0,
+        values.reserved ?? 0,
+      ],
     );
-  }
 
-  const start = (eventId: string) =>
-    new ApiClient(app, newAddress()).send(
-      demo,
+  const start = (session: TestSession, eventId: string, on = app) =>
+    new ApiClient(on, newAddress()).send(
+      session,
       "post",
       `/events/${eventId}/question-triage-runs`,
     );
 
-  const clear = () =>
-    database.query("DELETE FROM triage_runs WHERE event_id = ANY($1::uuid[])", [
-      events.map(({ id }) => id),
+  const reset = async () => {
+    await database.query(
+      "DELETE FROM triage_runs WHERE event_id = ANY($1::uuid[])",
+      [events.map(({ id }) => id)],
+    );
+    await database.query("DELETE FROM triage_spend WHERE workspace_id = $1", [
+      DEMO_WORKSPACE.id,
     ]);
+  };
 
-  it("stops at its daily count of runs or its daily spend, and counts today only", async () => {
-    await clear();
-    await spent(DEMO_TRIAGE_DAILY_RUNS, 0);
-    const byCount = await start(events[1]?.id ?? "");
+  it("stops the demo at its daily count, or when spent and reserved money would pass a dollar", async () => {
+    await reset();
+    await spend(today(), { runs: DEMO_TRIAGE_DAILY_RUNS });
+    const byCount = await start(demo, events[1]?.id ?? "");
 
-    await clear();
-    await spent(1, DEMO_TRIAGE_DAILY_MICROS);
-    const bySpend = await start(events[1]?.id ?? "");
+    await spend(today(), { spent: DEMO_TRIAGE_DAILY_MICROS - 5_000 });
+    const bySpend = await start(demo, events[1]?.id ?? "");
 
-    await clear();
-    await spent(DEMO_TRIAGE_DAILY_RUNS, DEMO_TRIAGE_DAILY_MICROS, "2 days");
-    const yesterday = await start(events[1]?.id ?? "");
+    // Runs at the moment hold their worst cost: it counts too.
+    await spend(today(), { reserved: DEMO_TRIAGE_DAILY_MICROS - 5_000 });
+    const byReserved = await start(demo, events[1]?.id ?? "");
 
-    expect(ProblemDetails.parse(byCount.body).code).toBe("TRIAGE_BUDGET_SPENT");
-    expect(byCount.status).toBe(429);
-    expect(ProblemDetails.parse(bySpend.body).code).toBe("TRIAGE_BUDGET_SPENT");
-    expect(yesterday.status, yesterday.text).toBe(202);
+    for (const refused of [byCount, bySpend, byReserved]) {
+      expect(refused.status).toBe(429);
+      expect(ProblemDetails.parse(refused.body).code).toBe(
+        "TRIAGE_BUDGET_SPENT",
+      );
+    }
   });
 
-  it("lets one of two runs through when one is left, also at the same moment", async () => {
-    await clear();
-    await spent(DEMO_TRIAGE_DAILY_RUNS - 1, 0);
-    // Both requests queue behind the budget's lock, then go together.
+  it("counts today only", async () => {
+    await reset();
+    await spend("2020-01-01", {
+      runs: DEMO_TRIAGE_DAILY_RUNS,
+      spent: DEMO_TRIAGE_DAILY_MICROS,
+    });
+
+    const allowed = await start(demo, events[1]?.id ?? "");
+
+    expect(allowed.status, allowed.text).toBe(202);
+  });
+
+  it("keeps the day's spend when the demo's events are deleted (its nightly reset)", async () => {
+    await reset();
+    const started = await start(demo, events[1]?.id ?? "");
+    expect(started.status, started.text).toBe(202);
+    const [before] = await database.query<{
+      runs: number;
+      reserved_micros: string;
+    }>(
+      "SELECT runs, reserved_micros::text FROM triage_spend WHERE workspace_id = $1 AND day = $2::date",
+      [DEMO_WORKSPACE.id, today()],
+    );
+
+    // What the reset does to the runs: they go with their events.
+    await database.query("DELETE FROM triage_runs WHERE event_id = $1", [
+      events[1]?.id,
+    ]);
+
+    const [after] = await database.query<{
+      runs: number;
+      reserved_micros: string;
+    }>(
+      "SELECT runs, reserved_micros::text FROM triage_spend WHERE workspace_id = $1 AND day = $2::date",
+      [DEMO_WORKSPACE.id, today()],
+    );
+    expect(before?.runs).toBe(1);
+    expect(Number(before?.reserved_micros)).toBeGreaterThan(0);
+    expect(after).toEqual(before);
+  });
+
+  it("lets one of two runs through when only one fits, also at the same moment", async () => {
+    await reset();
+    // Room for one run's reservation, not two.
+    await spend(today(), { spent: DEMO_TRIAGE_DAILY_MICROS - 60_000 });
     const block = await holdLock(
       database.url,
-      "SELECT pg_advisory_xact_lock(hashtext($1))",
-      [`triage-budget:${DEMO_WORKSPACE.id}`],
+      "SELECT 1 FROM triage_spend WHERE workspace_id = $1 AND day = $2::date FOR UPDATE",
+      [DEMO_WORKSPACE.id, today()],
     );
     let statuses: number[];
     try {
       const both = Promise.all([
-        Promise.resolve(start(events[1]?.id ?? "")),
-        Promise.resolve(start(events[2]?.id ?? "")),
+        Promise.resolve(start(demo, events[1]?.id ?? "")),
+        Promise.resolve(start(demo, events[2]?.id ?? "")),
       ]);
       await block.waitForWaiters(2);
       await block.release();
@@ -150,5 +210,38 @@ describe("the demo's AI budget", { timeout: 60_000 }, () => {
     }
 
     expect(statuses.sort()).toEqual([202, 429]);
+  });
+
+  it("holds a real workspace to TRIAGE_DAILY_BUDGET_USD when it is set, and to nothing when not", async () => {
+    const capped = await createTestApp({
+      env: { ...env(), TRIAGE_DAILY_BUDGET_USD: "0.01" },
+      mailer: new CapturingMailer(),
+      triageModel: new NeverCalled(),
+    });
+    try {
+      const client = new ApiClient(capped, newAddress());
+      const owner = await client.newOwner();
+      const event = await openEvent(client, owner);
+      await client.send(owner, "post", `/events/${event.id}/questions`, {
+        body: "Is it recorded?",
+      });
+      const free = new ApiClient(app, newAddress());
+      const other = await free.newOwner();
+      const otherEvent = await openEvent(free, other);
+      await free.send(other, "post", `/events/${otherEvent.id}/questions`, {
+        body: "Is it recorded?",
+      });
+
+      // One run's worst cost is more than a cent.
+      const refused = await start(owner, event.id, capped);
+      const unlimited = await start(other, otherEvent.id);
+
+      expect(ProblemDetails.parse(refused.body).code).toBe(
+        "TRIAGE_BUDGET_SPENT",
+      );
+      expect(unlimited.status, unlimited.text).toBe(202);
+    } finally {
+      await capped.close();
+    }
   });
 });

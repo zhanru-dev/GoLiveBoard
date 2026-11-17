@@ -2,20 +2,69 @@
 export const DEMO_TRIAGE_DAILY_RUNS = 30;
 /** One US dollar, in millionths. */
 export const DEMO_TRIAGE_DAILY_MICROS = 1_000_000;
+/** Output tokens a run may use: room for its groups, never above 8,000. */
+export function maxOutputTokens(questionCount: number): number {
+  return Math.min(8_000, 1_000 + 40 * questionCount);
+}
+
+/**
+ * The most a run can cost, reserved while it runs so runs at once cannot
+ * all fit a budget: its text (about three characters a token) plus the
+ * instructions, and its whole output allowance, at the dearest price.
+ */
+export function reserveMicros(
+  textCharacters: number,
+  questionCount: number,
+  price: { readonly input: number; readonly output: number },
+): number {
+  const inputTokens = Math.ceil(textCharacters / 3) + 1_000;
+  return Math.ceil(
+    inputTokens * price.input + maxOutputTokens(questionCount) * price.output,
+  );
+}
+
 /** The demo resets at 03:00 UK time; its AI day is the UK calendar day. */
 export const DEMO_TIME_ZONE = "Europe/London";
 
+/** A workspace's day so far: runs started, money spent and reserved. */
 export interface Spent {
   readonly runs: number;
-  readonly costMicros: number;
+  readonly spentMicros: number;
+  readonly reservedMicros: number;
 }
 
-/** Whether the demo may start another run today. */
-export function demoMayRun(spent: Spent): boolean {
+export interface DailyLimit {
+  /** Runs a day; none for real workspaces. */
+  readonly runs?: number;
+  readonly micros: number;
+}
+
+/** The demo's limit (docs/06 section 10). */
+export const DEMO_LIMIT: DailyLimit = {
+  runs: DEMO_TRIAGE_DAILY_RUNS,
+  micros: DEMO_TRIAGE_DAILY_MICROS,
+};
+
+/**
+ * Whether one more run, reserving `reserve`, fits the day: its run count
+ * stays within the limit, and what was spent, what runs at the moment
+ * reserve and its own reservation together stay within the money.
+ */
+export function mayRun(
+  spent: Spent,
+  reserve: number,
+  limit: DailyLimit,
+): boolean {
   return (
-    spent.runs < DEMO_TRIAGE_DAILY_RUNS &&
-    spent.costMicros < DEMO_TRIAGE_DAILY_MICROS
+    (limit.runs === undefined || spent.runs < limit.runs) &&
+    spent.spentMicros + spent.reservedMicros + reserve <= limit.micros
   );
+}
+
+/** `now`'s calendar date in `timeZone`, as YYYY-MM-DD. */
+export function dateIn(now: Date, timeZone: string): string {
+  const { year, month, day } = localParts(now, timeZone);
+  return `${String(year)}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
 }
 
 /** Midnight that began `now`'s day in `timeZone`, as an instant. */

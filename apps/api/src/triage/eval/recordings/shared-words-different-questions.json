@@ -4,12 +4,12 @@
   "hash": "40f9a90ca0a29d26ea9dc149a5fc5ed22f9e5bfcf74bfb715f621b19fa0f2057",
   "output": {
     "groups": [],
-    "answer_order": ["q1", "q5", "q2", "q4", "q3"]
+    "answer_order": ["q1", "q4", "q5", "q2", "q3"]
   },
   "usage": {
     "inputTokens": 788,
     "outputTokens": 33
   },
-  "latencyMs": 2163,
-  "recordedAt": "2026-11-17T12:52:50.920Z"
+  "latencyMs": 1979,
+  "recordedAt": "2026-11-17T17:11:13.498Z"
 }

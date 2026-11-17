@@ -52,8 +52,14 @@ export function promptFor(questions: readonly TriageQuestion[]): Prompt {
   const lines = questions.map((question, index) => {
     const label = `q${String(index + 1)}`;
     labels.set(label, question.id);
-    // One question per line: line breaks inside one are flattened.
-    return `${label}: ${question.text.replaceAll(/\s+/g, " ").trim()}`;
+    // One question per line: line breaks inside one are flattened. No
+    // angle brackets: a question cannot close the <questions> block.
+    const text = question.text
+      .replaceAll(/\s+/g, " ")
+      .trim()
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;");
+    return `${label}: ${text}`;
   });
   return {
     user: `<questions>\n${lines.join("\n")}\n</questions>`,

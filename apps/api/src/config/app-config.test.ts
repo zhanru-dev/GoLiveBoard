@@ -35,6 +35,7 @@ describe("loadConfig", () => {
         apiKey: undefined,
         baseUrl: undefined,
         model: "claude-opus-5-5",
+        dailyBudgetMicros: undefined,
       },
       errorReporting: {
         dsn: undefined,
@@ -131,6 +132,13 @@ describe("loadConfig", () => {
     expect(() => loadConfig({ ...REQUIRED, AI_PROVIDER: "openai" })).toThrow(
       /AI_PROVIDER/,
     );
+    expect(
+      loadConfig({ ...REQUIRED, TRIAGE_DAILY_BUDGET_USD: "2.5" }).triage
+        .dailyBudgetMicros,
+    ).toBe(2_500_000);
+    expect(() =>
+      loadConfig({ ...REQUIRED, TRIAGE_DAILY_BUDGET_USD: "-1" }),
+    ).toThrow(/TRIAGE_DAILY_BUDGET_USD/);
   });
 
   it("requires both storage credentials or neither", () => {

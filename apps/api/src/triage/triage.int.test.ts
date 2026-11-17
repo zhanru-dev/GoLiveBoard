@@ -54,6 +54,14 @@ class ScriptedModel extends TriageModel {
   }
 }
 
+/** A value the test set up, or a failure saying it is missing. */
+function need<T>(value: T | undefined): T {
+  if (value === undefined) {
+    throw new Error("Missing test data");
+  }
+  return value;
+}
+
 /** The label the prompt gave a question, found by its text. */
 function labelOf(prompt: string, text: string): string {
   const line = prompt
@@ -73,6 +81,7 @@ const answered = (
   output,
   model,
   usage: { inputTokens: 1_000, outputTokens: 100 },
+  attempts: [{ model, inputTokens: 1_000, outputTokens: 100 }],
 });
 
 describe("AI question triage (FR-RN-6, ADR-0012)", { timeout: 60_000 }, () => {
@@ -697,6 +706,298 @@ describe("AI question triage (FR-RN-6, ADR-0012)", { timeout: 60_000 }, () => {
     ).toEqual([]);
   });
 
+  /** Accepts the pricing group: "How much…" kept, "What is the price?" merged. */
+  const groupPricing = () => {
+    model.answer = (prompt) => {
+      const a = labelOf(prompt, "How much does it cost?");
+      const b = labelOf(prompt, "What is the price?");
+      return Promise.resolve(
+        answered({
+          groups: [{ representative: a, questions: [a, b], reason: "" }],
+          answer_order: [],
+        }),
+      );
+    };
+  };
+
+  const moderate = (
+    client: ApiClient,
+    owner: TestSession,
+    question: Question,
+    change: object,
+  ) =>
+    client
+      .send(owner, "patch", `/questions/${question.id}`, change)
+      .set("If-Match", `"${String(question.version)}"`);
+
+  async function current(
+    client: ApiClient,
+    owner: TestSession,
+    eventId: string,
+    id: string,
+  ) {
+    const list = QuestionList.parse(
+      (await client.get(owner, `/events/${eventId}/questions`)).body,
+    );
+    const found = list.items.find((item) => item.id === id);
+    if (found === undefined) {
+      throw new Error("No such question");
+    }
+    return found;
+  }
+
+  it("never merges a public question into one hidden since the run", async () => {
+    const { client, owner, event, questions } = await withQuestions(pricing);
+    const [howMuch, price] = questions;
+    groupPricing();
+    const run = await triaged(client, owner, event.id);
+    const hidden = await moderate(client, owner, need(howMuch), {
+      status: "HIDDEN",
+    });
+    expect(hidden.status, hidden.text).toBe(200);
+
+    const decided = await decide(client, owner, run.id, [0]);
+
+    expect(TriageRun.parse(decided.body)).toMatchObject({
+      decision: "PARTIAL",
+      mergedCount: 0,
+    });
+    expect(
+      (await current(client, owner, event.id, price?.id ?? "")).mergedIntoId,
+    ).toBeNull();
+    const viewer = await attendee(event.slug);
+    expect(
+      QuestionList.parse(
+        (await viewer.get(`/public/events/${event.slug}/questions`)).body,
+      ).items.map(({ id }) => id),
+    ).toContain(price?.id);
+  });
+
+  it("never merges into a question still waiting for approval", async () => {
+    const client = api();
+    const owner = await client.newOwner();
+    const event = await openEvent(client, owner);
+    const current_ = await client.get(owner, `/events/${event.id}`);
+    await client
+      .send(owner, "patch", `/events/${event.id}`, {
+        questionsPreModerated: true,
+      })
+      .set("If-Match", String(current_.headers.etag));
+    const asker = await attendee(event.slug);
+    // Pending: asked while questions wait for approval.
+    const howMuch = await asked(asker, event.slug, "How much does it cost?");
+    // Published by a moderator.
+    const price = await asked(asker, event.slug, "What is the price?");
+    await moderate(client, owner, price, { status: "PUBLISHED" });
+    groupPricing();
+    const run = await triaged(client, owner, event.id);
+
+    const decided = await decide(client, owner, run.id, [0]);
+
+    expect(howMuch.status).toBe("PENDING");
+    expect(TriageRun.parse(decided.body).mergedCount).toBe(0);
+    expect(
+      (await current(client, owner, event.id, price.id)).mergedIntoId,
+    ).toBeNull();
+  });
+
+  it("leaves a member hidden since the run where it is", async () => {
+    const { client, owner, event, questions } = await withQuestions(pricing);
+    const [, price] = questions;
+    groupPricing();
+    const run = await triaged(client, owner, event.id);
+    await moderate(client, owner, need(price), { status: "HIDDEN" });
+
+    const decided = await decide(client, owner, run.id, [0]);
+
+    expect(TriageRun.parse(decided.body)).toMatchObject({
+      decision: "ACCEPTED",
+      mergedCount: 0,
+    });
+    expect(
+      (await current(client, owner, event.id, price?.id ?? "")).mergedIntoId,
+    ).toBeNull();
+  });
+
+  it("unpins a merged question, freeing its slot, and never pins it again", async () => {
+    const { client, owner, event, questions } = await withQuestions(pricing);
+    const [, price, free] = questions;
+    const pinned = await moderate(client, owner, need(price), { pinned: true });
+    expect(Question.parse(pinned.body).pinSlot).toBe(1);
+    groupPricing();
+    const run = await triaged(client, owner, event.id);
+
+    await decide(client, owner, run.id, [0]);
+
+    const merged = await current(client, owner, event.id, price?.id ?? "");
+    expect(merged.pinSlot).toBeNull();
+    const again = await moderate(client, owner, merged, { pinned: true });
+    expect(ProblemDetails.parse(again.body).code).toBe("QUESTION_NOT_PINNABLE");
+    // Its slot is free for another.
+    const other = await moderate(client, owner, need(free), { pinned: true });
+    expect(Question.parse(other.body).pinSlot).toBe(1);
+  });
+
+  it("times out a model that ignores the run's signal", async () => {
+    const { client, owner, event } = await withQuestions([
+      "Will it be recorded?",
+    ]);
+    // Never answers, and never listens.
+    model.answer = () => new Promise<never>(() => undefined);
+    const startedAt = Date.now();
+
+    const run = await triaged(client, owner, event.id);
+
+    expect(Date.now() - startedAt).toBeLessThan(12_000);
+    expect(run).toMatchObject({
+      status: "TIMED_OUT",
+      failure: "The AI model did not answer within 8 seconds",
+    });
+    // It may have been billed: its worst cost stays counted.
+    const day = await spentToday(client, owner);
+    expect(day.reserved).toBe(0);
+    expect(day.spent).toBeGreaterThan(0);
+  });
+
+  it("sends no question hidden since the run was asked for, and calls no model when none is left", async () => {
+    const { client, owner, event, questions } = await withQuestions(pricing);
+    const [howMuch, price, free] = questions;
+    model.answer = () =>
+      Promise.resolve(answered({ groups: [], answer_order: [] }));
+    const runId = await started(client, owner, event.id);
+    await moderate(client, owner, need(free), { status: "HIDDEN" });
+
+    await worker.get(TriageRunner).run(runId);
+
+    expect(model.sent.at(-1)).not.toContain("Is there a free tier?");
+    expect(model.sent.at(-1)).toContain("What is the price?");
+
+    // All of them hidden before the next run: the model is not called.
+    const sentBefore = model.sent.length;
+    const secondId = await started(client, owner, event.id);
+    await moderate(
+      client,
+      owner,
+      await current(client, owner, event.id, howMuch?.id ?? ""),
+      { status: "HIDDEN" },
+    );
+    await moderate(
+      client,
+      owner,
+      await current(client, owner, event.id, price?.id ?? ""),
+      { status: "HIDDEN" },
+    );
+    await worker.get(TriageRunner).run(secondId);
+
+    expect(model.sent).toHaveLength(sentBefore);
+    expect(await runOf(client, owner, secondId)).toMatchObject({
+      status: "FAILED",
+      failure: "Every question was answered, hidden or merged before the run",
+    });
+  });
+
+  it("sends the newest 200 when more questions are open", async () => {
+    const { client, owner, event } = await withQuestions([
+      "The first question",
+    ]);
+    const userId = (await client.me(owner)).user.id;
+    await database.query(
+      `INSERT INTO questions (event_id, author_user_id, body, status, created_at)
+       SELECT $1, $2, 'Question ' || n, 'PUBLISHED', now() + n * interval '1 second'
+       FROM generate_series(1, 210) AS n`,
+      [event.id, userId],
+    );
+    model.answer = () =>
+      Promise.resolve(answered({ groups: [], answer_order: [] }));
+
+    const run = await triaged(client, owner, event.id);
+
+    expect(run).toMatchObject({ status: "SUCCEEDED", questionCount: 200 });
+    expect(model.sent.at(-1)).not.toContain("The first question");
+  });
+
+  /** The workspace's spend today, from the ledger. */
+  async function spentToday(client: ApiClient, owner: TestSession) {
+    const workspaceId = (await client.me(owner)).activeWorkspace.workspaceId;
+    const [row] = await database.query<{
+      runs: number;
+      spent: string;
+      reserved: string;
+    }>(
+      `SELECT runs, spent_micros::text AS spent, reserved_micros::text AS reserved
+       FROM triage_spend WHERE workspace_id = $1
+       AND day = (now() AT TIME ZONE 'Europe/London')::date`,
+      [workspaceId],
+    );
+    return {
+      runs: row?.runs ?? 0,
+      spent: Number(row?.spent ?? 0),
+      reserved: Number(row?.reserved ?? 0),
+    };
+  }
+
+  it("settles the day's spend when a run ends: its cost, or nothing when no model was called", async () => {
+    const { client, owner, event, questions } = await withQuestions([
+      "Is it free?",
+    ]);
+    model.answer = () =>
+      Promise.resolve(answered({ groups: [], answer_order: [] }));
+    const runId = await started(client, owner, event.id);
+    const whileRunning = await spentToday(client, owner);
+    await worker.get(TriageRunner).run(runId);
+    const afterRun = await spentToday(client, owner);
+    // A second run whose questions were all hidden meanwhile: no model call.
+    const second = await started(client, owner, event.id);
+    await moderate(client, owner, need(questions[0]), { status: "HIDDEN" });
+    await worker.get(TriageRunner).run(second);
+
+    expect(whileRunning.runs).toBe(1);
+    expect(whileRunning.reserved).toBeGreaterThan(6_000);
+    // 1,000 × $4/M + 100 × $20/M.
+    expect(afterRun).toEqual({ runs: 1, spent: 6_000, reserved: 0 });
+    expect(await spentToday(client, owner)).toEqual({
+      runs: 2,
+      spent: 6_000,
+      reserved: 0,
+    });
+  });
+
+  it("refuses to start while its rate limit cannot be counted (Valkey down)", async () => {
+    const down = await createTestApp({
+      // No VALKEY_URL: the test default is a closed port.
+      env: { DATABASE_URL: database.url, TRUST_PROXY_HOPS: "1" },
+      triageModel: model,
+    });
+    try {
+      const client = new ApiClient(down, newAddress());
+      const owner = await client.newOwner();
+      const event = await openEvent(client, owner);
+      await database.query(
+        `INSERT INTO questions (event_id, author_user_id, body, status)
+         VALUES ($1, $2, 'Is it recorded?', 'PUBLISHED')`,
+        [event.id, (await client.me(owner)).user.id],
+      );
+
+      const refused = await client.send(
+        owner,
+        "post",
+        `/events/${event.id}/question-triage-runs`,
+      );
+
+      expect(refused.status).toBe(503);
+      expect(ProblemDetails.parse(refused.body).code).toBe(
+        "SERVICE_UNAVAILABLE",
+      );
+      expect(
+        await database.query("SELECT 1 FROM triage_runs WHERE event_id = $1", [
+          event.id,
+        ]),
+      ).toEqual([]);
+    } finally {
+      await down.close();
+    }
+  });
+
   it("refuses a vote that waited for the merge of its question", async () => {
     const { client, owner, event, asker, questions } =
       await withQuestions(pricing);
@@ -739,6 +1040,32 @@ describe("AI question triage (FR-RN-6, ADR-0012)", { timeout: 60_000 }, () => {
     expect(kept?.vote_count).toBe(0);
   });
 
+  it("finds the event's latest run, so a moderator who comes back sees it", async () => {
+    const { client, owner, event } = await withQuestions([
+      "Is there a replay?",
+    ]);
+    const none = await client.get(
+      owner,
+      `/events/${event.id}/question-triage-runs/latest`,
+    );
+    model.answer = () =>
+      Promise.resolve(answered({ groups: [], answer_order: [] }));
+    const first = await triaged(client, owner, event.id);
+    await decide(client, owner, first.id, []);
+    const second = await started(client, owner, event.id);
+
+    const latest = await client.get(
+      owner,
+      `/events/${event.id}/question-triage-runs/latest`,
+    );
+
+    expect(none.status).toBe(404);
+    expect(TriageRun.parse(latest.body)).toMatchObject({
+      id: second,
+      status: "QUEUED",
+    });
+  });
+
   it("is for Managers and Owners of the event's workspace only", async () => {
     const { client, owner, event } = await withQuestions(["Is there parking?"]);
     const manager = await memberOf(client, mailer, owner, "MANAGER");
@@ -752,13 +1079,14 @@ describe("AI question triage (FR-RN-6, ADR-0012)", { timeout: 60_000 }, () => {
     const calls = (session: TestSession) => [
       client.send(session, "post", `/events/${event.id}/question-triage-runs`),
       client.get(session, `/question-triage-runs/${runId}`),
+      client.get(session, `/events/${event.id}/question-triage-runs/latest`),
       decide(client, session, runId, []),
     ];
     const analysts = await Promise.all(calls(analyst));
     const strangers = await Promise.all(calls(stranger));
 
-    expect(analysts.map(({ status }) => status)).toEqual([403, 403, 403]);
-    expect(strangers.map(({ status }) => status)).toEqual([404, 404, 404]);
+    expect(analysts.map(({ status }) => status)).toEqual([403, 403, 403, 403]);
+    expect(strangers.map(({ status }) => status)).toEqual([404, 404, 404, 404]);
     expect((await runOf(client, manager, runId)).status).toBe("SUCCEEDED");
     expect((await decide(client, owner, runId, [])).status).toBe(200);
   });
@@ -791,15 +1119,33 @@ describe("AI question triage (FR-RN-6, ADR-0012)", { timeout: 60_000 }, () => {
     const { client, owner, event } = await withQuestions(["Lunch?"]);
     const runId = await started(client, owner, event.id);
     await database.query(
-      "UPDATE triage_runs SET status = 'RUNNING', started_at = now() - interval '2 minutes' WHERE id = $1",
+      "UPDATE triage_runs SET status = 'RUNNING', started_at = now() - interval '61 seconds' WHERE id = $1",
       [runId],
     );
     const other = await withQuestions(["Dinner?"]);
     const queuedId = await started(other.client, other.owner, other.event.id);
     await database.query(
-      "UPDATE triage_runs SET created_at = now() - interval '6 minutes' WHERE id = $1",
+      "UPDATE triage_runs SET created_at = now() - interval '301 seconds' WHERE id = $1",
       [queuedId],
     );
+    // Still within their time: left alone.
+    const recent = await withQuestions(["Breakfast?"]);
+    const recentRunning = await started(
+      recent.client,
+      recent.owner,
+      recent.event.id,
+    );
+    await database.query(
+      "UPDATE triage_runs SET status = 'RUNNING', started_at = now() - interval '55 seconds' WHERE id = $1",
+      [recentRunning],
+    );
+    const late = await withQuestions(["Supper?"]);
+    const recentQueued = await started(late.client, late.owner, late.event.id);
+    await database.query(
+      "UPDATE triage_runs SET created_at = now() - interval '290 seconds' WHERE id = $1",
+      [recentQueued],
+    );
+    const reservedBefore = (await spentToday(client, owner)).reserved;
 
     await worker.get(TriageConsumer).process({ name: "sweep" });
 
@@ -811,6 +1157,18 @@ describe("AI question triage (FR-RN-6, ADR-0012)", { timeout: 60_000 }, () => {
       status: "FAILED",
       failure: "The run never started",
     });
+    expect(
+      (await runOf(recent.client, recent.owner, recentRunning)).status,
+    ).toBe("RUNNING");
+    expect((await runOf(late.client, late.owner, recentQueued)).status).toBe(
+      "QUEUED",
+    );
+    // An interrupted run may have been billed; one never started was not.
+    expect(await spentToday(client, owner)).toMatchObject({
+      reserved: 0,
+      spent: reservedBefore,
+    });
+    expect((await spentToday(other.client, other.owner)).spent).toBe(0);
     expect(await started(client, owner, event.id)).not.toBe(runId);
   });
 });

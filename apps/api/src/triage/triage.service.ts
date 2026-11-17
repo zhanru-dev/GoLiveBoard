@@ -7,6 +7,7 @@ import {
 } from "@opspilot/contracts";
 
 import { recordAudit } from "../audit/audit.js";
+import { APP_CONFIG, type AppConfig } from "../config/app-config.js";
 import type { Actor } from "../auth/actor.js";
 import { PRISMA } from "../database/prisma.js";
 import { isDemoWorkspace } from "../demo/demo-workspace.js";
@@ -17,7 +18,16 @@ import { writeOutbox } from "../outbox/outbox.js";
 import { RATE_LIMITS, RateLimiter } from "../rate-limit/rate-limiter.js";
 import { CLOCK, type Clock } from "../shared/clock.js";
 import { DomainError } from "../shared/domain/domain-error.js";
-import { DEMO_TIME_ZONE, demoMayRun, startOfDay } from "./domain/budget.js";
+import {
+  type DailyLimit,
+  dateIn,
+  DEMO_LIMIT,
+  DEMO_TIME_ZONE,
+  mayRun,
+  reserveMicros,
+} from "./domain/budget.js";
+import { HIGHEST_PRICE } from "./domain/pricing.js";
+import { dayValue, lockDay, reserve } from "./spend-ledger.js";
 import { acceptedGroupsExist, planMerges } from "./domain/merge.js";
 import { TRIAGE_MAX_QUESTIONS } from "./domain/prompt.js";
 import { TRIAGE_MODEL, type TriageModel } from "./triage-model.js";
@@ -33,6 +43,7 @@ export class TriageService {
   constructor(
     @Inject(PRISMA) private readonly prisma: PrismaClient,
     @Inject(CLOCK) private readonly clock: Clock,
+    @Inject(APP_CONFIG) private readonly config: AppConfig,
     @Inject(TRIAGE_MODEL) private readonly model: TriageModel | null,
     private readonly questions: QuestionsService,
     private readonly rateLimiter: RateLimiter,
@@ -60,32 +71,6 @@ export class TriageService {
       if (active !== null) {
         return active;
       }
-      // Counted only for a run that will start: asking again is free.
-      await this.rateLimiter.consumeOrThrow(
-        RATE_LIMITS.triagePerEvent,
-        `${actor.workspaceId}:${eventId}`,
-      );
-      if (isDemoWorkspace(actor.workspaceId)) {
-        // One budget check at a time, so two runs cannot both fit.
-        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`triage-budget:${actor.workspaceId}`}))`;
-        const since = startOfDay(this.clock.now(), DEMO_TIME_ZONE);
-        const [spent] = await tx.$queryRaw<
-          { runs: number; cost_micros: number }[]
-        >`
-          SELECT count(*)::int AS runs, coalesce(sum(run.cost_micros), 0)::int AS cost_micros
-          FROM triage_runs AS run
-          JOIN events AS event ON event.id = run.event_id
-          WHERE event.workspace_id = ${actor.workspaceId}::uuid
-            AND run.created_at >= ${since}`;
-        if (
-          !demoMayRun({
-            runs: spent?.runs ?? 0,
-            costMicros: spent?.cost_micros ?? 0,
-          })
-        ) {
-          throw new DomainError("TRIAGE_BUDGET_SPENT");
-        }
-      }
       const open = await tx.question.findMany({
         where: {
           eventId,
@@ -94,20 +79,41 @@ export class TriageService {
         },
         orderBy: [{ createdAt: "desc" }, { id: "desc" }],
         take: TRIAGE_MAX_QUESTIONS,
-        select: { id: true },
+        select: { id: true, body: true },
       });
       if (open.length === 0) {
         throw new DomainError("TRIAGE_NOTHING_TO_SORT");
       }
+      // The day's spend, locked: budget checks run one at a time, and a
+      // run reserves its worst cost so runs at once cannot all fit.
+      const day = dateIn(this.clock.now(), DEMO_TIME_ZONE);
+      const reserved = reserveMicros(
+        open.reduce((sum, { body }) => sum + body.length, 0),
+        open.length,
+        HIGHEST_PRICE,
+      );
+      const spent = await lockDay(tx, actor.workspaceId, day);
+      const limit = this.limitFor(actor.workspaceId);
+      if (limit !== undefined && !mayRun(spent, reserved, limit)) {
+        throw new DomainError("TRIAGE_BUDGET_SPENT");
+      }
+      // Counted only for a run that will start.
+      await this.rateLimiter.consumeOrThrow(
+        RATE_LIMITS.triagePerEvent,
+        `${actor.workspaceId}:${eventId}`,
+      );
       const run = await tx.triageRun.create({
         data: {
           eventId,
           requestedById: actor.userId,
           questionIds: open.map(({ id }) => id),
+          reservedMicros: reserved,
+          spendDay: dayValue(day),
           createdAt: this.clock.now(),
         },
         select: { id: true },
       });
+      await reserve(tx, actor.workspaceId, day, reserved);
       const payload: TriageRequestedPayload = { runId: run.id };
       await writeOutbox(tx, {
         workspaceId: actor.workspaceId,
@@ -116,6 +122,24 @@ export class TriageService {
       });
       return run;
     });
+  }
+
+  /**
+   * The event's most recent run, so a moderator who comes back finds it.
+   *
+   * @throws DomainError `NOT_FOUND` for an event outside the workspace, or
+   * one never triaged
+   */
+  async latest(actor: Actor, eventId: string): Promise<TriageRun> {
+    const row = await this.prisma.triageRun.findFirst({
+      where: { eventId, event: { workspaceId: actor.workspaceId } },
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      select: TRIAGE_RUN_SELECT,
+    });
+    if (row === null) {
+      throw new DomainError("NOT_FOUND");
+    }
+    return toTriageRun(row);
   }
 
   /** @throws DomainError `NOT_FOUND` */
@@ -178,7 +202,7 @@ export class TriageService {
       );
       const now = await tx.question.findMany({
         where: { eventId, id: { in: named } },
-        select: { id: true, mergedIntoId: true },
+        select: { id: true, status: true, mergedIntoId: true },
       });
       const plan = planMerges(suggestions, request.acceptedGroups, now);
       const announcements = await this.questions.mergeIn(
@@ -190,6 +214,7 @@ export class TriageService {
         where: { id: runId },
         data: {
           decision: plan.decision,
+          mergedCount: plan.merges.length,
           decidedById: actor.userId,
           decidedAt: this.clock.now(),
         },
@@ -213,6 +238,15 @@ export class TriageService {
     });
     await this.questions.announce(eventId, outcome.announcements);
     return toTriageRun(outcome.row);
+  }
+
+  /** The demo's limit, the configured one for others, or none. */
+  private limitFor(workspaceId: string): DailyLimit | undefined {
+    if (isDemoWorkspace(workspaceId)) {
+      return DEMO_LIMIT;
+    }
+    const micros = this.config.triage.dailyBudgetMicros;
+    return micros === undefined ? undefined : { micros };
   }
 
   private async assertEventVisible(actor: Actor, eventId: string) {

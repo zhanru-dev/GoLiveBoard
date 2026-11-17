@@ -94,7 +94,33 @@ describe("triage run constraints", () => {
       finished_at: new Date(),
       decision: "PARTIAL",
       decided_at: new Date(),
+      merged_count: 0,
     });
+  });
+
+  it("counts merges exactly once decided, and keeps the spend ledger's amounts whole", async () => {
+    await expect(
+      run({
+        status: "SUCCEEDED",
+        suggestions: {},
+        finished_at: new Date(),
+        decision: "ACCEPTED",
+        decided_at: new Date(),
+      }),
+    ).rejects.toThrow(/triage_runs_merged_when_decided/);
+    await expect(run({ merged_count: 1 })).rejects.toThrow(
+      /triage_runs_merged_when_decided/,
+    );
+    const [{ workspace_id: workspaceId } = { workspace_id: "" }] =
+      await database.query<{
+        workspace_id: string;
+      }>("SELECT workspace_id FROM events WHERE id = $1", [eventId]);
+    await expect(
+      database.query(
+        "INSERT INTO triage_spend (workspace_id, day, reserved_micros) VALUES ($1, '2026-11-17', -1)",
+        [workspaceId],
+      ),
+    ).rejects.toThrow(/triage_spend_amounts/);
   });
 
   it("refuses negative counts", async () => {

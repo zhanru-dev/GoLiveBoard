@@ -40,6 +40,7 @@ export class OfflineTriageModel extends TriageModel {
       output,
       model: "offline",
       usage: { inputTokens: 0, outputTokens: 0 },
+      attempts: [],
     });
   }
 }

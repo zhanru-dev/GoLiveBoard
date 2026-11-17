@@ -19,7 +19,7 @@ const SUGGESTIONS: TriageSuggestions = {
 };
 
 const open = (...ns: number[]): QuestionState[] =>
-  ns.map((n) => ({ id: id(n), mergedIntoId: null }));
+  ns.map((n) => ({ id: id(n), status: "PUBLISHED", mergedIntoId: null }));
 
 describe("planMerges", () => {
   it("merges every accepted group's questions into its representative", () => {
@@ -46,17 +46,44 @@ describe("planMerges", () => {
 
   it("skips what changed since the run: a member merged or deleted, a representative gone", () => {
     const now: QuestionState[] = [
-      { id: id(1), mergedIntoId: null },
-      { id: id(2), mergedIntoId: id(9) }, // merged elsewhere since
+      { id: id(1), status: "PUBLISHED", mergedIntoId: null },
+      { id: id(2), status: "PUBLISHED", mergedIntoId: id(9) }, // merged elsewhere since
       // id(3) deleted since
-      { id: id(4), mergedIntoId: id(1) }, // representative merged since
-      { id: id(5), mergedIntoId: null },
+      { id: id(4), status: "PUBLISHED", mergedIntoId: id(1) }, // representative merged since
+      { id: id(5), status: "PUBLISHED", mergedIntoId: null },
     ];
 
     expect(planMerges(SUGGESTIONS, [0, 1], now)).toEqual({
       merges: [],
       decision: "PARTIAL",
     });
+  });
+
+  it("never merges into a question others cannot see: a pending or hidden representative merges nothing", () => {
+    for (const status of ["PENDING", "HIDDEN"] as const) {
+      const now: QuestionState[] = [
+        { id: id(1), status, mergedIntoId: null },
+        ...open(2, 3, 4, 5),
+      ];
+
+      expect(planMerges(SUGGESTIONS, [0, 1], now)).toEqual({
+        merges: [{ questionId: id(5), into: id(4) }],
+        decision: "PARTIAL",
+      });
+    }
+  });
+
+  it("merges into an answered question, and leaves a hidden member alone", () => {
+    const now: QuestionState[] = [
+      { id: id(1), status: "ANSWERED", mergedIntoId: null },
+      { id: id(2), status: "HIDDEN", mergedIntoId: null },
+      { id: id(3), status: "PENDING", mergedIntoId: null },
+      ...open(4, 5),
+    ];
+
+    expect(planMerges(SUGGESTIONS, [0], now).merges).toEqual([
+      { questionId: id(3), into: id(1) },
+    ]);
   });
 });
 

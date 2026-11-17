@@ -1,7 +1,12 @@
-import type { TriageDecision, TriageSuggestions } from "@opspilot/contracts";
+import type {
+  QuestionStatus,
+  TriageDecision,
+  TriageSuggestions,
+} from "@opspilot/contracts";
 
 export interface QuestionState {
   readonly id: string;
+  readonly status: QuestionStatus;
   readonly mergedIntoId: string | null;
 }
 
@@ -17,11 +22,16 @@ export interface MergePlan {
 
 /**
  * What a moderator's decision does, against the questions as they are now
- * (they may have changed since the run). An accepted group merges its
- * other questions into its representative, except one already merged (or
- * deleted since); a group whose representative was merged or deleted since
- * merges nothing. The decision is ACCEPTED when every group was accepted
- * and merged, REJECTED when none was accepted, PARTIAL otherwise.
+ * (they may have changed since the run). A merge must never hide a public
+ * question behind one nobody else sees, so:
+ *
+ * - a group merges only into a representative that is public now
+ *   (published or answered, not merged); one pending, hidden, merged or
+ *   deleted since merges nothing;
+ * - its other questions merge unless they are hidden, merged or deleted.
+ *
+ * The decision is ACCEPTED when every group was accepted and merged,
+ * REJECTED when none was accepted, PARTIAL otherwise.
  */
 export function planMerges(
   suggestions: TriageSuggestions,
@@ -29,19 +39,27 @@ export function planMerges(
   questions: readonly QuestionState[],
 ): MergePlan {
   const now = new Map(questions.map((question) => [question.id, question]));
-  const isOpen = (id: string) => {
-    return now.get(id)?.mergedIntoId === null;
+  const representable = (id: string) => {
+    const question = now.get(id);
+    return (
+      question?.mergedIntoId === null &&
+      (question.status === "PUBLISHED" || question.status === "ANSWERED")
+    );
+  };
+  const mergeable = (id: string) => {
+    const question = now.get(id);
+    return question?.mergedIntoId === null && question.status !== "HIDDEN";
   };
   const accepted = new Set(acceptedGroups);
   const merges: Merge[] = [];
   let applied = 0;
   suggestions.groups.forEach((group, index) => {
-    if (!accepted.has(index) || !isOpen(group.representativeId)) {
+    if (!accepted.has(index) || !representable(group.representativeId)) {
       return;
     }
     applied += 1;
     for (const id of group.questionIds) {
-      if (id !== group.representativeId && isOpen(id)) {
+      if (id !== group.representativeId && mergeable(id)) {
         merges.push({ questionId: id, into: group.representativeId });
       }
     }

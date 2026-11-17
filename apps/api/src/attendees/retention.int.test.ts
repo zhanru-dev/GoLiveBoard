@@ -120,6 +120,12 @@ describe("the daily retention job (FR-AD-6, docs/03 section 8)", () => {
               ('s', gen_random_uuid(), 'h', 201, '{}', now() + interval '1 hour')`,
     );
     await database.query(
+      `INSERT INTO triage_spend (workspace_id, day, runs)
+       VALUES ($1, (now() - interval '731 days')::date, 1),
+              ($1, now()::date, 2)`,
+      [event.workspaceId],
+    );
+    await database.query(
       `INSERT INTO audit_entries (workspace_id, actor_kind, action, target_type, target_id, created_at)
        VALUES ($1, 'SYSTEM', 'old.thing', 'x', gen_random_uuid(), now() - interval '731 days'),
               ($1, 'SYSTEM', 'new.thing', 'x', gen_random_uuid(), now())`,
@@ -190,6 +196,12 @@ describe("the daily retention job (FR-AD-6, docs/03 section 8)", () => {
         "SELECT (expires_at > now())::text AS v FROM idempotency_records WHERE scope = 's'",
       ),
     ).toEqual(["true"]);
+    expect(
+      await left(
+        "SELECT runs::text AS v FROM triage_spend WHERE workspace_id = $1",
+        [event.workspaceId],
+      ),
+    ).toEqual(["2"]);
     expect(
       await left(
         "SELECT action AS v FROM audit_entries WHERE workspace_id = $1",

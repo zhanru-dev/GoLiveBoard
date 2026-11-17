@@ -40,9 +40,11 @@ export function TriagePanel({
   workspaceId: string;
   questions: readonly Question[];
 }>) {
-  const [runId, setRunId] = useState<string>();
+  const [chosenRun, setRunId] = useState<string>();
   const [refusal, setRefusal] = useState<string>();
   const [chosen, setChosen] = useState<ReadonlySet<number>>(new Set());
+  /** The run just decided: not shown again, even as the latest. */
+  const [decided, setDecided] = useState<string>();
 
   const start = useMutation({
     mutationFn: () =>
@@ -66,9 +68,40 @@ export function TriagePanel({
       );
     },
   });
+  // The event's latest run: one under way or waiting for a decision is
+  // still there when the moderator comes back.
+  const latest = useQuery({
+    queryKey: ["triage-run-latest", workspaceId, eventId],
+    queryFn: async ({ signal }) => {
+      try {
+        return await api(`/events/${eventId}/question-triage-runs/latest`, {
+          schema: TriageRun,
+          workspaceId,
+          signal,
+        });
+      } catch (error) {
+        if (error instanceof ApiError && error.problem.status === 404) {
+          return null;
+        }
+        throw error;
+      }
+    },
+    retry: false,
+  });
+  const resumable =
+    latest.data !== undefined &&
+    latest.data !== null &&
+    (latest.data.status === "QUEUED" ||
+      latest.data.status === "RUNNING" ||
+      (latest.data.status === "SUCCEEDED" &&
+        latest.data.decision === "PENDING"))
+      ? latest.data.id
+      : undefined;
+  const runId = chosenRun ?? resumable;
   const run = useQuery({
     queryKey: ["triage-run", workspaceId, runId],
     enabled: runId !== undefined,
+    retry: false,
     queryFn: ({ signal }) =>
       api(`/question-triage-runs/${runId ?? ""}`, {
         schema: TriageRun,
@@ -76,6 +109,10 @@ export function TriagePanel({
         signal,
       }),
     refetchInterval: (query) => {
+      // A run that cannot be read is not asked for again every second.
+      if (query.state.status === "error") {
+        return false;
+      }
       const status = query.state.data?.status;
       return status === undefined || status === "QUEUED" || status === "RUNNING"
         ? POLL_MS
@@ -92,17 +129,13 @@ export function TriagePanel({
       }),
     onSuccess: (decided, acceptedGroups) => {
       setRunId(undefined);
+      setDecided(decided.id);
       if (acceptedGroups.length === 0) {
         toast.success("Suggestions dismissed");
         return;
       }
-      const merged = acceptedGroups.reduce(
-        (sum, index) =>
-          sum +
-          (decided.suggestions?.groups[index]?.questionIds.length ?? 1) -
-          1,
-        0,
-      );
+      // What the server merged: questions that changed since are skipped.
+      const merged = decided.mergedCount ?? 0;
       toast.success(
         `Merged ${String(merged)} ${merged === 1 ? "question" : "questions"}`,
       );
@@ -115,7 +148,25 @@ export function TriagePanel({
   const bodyOf = (id: string) =>
     questions.find((question) => question.id === id)?.body ??
     "(no longer there)";
-  const current = runId === undefined ? undefined : run.data;
+  /** Why a group would merge nothing now, or undefined when it would. */
+  const blockedReason = (representativeId: string) => {
+    const representative = questions.find(({ id }) => id === representativeId);
+    if (representative === undefined) {
+      return "Its first question is no longer there.";
+    }
+    if (representative.mergedIntoId !== null) {
+      return "Its first question was merged into another.";
+    }
+    if (representative.status === "PENDING") {
+      return "Its first question waits for approval: publish it to merge into it.";
+    }
+    if (representative.status === "HIDDEN") {
+      return "Its first question is hidden.";
+    }
+    return undefined;
+  };
+  const current =
+    runId === undefined || runId === decided ? undefined : run.data;
   const busy =
     start.isPending ||
     (runId !== undefined &&
@@ -132,19 +183,24 @@ export function TriagePanel({
         <Button
           variant="outline"
           size="sm"
-          disabled={busy || decide.isPending}
+          disabled={(busy && !run.isError) || decide.isPending}
           onClick={() => {
             start.mutate();
           }}
         >
           Suggest groups
         </Button>
-        {busy ? (
+        {busy && !run.isError ? (
           <p role="status" className="text-sm text-muted-foreground">
             Sorting questions…
           </p>
         ) : null}
       </div>
+      {run.isError ? (
+        <p role="alert" className="text-sm text-destructive">
+          The suggestions could not be read: {errorMessage(run.error)}
+        </p>
+      ) : null}
       {refusal === undefined ? null : (
         <p role="status" className="text-sm text-muted-foreground">
           {refusal}
@@ -179,6 +235,9 @@ export function TriagePanel({
                   <input
                     type="checkbox"
                     className="mt-1"
+                    disabled={
+                      blockedReason(group.representativeId) !== undefined
+                    }
                     checked={chosen.has(index)}
                     onChange={(change) => {
                       const next = new Set(chosen);
@@ -204,6 +263,12 @@ export function TriagePanel({
                     <span className="text-xs text-muted-foreground">
                       {group.reason}
                     </span>
+                    {blockedReason(group.representativeId) ===
+                    undefined ? null : (
+                      <span className="text-xs text-destructive">
+                        {blockedReason(group.representativeId)}
+                      </span>
+                    )}
                   </span>
                 </label>
               ))}

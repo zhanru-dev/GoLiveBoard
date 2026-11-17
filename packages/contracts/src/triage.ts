@@ -56,6 +56,8 @@ export const TriageRun = z.object({
   outputTokens: z.number().int().nonnegative().nullable(),
   /** In millionths of a US dollar. */
   costMicros: z.number().int().nonnegative().nullable(),
+  /** How many questions the decision merged; null until decided. */
+  mergedCount: z.number().int().nonnegative().nullable(),
   createdAt: z.iso.datetime(),
   finishedAt: z.iso.datetime().nullable(),
 });

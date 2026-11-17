@@ -7,20 +7,20 @@
       {
         "representative": "q1",
         "questions": ["q1", "q2", "q3"],
-        "reason": "All ask whether a recording of the session will be available afterwards."
+        "reason": "All ask whether a recording will be available to watch later."
       },
       {
         "representative": "q6",
         "questions": ["q5", "q6"],
-        "reason": "Both ask how to get the slides after the event."
+        "reason": "Both ask how to get the slides after the session."
       }
     ],
     "answer_order": ["q1", "q6", "q7", "q4"]
   },
   "usage": {
     "inputTokens": 818,
-    "outputTokens": 118
+    "outputTokens": 115
   },
-  "latencyMs": 3401,
-  "recordedAt": "2026-11-17T12:52:48.753Z"
+  "latencyMs": 2904,
+  "recordedAt": "2026-11-17T17:11:11.515Z"
 }

@@ -4,7 +4,10 @@ import { InjectPinoLogger, PinoLogger } from "nestjs-pino";
 import { PRISMA } from "../database/prisma.js";
 import type { PrismaClient } from "../generated/prisma/client.js";
 import { CLOCK, type Clock } from "../shared/clock.js";
+import type { Prisma } from "../generated/prisma/client.js";
+import { maxOutputTokens } from "./domain/budget.js";
 import { costMicros } from "./domain/pricing.js";
+import { settle } from "./spend-ledger.js";
 import { fromLabels, promptFor } from "./domain/prompt.js";
 import { checkSuggestions } from "./domain/suggestions.js";
 import {
@@ -57,9 +60,14 @@ export class TriageRunner {
       await this.fail(runId, "FAILED", "AI suggestions are switched off");
       return;
     }
-    // As they are now: one deleted since is not sent.
+    // As they are now: one answered, hidden, merged or deleted since is
+    // not sent (a moderator hid it for a reason).
     const rows = await this.prisma.question.findMany({
-      where: { id: { in: run.questionIds } },
+      where: {
+        id: { in: run.questionIds },
+        status: { in: ["PENDING", "PUBLISHED"] },
+        mergedIntoId: null,
+      },
       select: { id: true, body: true },
     });
     const byId = new Map(rows.map((row) => [row.id, row.body]));
@@ -67,12 +75,24 @@ export class TriageRunner {
       const text = byId.get(id);
       return text === undefined ? [] : [{ id, text }];
     });
+    if (questions.length === 0) {
+      await this.fail(
+        runId,
+        "FAILED",
+        "Every question was answered, hidden or merged before the run",
+      );
+      return;
+    }
     const prompt = promptFor(questions);
     const started = performance.now();
     const signal = AbortSignal.timeout(TRIAGE_TIMEOUT_MS);
     try {
       const answer = await Promise.race([
-        this.model.triage(prompt.user, signal),
+        this.model.triage(
+          prompt.user,
+          signal,
+          maxOutputTokens(questions.length),
+        ),
         new Promise<never>((_, reject) => {
           signal.addEventListener("abort", () => {
             reject(new TimedOut());
@@ -85,7 +105,7 @@ export class TriageRunner {
         latencyMs,
         inputTokens: answer.usage.inputTokens,
         outputTokens: answer.usage.outputTokens,
-        costMicros: costMicros(answer.model, answer.usage),
+        costMicros: costMicros(answer.attempts),
       };
       const check = checkSuggestions(
         questions.map(({ id }) => id),
@@ -104,23 +124,23 @@ export class TriageRunner {
         );
         return;
       }
-      await this.prisma.triageRun.updateMany({
-        where: { id: runId, status: "RUNNING" },
-        data: {
-          status: "SUCCEEDED",
-          suggestions: check.suggestions,
-          finishedAt: this.clock.now(),
-          ...recorded,
-        },
+      await this.finish(runId, recorded.costMicros, {
+        status: "SUCCEEDED",
+        suggestions: check.suggestions,
+        finishedAt: this.clock.now(),
+        ...recorded,
       });
     } catch (error) {
       const latencyMs = Math.round(performance.now() - started);
       if (error instanceof TimedOut || signal.aborted) {
+        // The model may have billed for work it did not finish in time:
+        // its worst cost stays counted.
         await this.fail(
           runId,
           "TIMED_OUT",
           "The AI model did not answer within 8 seconds",
           { latencyMs },
+          "RESERVED",
         );
         return;
       }
@@ -143,31 +163,68 @@ export class TriageRunner {
    */
   async sweep(): Promise<number> {
     const now = this.clock.now().getTime();
-    const [running, queued] = await Promise.all([
-      this.prisma.triageRun.updateMany({
-        where: {
-          status: "RUNNING",
-          startedAt: { lt: new Date(now - RUNNING_FOR_TOO_LONG_MS) },
-        },
-        data: {
-          status: "TIMED_OUT",
-          failure: "The run was interrupted",
-          finishedAt: new Date(now),
-        },
-      }),
-      this.prisma.triageRun.updateMany({
-        where: {
-          status: "QUEUED",
-          createdAt: { lt: new Date(now - QUEUED_FOR_TOO_LONG_MS) },
-        },
-        data: {
-          status: "FAILED",
-          failure: "The run never started",
-          finishedAt: new Date(now),
-        },
-      }),
-    ]);
-    return running.count + queued.count;
+    const stale = await this.prisma.triageRun.findMany({
+      where: {
+        OR: [
+          {
+            status: "RUNNING",
+            startedAt: { lt: new Date(now - RUNNING_FOR_TOO_LONG_MS) },
+          },
+          {
+            status: "QUEUED",
+            createdAt: { lt: new Date(now - QUEUED_FOR_TOO_LONG_MS) },
+          },
+        ],
+      },
+      select: { id: true, status: true, reservedMicros: true },
+    });
+    let closed = 0;
+    for (const run of stale) {
+      // A run interrupted while running may have been billed: its worst
+      // cost stays counted. One that never started cost nothing.
+      const running = run.status === "RUNNING";
+      closed += await this.finish(
+        run.id,
+        running ? run.reservedMicros : 0,
+        running
+          ? {
+              status: "TIMED_OUT",
+              failure: "The run was interrupted",
+              finishedAt: new Date(now),
+            }
+          : {
+              status: "FAILED",
+              failure: "The run never started",
+              finishedAt: new Date(now),
+            },
+        running ? "RUNNING" : "QUEUED",
+      );
+    }
+    return closed;
+  }
+
+  /**
+   * Finishes a run that is still in `from`, and settles its day's spend in
+   * the same transaction: once, whoever finishes it.
+   *
+   * @returns 1 when it finished the run, 0 when another did first
+   */
+  private finish(
+    runId: string,
+    spentMicros: number | null,
+    data: Prisma.TriageRunUpdateManyMutationInput,
+    from: "QUEUED" | "RUNNING" = "RUNNING",
+  ): Promise<number> {
+    return this.prisma.$transaction(async (tx) => {
+      const { count } = await tx.triageRun.updateMany({
+        where: { id: runId, status: from },
+        data,
+      });
+      if (count > 0) {
+        await settle(tx, runId, spentMicros ?? 0);
+      }
+      return count;
+    });
   }
 
   private async fail(
@@ -181,10 +238,22 @@ export class TriageRunner {
       outputTokens?: number;
       costMicros?: number | null;
     } = {},
+    spend: "RECORDED" | "RESERVED" = "RECORDED",
   ): Promise<void> {
-    await this.prisma.triageRun.updateMany({
-      where: { id: runId, status: "RUNNING" },
-      data: { status, failure, finishedAt: this.clock.now(), ...recorded },
+    const reserved =
+      spend === "RESERVED"
+        ? (
+            await this.prisma.triageRun.findUniqueOrThrow({
+              where: { id: runId },
+              select: { reservedMicros: true },
+            })
+          ).reservedMicros
+        : (recorded.costMicros ?? 0);
+    await this.finish(runId, reserved, {
+      status,
+      failure,
+      finishedAt: this.clock.now(),
+      ...recorded,
     });
   }
 }

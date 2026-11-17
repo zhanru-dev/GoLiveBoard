@@ -132,6 +132,14 @@ export class RetentionJob {
           },
         })
       ).count,
+      // Only figures, kept as long as the audit trail.
+      triageSpend: (
+        await this.prisma.triageSpend.deleteMany({
+          where: {
+            day: { lt: new Date(now.getTime() - AUDIT_DAYS * DAY_MS) },
+          },
+        })
+      ).count,
       auditEntries: (
         await this.prisma.auditEntry.deleteMany({
           where: {

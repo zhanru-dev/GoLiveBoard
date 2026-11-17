@@ -20,6 +20,7 @@ describe("triageModelProvider", () => {
         apiKey: "k",
         baseUrl: undefined,
         model: "m",
+        dailyBudgetMicros: undefined,
       }),
     ).toBeNull();
   });
@@ -31,6 +32,7 @@ describe("triageModelProvider", () => {
         apiKey: "k",
         baseUrl: undefined,
         model: "m",
+        dailyBudgetMicros: undefined,
       }),
     ).toBeInstanceOf(AnthropicTriageModel);
     expect(
@@ -39,6 +41,7 @@ describe("triageModelProvider", () => {
         apiKey: undefined,
         baseUrl: undefined,
         model: "m",
+        dailyBudgetMicros: undefined,
       }),
     ).toBeInstanceOf(OfflineTriageModel);
   });

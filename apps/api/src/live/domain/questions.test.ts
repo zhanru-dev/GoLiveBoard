@@ -96,6 +96,16 @@ describe("isVotable", () => {
 });
 
 describe("planModeration (FR-RN-5)", () => {
+  it("never pins a question merged into another", () => {
+    expect(
+      planModeration(
+        { status: "PUBLISHED", pinSlot: null, mergedIntoId: "another" },
+        { pinned: true },
+        [],
+      ),
+    ).toEqual({ allowed: false, reason: "NOT_PINNABLE" });
+  });
+
   const at = (status: QuestionStatus, pinSlot: number | null = null) => ({
     status,
     pinSlot,

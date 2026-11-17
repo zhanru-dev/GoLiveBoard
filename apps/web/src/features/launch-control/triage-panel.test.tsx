@@ -60,14 +60,20 @@ const run = (changes: Partial<TriageRun> = {}): TriageRun => ({
   inputTokens: 900,
   outputTokens: 120,
   costMicros: 6_000,
+  mergedCount: null,
   createdAt: "2026-11-17T10:00:00.000Z",
   finishedAt: "2026-11-17T10:00:02.000Z",
   ...changes,
 });
 
-function serve(runs: TriageRun[]) {
+function serve(runs: TriageRun[], latest: TriageRun | null = null) {
   let read = 0;
   server.use(
+    http.get(`*/api/v1/events/${EVENT_ID}/question-triage-runs/latest`, () =>
+      latest === null
+        ? HttpResponse.json(problem(404, "NOT_FOUND"), { status: 404 })
+        : HttpResponse.json(latest),
+    ),
     http.post(`*/api/v1/events/${EVENT_ID}/question-triage-runs`, () =>
       HttpResponse.json({ id: RUN_ID }, { status: 202 }),
     ),
@@ -130,10 +136,7 @@ describe("TriagePanel", () => {
         async ({ request }) => {
           sent = await request.json();
           return HttpResponse.json(
-            run({
-              decision: "PARTIAL",
-              decidedAt: undefined,
-            } as Partial<TriageRun>),
+            run({ decision: "PARTIAL", mergedCount: 1 }),
           );
         },
       ),
@@ -159,7 +162,9 @@ describe("TriagePanel", () => {
         `*/api/v1/question-triage-runs/${RUN_ID}/decision`,
         async ({ request }) => {
           sent = await request.json();
-          return HttpResponse.json(run({ decision: "REJECTED" }));
+          return HttpResponse.json(
+            run({ decision: "REJECTED", mergedCount: 0 }),
+          );
         },
       ),
     );
@@ -218,6 +223,78 @@ describe("TriagePanel", () => {
       .click(screen.getByRole("button", { name: "Suggest groups" }));
 
     expect(await screen.findByText(text)).toBeInTheDocument();
+  });
+
+  it("comes back to a run waiting for a decision", async () => {
+    serve([run()], run());
+    show();
+
+    expect(
+      await screen.findByRole("group", { name: /Choose the groups to merge/ }),
+    ).toBeInTheDocument();
+  });
+
+  it("will not merge into a question waiting for approval, and says why", async () => {
+    serve([run()]);
+    renderScreen(
+      <TriagePanel
+        eventId={EVENT_ID}
+        workspaceId={OWNER.activeWorkspace.workspaceId}
+        questions={[
+          { ...question(1, "How much does it cost?"), status: "PENDING" },
+          ...QUESTIONS.slice(1),
+        ]}
+      />,
+      OWNER,
+    );
+
+    await userEvent
+      .setup()
+      .click(screen.getByRole("button", { name: "Suggest groups" }));
+
+    expect(
+      await screen.findByRole("checkbox", { name: /How much does it cost\?/ }),
+    ).toBeDisabled();
+    expect(
+      screen.getByText(
+        "Its first question waits for approval: publish it to merge into it.",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("checkbox", { name: /Is it recorded\?/ }),
+    ).toBeEnabled();
+  });
+
+  it("stops asking when the run cannot be read, and lets the moderator try again", async () => {
+    let reads = 0;
+    server.use(
+      http.get(`*/api/v1/events/${EVENT_ID}/question-triage-runs/latest`, () =>
+        HttpResponse.json(problem(404, "NOT_FOUND"), { status: 404 }),
+      ),
+      http.post(`*/api/v1/events/${EVENT_ID}/question-triage-runs`, () =>
+        HttpResponse.json({ id: RUN_ID }, { status: 202 }),
+      ),
+      http.get(`*/api/v1/question-triage-runs/${RUN_ID}`, () => {
+        reads += 1;
+        return HttpResponse.json(problem(500, "INTERNAL_ERROR"), {
+          status: 500,
+        });
+      }),
+    );
+    show();
+
+    await userEvent
+      .setup()
+      .click(screen.getByRole("button", { name: "Suggest groups" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "The suggestions could not be read",
+    );
+    await new Promise((resolve) => setTimeout(resolve, 2_500));
+    expect(reads).toBe(1);
+    expect(
+      screen.getByRole("button", { name: "Suggest groups" }),
+    ).toBeEnabled();
   });
 
   it("says when nothing asks the same thing", async () => {

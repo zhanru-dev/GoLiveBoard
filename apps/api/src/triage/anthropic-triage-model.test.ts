@@ -103,6 +103,9 @@ describe("AnthropicTriageModel", () => {
       output: OUTPUT,
       model: "claude-opus-5-5",
       usage: { inputTokens: 1200, outputTokens: 80 },
+      attempts: [
+        { model: "claude-opus-5-5", inputTokens: 1200, outputTokens: 80 },
+      ],
     });
     const [request] = seen;
     expect(request?.path).toBe("/v1/messages");
@@ -119,6 +122,73 @@ describe("AnthropicTriageModel", () => {
     // Removed on this model: sending them is a 400.
     expect(request?.body).not.toHaveProperty("temperature");
     expect(request?.body).not.toHaveProperty("thinking");
+  });
+
+  it("counts each attempt with its model: one declined, and the fallback that answered", async () => {
+    reply = {
+      status: 200,
+      body: message({
+        model: "claude-opus-4-8",
+        usage: {
+          input_tokens: 1300,
+          output_tokens: 90,
+          iterations: [
+            {
+              type: "message",
+              model: null,
+              input_tokens: 1200,
+              output_tokens: 10,
+              cache_creation_input_tokens: 0,
+              cache_read_input_tokens: 0,
+            },
+            {
+              type: "fallback_message",
+              model: "claude-opus-4-8",
+              input_tokens: 1250,
+              output_tokens: 80,
+              cache_creation_input_tokens: 0,
+              cache_read_input_tokens: 50,
+            },
+          ],
+        },
+      }),
+    };
+
+    const answer = await triage();
+
+    expect(answer.attempts).toEqual([
+      { model: "claude-opus-5-5", inputTokens: 1200, outputTokens: 10 },
+      { model: "claude-opus-4-8", inputTokens: 1300, outputTokens: 80 },
+    ]);
+    expect(answer.usage).toEqual({ inputTokens: 2500, outputTokens: 90 });
+  });
+
+  it("counts cache tokens as input", async () => {
+    reply = {
+      status: 200,
+      body: message({
+        usage: {
+          input_tokens: 100,
+          output_tokens: 20,
+          cache_creation_input_tokens: 30,
+          cache_read_input_tokens: 70,
+        },
+      }),
+    };
+
+    expect((await triage()).usage).toEqual({
+      inputTokens: 200,
+      outputTokens: 20,
+    });
+  });
+
+  it("asks for no more output than the run allows", async () => {
+    reply = { status: 200, body: message() };
+    seen.length = 0;
+
+    await model().triage(questions, new AbortController().signal, 1_400);
+
+    expect(seen[0]?.body).toMatchObject({ max_tokens: 1_400 });
   });
 
   it("records the model that answered, a fallback included", async () => {

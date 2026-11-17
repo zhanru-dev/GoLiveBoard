@@ -7,7 +7,7 @@
       {
         "representative": "q3",
         "questions": ["q1", "q2", "q3"],
-        "reason": "All ask whether single sign-on with their identity provider (SAML, Okta) is supported."
+        "reason": "All ask whether single sign-on with their identity provider (SAML/Okta) is supported."
       },
       {
         "representative": "q5",
@@ -17,20 +17,20 @@
       {
         "representative": "q7",
         "questions": ["q6", "q7"],
-        "reason": "Both ask about offline use without an internet connection."
+        "reason": "Both ask about offline use without internet."
       },
       {
         "representative": "q10",
         "questions": ["q8", "q9", "q10"],
-        "reason": "All ask whether data is stored in Europe for European customers."
+        "reason": "All ask about EU data residency and server location."
       }
     ],
     "answer_order": ["q3", "q10", "q5", "q7", "q11", "q12", "q13", "q14", "q15"]
   },
   "usage": {
     "inputTokens": 964,
-    "outputTokens": 237
+    "outputTokens": 229
   },
-  "latencyMs": 3824,
-  "recordedAt": "2026-11-17T12:53:01.194Z"
+  "latencyMs": 3540,
+  "recordedAt": "2026-11-17T17:11:24.916Z"
 }

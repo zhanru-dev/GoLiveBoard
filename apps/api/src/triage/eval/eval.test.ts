@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 
 import { ModelTriage, fromLabels } from "../domain/prompt.js";
 import { checkSuggestions } from "../domain/suggestions.js";
-import { EVAL_CASES, PASSING_MEAN_SCORE } from "./cases.js";
+import { EVAL_CASES, PASSING_CASE_SCORE, PASSING_MEAN_SCORE } from "./cases.js";
 import {
   promptOfCase,
   type Recording,
@@ -57,6 +57,7 @@ describe("the triage evaluation suite, on recorded answers", () => {
       evalCase.mustStayAlone,
     );
     expect(result.brokenRules).toEqual([]);
+    expect(result.score).toBeGreaterThanOrEqual(PASSING_CASE_SCORE);
     scores.set(evalCase.name, result.score);
   });
 
