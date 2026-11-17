@@ -113,6 +113,8 @@ flowchart LR
 
 **Dependency audit.** CI fails on any known vulnerability of moderate severity or above in **production** dependencies. Development tools (linters, test runners, build tools) never reach users and run only on our own inputs, so their advisories are reviewed when Dependabot proposes an update rather than blocking every pull request.
 
+An advisory with no fixed release yet, and reviewed as not reachable by users' input, may be allowed in `audit-allowlist.json`. Each entry gives the advisory, its package, the reason, the review date and an expiry date at most 30 days on. `scripts/audit.mjs` fails CI on any advisory not listed, on an entry past its expiry date (review it again), and on an entry the audit no longer reports (remove it).
+
 ## 4. Continuous delivery
 
 Built in milestone 10, once the product is complete ([delivery plan](07-delivery-plan.md)); until then CI proves the production images locally.

@@ -1,0 +1,9 @@
+[
+  {
+    "advisory": "GHSA-fc5q-39xc-vjpf",
+    "package": "picomatch",
+    "reason": "ReDoS on crafted extglob patterns. Reached only through @sentry/nextjs's build plugins (@rollup/plugin-commonjs, vite), which match our own build configuration's globs, never user input. No patched release exists (<= 4.0.7 affected).",
+    "reviewed": "2026-11-17",
+    "expires": "2026-12-17"
+  }
+]

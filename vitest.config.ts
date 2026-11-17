@@ -9,6 +9,7 @@ export default defineConfig({
     projects: [
       "packages/*",
       "apps/web",
+      { test: { name: "scripts", root: "./scripts", include: ["*.test.mjs"] } },
       {
         extends: api,
         test: {

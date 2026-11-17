@@ -89,9 +89,11 @@ jobs:
         with:
           node-version-file: .nvmrc
       # Production dependencies only: development tools never reach users.
-      # (docs/06-infrastructure-and-operations.md, "Dependency audit")
+      # Advisories reviewed and allowed, each until a date, are listed in
+      # audit-allowlist.json (docs/06-infrastructure-and-operations.md,
+      # "Dependency audit").
       - name: Audit production dependencies
-        run: npm audit --omit=dev --audit-level=moderate
+        run: node scripts/audit.mjs
       - name: Install gitleaks (checksum verified)
         run: |
           archive="gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
