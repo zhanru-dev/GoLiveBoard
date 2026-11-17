@@ -47,6 +47,8 @@ model User {
   chatMessages        ChatMessage[]        @relation("ChatAuthor")
   deletedMessages     ChatMessage[]        @relation("ChatDeletedBy")
   questions           Question[]
+  triageRequests      TriageRun[]          @relation("TriageRequestedBy")
+  triageDecisions     TriageRun[]          @relation("TriageDecidedBy")
 
   @@map("users")
 }
@@ -214,6 +216,7 @@ model Event {
   journal      RealtimeJournal[]
   attendance   AttendanceMinute[]
   report       EventReport?
+  triageRuns   TriageRun[]
 
   // The event list: one workspace, newest start first, ID as tie-breaker.
   @@index([workspaceId, startsAt(sort: Desc), id(sort: Desc)])
@@ -811,6 +814,64 @@ model AttendanceMinute {
   @@id([eventId, attendeeId, minute])
   @@index([attendeeId])
   @@map("attendance_minutes")
+}
+
+enum TriageRunStatus {
+  QUEUED
+  RUNNING
+  SUCCEEDED
+  FAILED
+  TIMED_OUT
+
+  @@map("triage_run_status")
+}
+
+enum TriageDecision {
+  PENDING
+  ACCEPTED
+  PARTIAL
+  REJECTED
+
+  @@map("triage_decision")
+}
+
+/// One run of AI question triage (FR-RN-6, ADR-0012): what it was given,
+/// what it suggested, what it cost, and what a moderator decided. The model
+/// only suggests; merges happen when a moderator accepts them.
+model TriageRun {
+  id            String          @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  eventId       String          @map("event_id") @db.Uuid
+  requestedById String?         @map("requested_by_id") @db.Uuid
+  status        TriageRunStatus @default(QUEUED)
+  /// The questions it was given, as they were: the suggestions may name
+  /// only these.
+  questionIds   String[]        @map("question_ids") @db.Uuid
+  /// `{ groups, answerOrder }`, validated; set when SUCCEEDED.
+  suggestions   Json?
+  failure       String?
+  model         String?
+  latencyMs     Int?            @map("latency_ms")
+  inputTokens   Int?            @map("input_tokens")
+  outputTokens  Int?            @map("output_tokens")
+  /// Millionths of a US dollar, from the model's price when it ran.
+  costMicros    Int?            @map("cost_micros")
+  decision      TriageDecision  @default(PENDING)
+  decidedById   String?         @map("decided_by_id") @db.Uuid
+  decidedAt     DateTime?       @map("decided_at") @db.Timestamptz(3)
+  createdAt     DateTime        @default(now()) @map("created_at") @db.Timestamptz(3)
+  startedAt     DateTime?       @map("started_at") @db.Timestamptz(3)
+  finishedAt    DateTime?       @map("finished_at") @db.Timestamptz(3)
+
+  event       Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  requestedBy User? @relation("TriageRequestedBy", fields: [requestedById], references: [id], onDelete: SetNull)
+  decidedBy   User? @relation("TriageDecidedBy", fields: [decidedById], references: [id], onDelete: SetNull)
+
+  @@index([eventId, createdAt(sort: Desc)])
+  /// The demo's daily budget sums the day's runs.
+  @@index([createdAt])
+  @@index([requestedById])
+  @@index([decidedById])
+  @@map("triage_runs")
 }
 
 /// What the report (FR-RC-3) keeps of the attendance minutes, which are

@@ -123,6 +123,15 @@ export {
 export { QuestionStatus, RealtimeChannel } from "./live.js";
 export { EventReport } from "./reports.js";
 export {
+  TriageDecision,
+  TriageDecisionRequest,
+  TriageGroup,
+  TriageRun,
+  TriageRunStarted,
+  TriageRunStatus,
+  TriageSuggestions,
+} from "./triage.js";
+export {
   LiveOps,
   LiveOpsAudience,
   LiveOpsMoment,

@@ -32,6 +32,9 @@ export const ErrorCode = z.enum([
   "PRECONDITION_REQUIRED",
   "INTERACTION_CLOSED",
   "REPORT_NOT_AVAILABLE",
+  "TRIAGE_UNAVAILABLE",
+  "TRIAGE_BUDGET_SPENT",
+  "TRIAGE_ALREADY_DECIDED",
   "QUESTION_STATUS_INVALID",
   "QUESTION_NOT_PINNABLE",
   "PIN_LIMIT_REACHED",
@@ -130,6 +133,18 @@ export const ERROR_DEFINITIONS = {
   PRECONDITION_REQUIRED: {
     status: 428,
     title: "The If-Match header is required",
+  },
+  TRIAGE_UNAVAILABLE: {
+    status: 503,
+    title: "AI suggestions are unavailable on this server",
+  },
+  TRIAGE_BUDGET_SPENT: {
+    status: 429,
+    title: "Today's budget for AI suggestions is spent",
+  },
+  TRIAGE_ALREADY_DECIDED: {
+    status: 409,
+    title: "These suggestions were already decided, or are not ready",
   },
   REPORT_NOT_AVAILABLE: {
     status: 409,
