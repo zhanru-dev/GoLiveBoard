@@ -15,7 +15,8 @@
     "db:migrate": "prisma migrate dev",
     "db:deploy": "prisma migrate deploy",
     "db:seed": "node --env-file-if-exists=../../.env --enable-source-maps dist/demo/seed.js",
-    "db:reset": "prisma migrate reset"
+    "db:reset": "prisma migrate reset",
+    "eval:record": "npm run build -w @opspilot/contracts && nest build && node --env-file-if-exists=../../.env --enable-source-maps dist/triage/eval/record.js && prettier --write src/triage/eval/recordings"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "1.4.0",

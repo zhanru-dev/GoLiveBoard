@@ -1,0 +1,36 @@
+{
+  "case": "a product launch Q&A",
+  "model": "claude-opus-5-5",
+  "hash": "926f379344cf8c2d2349032ecca4385d57616c695faa929cee6b42da7548d5a7",
+  "output": {
+    "groups": [
+      {
+        "representative": "q3",
+        "questions": ["q1", "q2", "q3"],
+        "reason": "All ask whether single sign-on with their identity provider (SAML, Okta) is supported."
+      },
+      {
+        "representative": "q5",
+        "questions": ["q4", "q5"],
+        "reason": "Both ask whether existing projects migrate automatically or manually."
+      },
+      {
+        "representative": "q7",
+        "questions": ["q6", "q7"],
+        "reason": "Both ask about offline use without an internet connection."
+      },
+      {
+        "representative": "q10",
+        "questions": ["q8", "q9", "q10"],
+        "reason": "All ask whether data is stored in Europe for European customers."
+      }
+    ],
+    "answer_order": ["q3", "q10", "q5", "q7", "q11", "q12", "q13", "q14", "q15"]
+  },
+  "usage": {
+    "inputTokens": 964,
+    "outputTokens": 237
+  },
+  "latencyMs": 3824,
+  "recordedAt": "2026-11-17T12:53:01.194Z"
+}

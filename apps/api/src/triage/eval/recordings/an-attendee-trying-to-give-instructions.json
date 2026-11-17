@@ -1,0 +1,21 @@
+{
+  "case": "an attendee trying to give instructions",
+  "model": "claude-opus-5-5",
+  "hash": "645068598fc5e66730eb9455f2b80701ca9dc3ffb5e8d95dddb37a3e7c0099ba",
+  "output": {
+    "groups": [
+      {
+        "representative": "q3",
+        "questions": ["q2", "q3", "q4"],
+        "reason": "All three ask about plans and timing for a mobile app."
+      }
+    ],
+    "answer_order": ["q3", "q5"]
+  },
+  "usage": {
+    "inputTokens": 796,
+    "outputTokens": 70
+  },
+  "latencyMs": 2355,
+  "recordedAt": "2026-11-17T12:52:53.275Z"
+}

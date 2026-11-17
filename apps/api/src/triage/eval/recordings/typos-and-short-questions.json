@@ -1,0 +1,26 @@
+{
+  "case": "typos and short questions",
+  "model": "claude-opus-5-5",
+  "hash": "7b8b5dcdf606a5a340af7d2934d34fdd2d53e22840fe54723dc6214a719f304e",
+  "output": {
+    "groups": [
+      {
+        "representative": "q3",
+        "questions": ["q1", "q2", "q3"],
+        "reason": "All three ask about the product's price."
+      },
+      {
+        "representative": "q5",
+        "questions": ["q4", "q5", "q6"],
+        "reason": "All three ask when or whether dark mode is coming."
+      }
+    ],
+    "answer_order": ["q3", "q5"]
+  },
+  "usage": {
+    "inputTokens": 785,
+    "outputTokens": 108
+  },
+  "latencyMs": 2150,
+  "recordedAt": "2026-11-17T12:52:57.369Z"
+}
