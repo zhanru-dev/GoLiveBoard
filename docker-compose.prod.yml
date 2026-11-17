@@ -39,6 +39,10 @@ x-app-environment: &app-environment
   # The demo: one-click sign-in and the nightly reset (FR-AUTH-5), as in the
   # AWS demo environment.
   DEMO_MODE: "true"
+  # AI question triage without a model or a key: identical questions are
+  # grouped. Set STACK_AI_PROVIDER=anthropic and ANTHROPIC_API_KEY for Claude.
+  AI_PROVIDER: ${STACK_AI_PROVIDER:-offline}
+  ANTHROPIC_API_KEY: ${STACK_ANTHROPIC_API_KEY:-}
   # Errors go to Sentry. Locally a reserved name that never resolves, so
   # nothing leaves the machine; the browser tests intercept what the page
   # sends there.

@@ -297,15 +297,20 @@ erDiagram
   TriageRun {
     uuid id PK
     uuid eventId FK
-    enum outcome "SUCCEEDED | FAILED | TIMED_OUT"
+    enum status "QUEUED | RUNNING | SUCCEEDED | FAILED | TIMED_OUT"
+    uuid[] questionIds
+    jsonb suggestions
+    text failure
     text model
     int latencyMs
     int inputTokens
     int outputTokens
-    jsonb suggestions
+    int costMicros
     enum decision "PENDING | ACCEPTED | PARTIAL | REJECTED"
   }
 ```
+
+A `TriageRun` (FR-RN-6, ADR-0012) records what it was given (the IDs of up to 200 open questions, pending or published and not merged), what the model suggested, why it failed, and its model, latency, tokens and cost in millionths of a dollar. CHECK constraints keep it consistent: suggestions exactly when it succeeded, a failure exactly when it failed or timed out, a finish time exactly when done, a decision only once it succeeded; a partial unique index allows one queued or running run per event. Accepting groups sets `Question.mergedIntoId` on the others: a merged question is no longer public (its author and moderators still see it), loses its pin and takes no votes, and its votes move to the question it was merged into, one per attendee.
 
 ### 4.4 Record
 
@@ -446,5 +451,6 @@ Every foreign key is indexed. Additional indexes follow the main queries:
 | Audit entries                 | 2 years                                                           | Deleted                                                                                                                                          |
 | Idempotency records           | 24 hours                                                          | Deleted                                                                                                                                          |
 | Webhook delivery attempts     | 30 days                                                           | Deleted                                                                                                                                          |
+| Triage runs                   | Lifetime of the event                                             | Deleted with the event; they hold question IDs, never text or names                                                                              |
 
 The daily retention job (`src/attendees/retention-job.ts`, 04:00 UK time) is idempotent: a second run finds nothing to do. Each anonymisation is audited as `SYSTEM` (`attendee.anonymised`), and takes the event's row lock and then the attendee's, like an erasure on request.

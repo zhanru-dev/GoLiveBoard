@@ -183,6 +183,7 @@ The documented upgrade path when traffic grows: move web, api and worker to **EC
 - **Locally**: `.env` (git-ignored), created from `.env.example`.
 - **On AWS**: secrets are `SecureString` parameters in Systems Manager Parameter Store, encrypted with KMS. The deploy command renders them into an env file readable only by the service user. Nothing secret is baked into images.
 - **Rotation**: JWT signing keys support a current and a previous key so rotation does not sign everyone out; webhook secrets rotate per endpoint; database credentials rotate through RDS.
+- **AI triage** (`AI_PROVIDER`): `none` by default (suggestions unavailable, Q&A unaffected); `anthropic` with `ANTHROPIC_API_KEY` and `AI_TRIAGE_MODEL` (default `claude-opus-5-5`); `offline` groups identical questions without a model, for development and the production-like stack. The evaluation suite's recorded answers are made with `npm run eval:record -w @opspilot/api`, which calls the real model and costs money (about $0.03 for the six cases): run it after a change to the prompt, the cases or the model, and before a release; CI fails while a recording no longer matches.
 - **Webhook encryption key** (`WEBHOOK_ENCRYPTION_KEY`, 32 bytes in base64: `openssl rand -base64 32`) encrypts the endpoints' signing secrets. Without it the API refuses to create endpoints and the worker records each delivery as failed. To rotate it, set the new key and move the old one to `WEBHOOK_ENCRYPTION_KEY_PREVIOUS` on the API and the worker. Every 10 minutes the worker seals secrets still under the old key again with the new one; the secrets stay the same, so receivers notice nothing. Once no `webhook_endpoints.secret_key_id` names the old key, remove it.
 
 ## 7. Observability
@@ -238,7 +239,7 @@ The demo environment runs with `DEMO_MODE=true`:
 - **One-click sign-in** to the demo workspace as a Manager, with a banner explaining that data resets nightly.
 - **Emails are captured, not sent**: messages to demo attendees appear in an in-app **demo inbox**, so a visitor can complete registration and verification without a real mailbox.
 - **Webhooks** are not part of the demo: they are managed by Owners, and visitors are the demo's Manager, so the Integrations screen is not offered to them (and the API refuses them). This keeps the demo from sending requests to addresses visitors choose.
-- **AI triage** has a per-workspace daily budget; when it is spent, the panel says so and Q&A carries on normally.
+- **AI triage** has a daily budget: 30 runs or $1, whichever comes first, per UK calendar day; when it is spent, the panel says so and Q&A carries on normally.
 - **Nightly reset** at 03:00 UK time restores the seed data; real workspaces are never touched.
 
 **What runs today** (milestone 4):
@@ -250,4 +251,4 @@ The demo environment runs with `DEMO_MODE=true`:
 - The demo people's addresses are under `demo.opspilot.invalid`. The reserved `.invalid` top-level domain cannot receive email, so request schemas refuse it (nobody can register, invite or reset the password of a demo account), and the mailer never sends to it: the demo sends no real email and earns no bounce. Their passwords are hashes of random secrets nobody knows.
 - **The demo inbox**: in the demo workspace no attendee mail is sent. Registering sets a random `__Host-opspilot_demo_inbox` key in the browser, and each message is stored with the hash of the key of the browser that registered: `GET /public/demo-inbox` shows that browser its own mail only, so a visitor can register with any address, verify and join, and nobody receives mail they did not ask for. The demo holds at most 200 attendees until the next reset; a registration beyond that is answered like any other (`202`) and does nothing. Each attendee keeps their newest 10 demo inbox messages, one unused link and 5 sessions, so registering one address again and again, from any number of places, grows nothing.
 - The past events (the conference that ran last week and the archived webinar) have reports from the moment they are seeded, with no audience: open one and choose **Report**.
-- Still to come: the AI budget (milestone 8).
+- AI triage in the demo counts runs and their cost since UK midnight before each start, under a lock so two starts cannot both fit (`TRIAGE_BUDGET_SPENT` once spent).
