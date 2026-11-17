@@ -37,7 +37,7 @@ export class AttendeeSessions {
 
   /** @returns undefined for an unknown or expired session */
   byToken(token: string): Promise<AttendeeSessionCheck | undefined> {
-    return this.load({ tokenHash: hashToken(token) });
+    return this.consistently({ tokenHash: hashToken(token) }, undefined);
   }
 
   /**
@@ -47,9 +47,29 @@ export class AttendeeSessions {
    */
   byId(
     sessionId: string,
-    client: Prisma.TransactionClient = this.prisma,
+    client?: Prisma.TransactionClient,
   ): Promise<AttendeeSessionCheck | undefined> {
-    return this.load({ id: sessionId }, client);
+    return this.consistently({ id: sessionId }, client);
+  }
+
+  /**
+   * Reads the session, the attendee, the event and the invitations from one
+   * snapshot. Prisma reads the relations with separate queries; without one
+   * snapshot, a revocation (which deletes the sessions and marks the
+   * attendee in one transaction) could commit between them and be seen half
+   * done: a live session for a revoked attendee. In a caller's transaction,
+   * its own snapshot and locks apply.
+   */
+  private consistently(
+    where: Prisma.AttendeeSessionWhereUniqueInput,
+    client: Prisma.TransactionClient | undefined,
+  ): Promise<AttendeeSessionCheck | undefined> {
+    if (client !== undefined) {
+      return this.load(where, client);
+    }
+    return this.prisma.$transaction((tx) => this.load(where, tx), {
+      isolationLevel: "RepeatableRead",
+    });
   }
 
   private async load(
