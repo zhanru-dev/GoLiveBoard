@@ -30,6 +30,12 @@ describe("loadConfig", () => {
         from: "OpsPilot <no-reply@opspilot.test>",
       },
       demo: { enabled: false },
+      triage: {
+        provider: "none",
+        apiKey: undefined,
+        baseUrl: undefined,
+        model: "claude-opus-5-5",
+      },
       errorReporting: {
         dsn: undefined,
         environment: "development",
@@ -108,6 +114,23 @@ describe("loadConfig", () => {
       publicEndpoint: "http://localhost:8333",
       forcePathStyle: true,
     });
+  });
+
+  it("leaves AI triage off by default, and needs a key for Claude", () => {
+    expect(() => loadConfig({ ...REQUIRED, AI_PROVIDER: "anthropic" })).toThrow(
+      /ANTHROPIC_API_KEY/,
+    );
+    expect(
+      loadConfig({
+        ...REQUIRED,
+        AI_PROVIDER: "anthropic",
+        ANTHROPIC_API_KEY: "test-key",
+        AI_TRIAGE_MODEL: "claude-sonnet-5-5",
+      }).triage,
+    ).toMatchObject({ provider: "anthropic", model: "claude-sonnet-5-5" });
+    expect(() => loadConfig({ ...REQUIRED, AI_PROVIDER: "openai" })).toThrow(
+      /AI_PROVIDER/,
+    );
   });
 
   it("requires both storage credentials or neither", () => {

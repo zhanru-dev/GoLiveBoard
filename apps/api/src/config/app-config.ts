@@ -143,6 +143,17 @@ const AppConfigSchema = z
      * and its nightly reset. The demo environment only.
      */
     DEMO_MODE: Flag,
+    /**
+     * AI question triage (FR-RN-6, ADR-0012). `none`: suggestions are
+     * unavailable and Q&A works as ever. `anthropic`: Claude, with
+     * ANTHROPIC_API_KEY. `offline`: groups questions whose words are the
+     * same, with no model at all (development and browser tests only).
+     */
+    AI_PROVIDER: z.enum(["none", "anthropic", "offline"]).default("none"),
+    ANTHROPIC_API_KEY: optional(z.string().min(1)),
+    /** Another endpoint for the Anthropic API (tests, proxies). */
+    ANTHROPIC_BASE_URL: optional(z.url({ protocol: /^https?$/ })),
+    AI_TRIAGE_MODEL: z.string().min(1).max(100).default("claude-opus-5-5"),
     /** Where errors are reported; reporting is off when unset. */
     SENTRY_DSN: optional(z.url({ protocol: /^https?$/ })),
     /** Defaults to NODE_ENV. */
@@ -156,6 +167,14 @@ const AppConfigSchema = z
       path: ["LOG_FORMAT"],
       message:
         "Must be json in production, where logs are collected by machines",
+    },
+  )
+  .refine(
+    (env) =>
+      env.AI_PROVIDER !== "anthropic" || env.ANTHROPIC_API_KEY !== undefined,
+    {
+      path: ["ANTHROPIC_API_KEY"],
+      message: "Required when AI_PROVIDER is anthropic",
     },
   )
   .refine(
@@ -194,6 +213,12 @@ const AppConfigSchema = z
     },
     mail: { smtpUrl: env.SMTP_URL, from: env.MAIL_FROM },
     demo: { enabled: env.DEMO_MODE },
+    triage: {
+      provider: env.AI_PROVIDER,
+      apiKey: env.ANTHROPIC_API_KEY,
+      baseUrl: env.ANTHROPIC_BASE_URL,
+      model: env.AI_TRIAGE_MODEL,
+    },
     errorReporting: {
       dsn: env.SENTRY_DSN,
       environment: env.SENTRY_ENVIRONMENT ?? env.NODE_ENV,
