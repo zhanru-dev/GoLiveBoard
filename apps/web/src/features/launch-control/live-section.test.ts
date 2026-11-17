@@ -37,4 +37,12 @@ describe("actionsFor (FR-RN-5)", () => {
     expect(labels({ status: "ANSWERED" })).toEqual(["Reopen", "Pin"]);
     expect(labels({ status: "HIDDEN" })).toEqual(["Publish"]);
   });
+
+  it("offers nothing for a question merged into another", () => {
+    expect(
+      actionsFor(
+        question({ mergedIntoId: "0195f0a0-0000-7000-8000-0000000000a2" }),
+      ),
+    ).toEqual([]);
+  });
 });

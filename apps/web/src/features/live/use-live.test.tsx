@@ -135,6 +135,18 @@ describe("orderQuestions", () => {
       "Question 5",
     ]);
   });
+
+  it("puts questions merged into others last", () => {
+    const ordered = orderQuestions([
+      question("1", { voteCount: 9, mergedIntoId: question("2").id }),
+      question("2", { voteCount: 1 }),
+    ]);
+
+    expect(ordered.map(({ body }) => body)).toEqual([
+      "Question 2",
+      "Question 1",
+    ]);
+  });
 });
 
 describe("useChat", () => {

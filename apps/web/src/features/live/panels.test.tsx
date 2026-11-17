@@ -104,6 +104,31 @@ describe("QuestionsPanel", () => {
     expect(screen.getByText(/Waiting for a moderator · Yours/)).toBeVisible();
   });
 
+  it("shows its author a question merged into another, without a vote button", () => {
+    renderScreen(
+      <QuestionsPanel
+        questions={[
+          {
+            ...base,
+            id: "20000000-0000-4000-8000-000000000003",
+            body: "Merged",
+            status: "PUBLISHED",
+            voteCount: 0,
+            mine: true,
+            mergedIntoId: "20000000-0000-4000-8000-000000000001",
+          },
+        ]}
+        onVote={vi.fn()}
+        onAsk={vi.fn()}
+      />,
+    );
+
+    expect(
+      screen.queryByRole("button", { name: "Vote for: Merged" }),
+    ).toBeNull();
+    expect(screen.getByText(/Merged with a similar question/)).toBeVisible();
+  });
+
   it("asks, and keeps the text when the question was not stored", async () => {
     const onAsk = vi
       .fn()

@@ -30,6 +30,7 @@ import { api, ApiError, refreshSession } from "@/lib/api";
 import { ChatPanel } from "../live/chat-panel";
 import { useChat, useLiveConnection, useQuestions } from "../live/use-live";
 import { Section } from "./section";
+import { TriagePanel } from "./triage-panel";
 import type { LaunchControl } from "./use-launch-control";
 
 /** The statuses in which an event has chat and Q&A to show. */
@@ -190,6 +191,13 @@ function LiveRoom({
           Reconnecting…
         </p>
       ) : null}
+      {canEdit && open ? (
+        <TriagePanel
+          eventId={event.id}
+          workspaceId={workspaceId}
+          questions={qa.questions}
+        />
+      ) : null}
       <div className="grid gap-3">
         <h3 className="font-medium">Questions</h3>
         {qa.questions.length === 0 ? (
@@ -208,6 +216,15 @@ function LiveRoom({
                   </Badge>
                   {question.pinSlot === null ? null : (
                     <Badge variant="outline">Pinned</Badge>
+                  )}
+                  {question.mergedIntoId === null ? null : (
+                    <Badge variant="outline">
+                      Merged into “
+                      {qa.questions.find(
+                        ({ id }) => id === question.mergedIntoId,
+                      )?.body ?? "another question"}
+                      ”
+                    </Badge>
                   )}
                   <span className="text-muted-foreground">
                     {question.author.name} · {question.voteCount}{" "}
@@ -296,6 +313,10 @@ interface Action {
 
 /** What a moderator can do with a question, as the API allows it. */
 export function actionsFor(question: Question): Action[] {
+  // Merged into another (AI triage): nothing more to do with it here.
+  if (question.mergedIntoId !== null) {
+    return [];
+  }
   const pin: Action[] =
     question.pinSlot === null
       ? [{ label: "Pin", change: { pinned: true } }]

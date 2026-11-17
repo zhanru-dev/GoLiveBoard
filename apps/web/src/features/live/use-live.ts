@@ -225,10 +225,14 @@ export function applyQuestionsEvent(
   return next;
 }
 
-/** Pinned first (by slot), then by votes, then oldest first. */
+/**
+ * Pinned first (by slot), then by votes, then oldest first; questions
+ * merged into others last.
+ */
 export function orderQuestions(questions: Iterable<Question>): Question[] {
   return [...questions].sort(
     (a, b) =>
+      Number(a.mergedIntoId !== null) - Number(b.mergedIntoId !== null) ||
       (a.pinSlot ?? 4) - (b.pinSlot ?? 4) ||
       b.voteCount - a.voteCount ||
       a.createdAt.localeCompare(b.createdAt),

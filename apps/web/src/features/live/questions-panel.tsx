@@ -96,9 +96,14 @@ export function QuestionsPanel({
                   ? ""
                   : ` · ${STATUS_NOTES[question.status] ?? ""}`}
                 {question.mine === true ? " · Yours" : ""}
+                {question.mergedIntoId === null
+                  ? ""
+                  : " · Merged with a similar question"}
               </p>
             </div>
-            {onVote !== undefined && question.status === "PUBLISHED" ? (
+            {onVote !== undefined &&
+            question.status === "PUBLISHED" &&
+            question.mergedIntoId === null ? (
               <PublicButton
                 variant={question.votedByMe === true ? "default" : "outline"}
                 size="sm"
