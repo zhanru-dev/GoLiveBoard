@@ -424,7 +424,11 @@ describe("AI question triage (FR-RN-6, ADR-0012)", { timeout: 60_000 }, () => {
       suggestions: null,
       failure: "The AI model did not answer within 8 seconds",
     });
-    expect(run.latencyMs).toBeGreaterThanOrEqual(8_000);
+    // Recorded for a timeout too: about 8 seconds. Timers fire on the
+    // event loop's millisecond clock, which can run a little ahead of
+    // performance.now(), so CI once measured 7,999.
+    expect(run.latencyMs).toBeGreaterThanOrEqual(8_000 - 50);
+    expect(run.latencyMs).toBeLessThan(12_000);
     // Asking, voting and listing work as before.
     const later = await asked(asker, event.slug, "And slides?");
     expect((await vote(asker, event.slug, later.id)).status).toBe(200);
