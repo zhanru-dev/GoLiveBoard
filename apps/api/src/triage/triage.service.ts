@@ -29,7 +29,7 @@ import {
 import { HIGHEST_PRICE } from "./domain/pricing.js";
 import { dayValue, lockDay, reserve } from "./spend-ledger.js";
 import { acceptedGroupsExist, planMerges } from "./domain/merge.js";
-import { TRIAGE_MAX_QUESTIONS } from "./domain/prompt.js";
+import { promptFor, TRIAGE_MAX_QUESTIONS } from "./domain/prompt.js";
 import { TRIAGE_MODEL, type TriageModel } from "./triage-model.js";
 import { TRIAGE_RUN_SELECT, toTriageRun } from "./triage-view.js";
 
@@ -84,11 +84,19 @@ export class TriageService {
       if (open.length === 0) {
         throw new DomainError("TRIAGE_NOTHING_TO_SORT");
       }
+      // Counted before the workspace's day is locked, so a slow Valkey
+      // holds up this event only.
+      await this.rateLimiter.consumeOrThrow(
+        RATE_LIMITS.triagePerEvent,
+        `${actor.workspaceId}:${eventId}`,
+      );
       // The day's spend, locked: budget checks run one at a time, and a
       // run reserves its worst cost so runs at once cannot all fit.
       const day = dateIn(this.clock.now(), DEMO_TIME_ZONE);
       const reserved = reserveMicros(
-        open.reduce((sum, { body }) => sum + body.length, 0),
+        Buffer.byteLength(
+          promptFor(open.map(({ id, body }) => ({ id, text: body }))).user,
+        ),
         open.length,
         HIGHEST_PRICE,
       );
@@ -97,11 +105,6 @@ export class TriageService {
       if (limit !== undefined && !mayRun(spent, reserved, limit)) {
         throw new DomainError("TRIAGE_BUDGET_SPENT");
       }
-      // Counted only for a run that will start.
-      await this.rateLimiter.consumeOrThrow(
-        RATE_LIMITS.triagePerEvent,
-        `${actor.workspaceId}:${eventId}`,
-      );
       const run = await tx.triageRun.create({
         data: {
           eventId,

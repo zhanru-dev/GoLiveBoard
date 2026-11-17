@@ -19,12 +19,14 @@ const report = {
   },
 };
 
-const allow = (id, expires = "2026-12-17") => ({
+const allow = (id, expires = "2026-12-17", changes = {}) => ({
   advisory: id,
   package: "picomatch",
+  severity: "high",
   reason: "Build tooling only",
   reviewed: "2026-11-17",
   expires,
+  ...changes,
 });
 
 describe("the dependency audit's rule", () => {
@@ -58,6 +60,55 @@ describe("the dependency audit's rule", () => {
       ).problems,
     ).toEqual([
       "GHSA-aaaa-bbbb-cccc is no longer reported: remove it from audit-allowlist.json",
+    ]);
+  });
+
+  it("refuses an allowance longer than 30 days after its review, or reviewed in the future", () => {
+    expect(
+      judge(report, [allow("GHSA-aaaa-bbbb-cccc", "2026-12-18")], "2026-11-17")
+        .problems,
+    ).toEqual([
+      "GHSA-aaaa-bbbb-cccc is allowed for more than 30 days after its review",
+    ]);
+    expect(
+      judge(
+        report,
+        [
+          allow("GHSA-aaaa-bbbb-cccc", "2026-12-17", {
+            reviewed: "2026-11-20",
+          }),
+        ],
+        "2026-11-17",
+      ).problems,
+    ).toEqual(["GHSA-aaaa-bbbb-cccc was reviewed on 2026-11-20, after today"]);
+  });
+
+  it("refuses an allowance without a severity or a reason", () => {
+    expect(
+      judge(
+        report,
+        [allow("GHSA-aaaa-bbbb-cccc", "2026-12-17", { severity: undefined })],
+        "2026-11-17",
+      ).problems,
+    ).toEqual(['GHSA-aaaa-bbbb-cccc needs the "severity" it was reviewed at']);
+    expect(
+      judge(
+        report,
+        [allow("GHSA-aaaa-bbbb-cccc", "2026-12-17", { reason: " " })],
+        "2026-11-17",
+      ).problems,
+    ).toEqual(["GHSA-aaaa-bbbb-cccc needs a reason"]);
+  });
+
+  it("fails when an allowed advisory becomes more severe than it was reviewed at", () => {
+    expect(
+      judge(
+        report,
+        [allow("GHSA-aaaa-bbbb-cccc", "2026-12-17", { severity: "moderate" })],
+        "2026-11-17",
+      ).problems,
+    ).toEqual([
+      "GHSA-aaaa-bbbb-cccc is now high, reviewed as moderate: review it again",
     ]);
   });
 

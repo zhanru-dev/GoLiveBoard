@@ -1,6 +1,6 @@
 import type { Page } from "@playwright/test";
 
-import { expect, test } from "./fixtures.js";
+import { expect, SIGNED_IN_MS, test } from "./fixtures.js";
 
 const PASSWORD = "correct horse battery staple";
 const unique = () =>
@@ -41,7 +41,9 @@ test("a Manager prepares an event in Launch Control until only the stream blocks
   await page.getByLabel("Email address").fill(`launch-${unique()}@example.com`);
   await page.getByLabel("Password").fill(PASSWORD);
   await page.getByRole("button", { name: "Create account" }).click();
-  await expect(page.getByRole("heading", { name: "Events" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Events" })).toBeVisible({
+    timeout: SIGNED_IN_MS,
+  });
   await expect(page.getByText("No events yet.")).toBeVisible();
 
   // Create the event; it opens in Launch Control.

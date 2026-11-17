@@ -51,11 +51,11 @@ describe("maxOutputTokens and reserveMicros", () => {
     expect(maxOutputTokens(200)).toBe(8_000);
   });
 
-  it("reserves a run's text and whole output allowance at the given price", () => {
-    // 3,000 characters → 1,000 tokens + 1,000 for the instructions = 2,000
-    // in at $5/M; 1,400 out (10 questions) at $25/M.
+  it("reserves a run's prompt at a token a byte, and its whole output allowance, at the given price", () => {
+    // 3,000 bytes → 3,000 tokens + 1,000 for the instructions = 4,000 in
+    // at $5/M; 1,400 out (10 questions) at $25/M.
     expect(reserveMicros(3_000, 10, { input: 5, output: 25 })).toBe(
-      2_000 * 5 + 1_400 * 25,
+      4_000 * 5 + 1_400 * 25,
     );
   });
 });

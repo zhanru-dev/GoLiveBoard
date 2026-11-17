@@ -1,6 +1,6 @@
 import type { Page } from "@playwright/test";
 
-import { expect, test } from "./fixtures.js";
+import { expect, SIGNED_IN_MS, test } from "./fixtures.js";
 
 import { latestEmailTo, linkIn } from "./mailpit.js";
 
@@ -27,7 +27,9 @@ async function signIn(page: Page, email: string) {
   await page.getByLabel("Email address").fill(email);
   await page.getByLabel("Password").fill(PASSWORD);
   await page.getByRole("button", { name: "Sign in" }).click();
-  await expect(page.getByRole("heading", { name: "Events" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Events" })).toBeVisible({
+    timeout: SIGNED_IN_MS,
+  });
   await page.getByRole("link", { name: "Team" }).click();
   await expect(page.getByRole("heading", { name: "Team" })).toBeVisible();
 }
@@ -38,7 +40,9 @@ async function signUp(page: Page, name: string, email: string) {
   await page.getByLabel("Email address").fill(email);
   await page.getByLabel("Password").fill(PASSWORD);
   await page.getByRole("button", { name: "Create account" }).click();
-  await expect(page.getByRole("heading", { name: "Events" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Events" })).toBeVisible({
+    timeout: SIGNED_IN_MS,
+  });
   await page.getByRole("link", { name: "Team" }).click();
   await expect(page.getByRole("heading", { name: "Team" })).toBeVisible();
 }
@@ -183,7 +187,9 @@ test.describe("a crafted next parameter", () => {
       await page.getByLabel("Password").fill(PASSWORD);
       await page.getByRole("button", { name: "Sign in" }).click();
 
-      await expect(page.getByRole("heading", { name: "Events" })).toBeVisible();
+      await expect(page.getByRole("heading", { name: "Events" })).toBeVisible({
+        timeout: SIGNED_IN_MS,
+      });
       expect(new URL(page.url()).origin).toBe(new URL(baseURL ?? "").origin);
       expect(new URL(page.url()).pathname).toBe("/events");
     });

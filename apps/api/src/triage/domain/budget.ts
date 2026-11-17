@@ -9,15 +9,16 @@ export function maxOutputTokens(questionCount: number): number {
 
 /**
  * The most a run can cost, reserved while it runs so runs at once cannot
- * all fit a budget: its text (about three characters a token) plus the
- * instructions, and its whole output allowance, at the dearest price.
+ * all fit a budget: its prompt at one token a byte (no token is shorter,
+ * whatever the language) plus the instructions, and its whole output
+ * allowance, at the dearest price.
  */
 export function reserveMicros(
-  textCharacters: number,
+  promptBytes: number,
   questionCount: number,
   price: { readonly input: number; readonly output: number },
 ): number {
-  const inputTokens = Math.ceil(textCharacters / 3) + 1_000;
+  const inputTokens = promptBytes + 1_000;
   return Math.ceil(
     inputTokens * price.input + maxOutputTokens(questionCount) * price.output,
   );

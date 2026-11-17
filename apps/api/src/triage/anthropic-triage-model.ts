@@ -61,6 +61,7 @@ export class AnthropicTriageModel extends TriageModel {
         throw new TriageModelError(
           "UNAVAILABLE",
           "The AI provider could not be reached",
+          [],
           { cause: error },
         );
       }
@@ -68,20 +69,26 @@ export class AnthropicTriageModel extends TriageModel {
         throw new TriageModelError(
           "UNAVAILABLE",
           `The AI provider answered ${String(error.status ?? "without a status")}`,
+          [],
           { cause: error },
         );
       }
-      // Otherwise the SDK could not read the answer as the schema.
+      // Otherwise the SDK could not read the answer as the schema: the
+      // provider answered, and billed, but its usage is lost with it.
       throw new TriageModelError(
         "MALFORMED",
         "The AI model's answer was not in the expected form",
+        "UNKNOWN",
         { cause: error },
       );
     }
+    // Answered, so billed, whether usable or not.
+    const attempts = attemptsOf(response, this.model);
     if (response.stop_reason === "refusal") {
       throw new TriageModelError(
         "REFUSED",
         "The AI model declined to sort these questions",
+        attempts,
       );
     }
     if (
@@ -91,9 +98,9 @@ export class AnthropicTriageModel extends TriageModel {
       throw new TriageModelError(
         "MALFORMED",
         "The AI model's answer was incomplete",
+        attempts,
       );
     }
-    const attempts = attemptsOf(response, this.model);
     return {
       output: response.parsed_output,
       model: response.model,
@@ -155,8 +162,12 @@ function attemptsOf(
       },
     ];
   }
+  // An attempt that names no model was the one asked for, or, for the
+  // fallback, the one that answered.
   return iterations.map((iteration) => ({
-    model: iteration.model ?? requested,
+    model:
+      iteration.model ??
+      (iteration.type === "fallback_message" ? response.model : requested),
     inputTokens: input(iteration),
     outputTokens: iteration.output_tokens,
   }));

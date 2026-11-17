@@ -234,36 +234,61 @@ describe("TriagePanel", () => {
     ).toBeInTheDocument();
   });
 
-  it("will not merge into a question waiting for approval, and says why", async () => {
-    serve([run()]);
-    renderScreen(
-      <TriagePanel
-        eventId={EVENT_ID}
-        workspaceId={OWNER.activeWorkspace.workspaceId}
-        questions={[
-          { ...question(1, "How much does it cost?"), status: "PENDING" },
-          ...QUESTIONS.slice(1),
-        ]}
-      />,
-      OWNER,
-    );
+  it.each([
+    [
+      "waits for approval",
+      [
+        {
+          ...question(1, "How much does it cost?"),
+          status: "PENDING" as const,
+        },
+        ...QUESTIONS.slice(1),
+      ],
+      "Its first question waits for approval: publish it to merge into it.",
+    ],
+    [
+      "is hidden",
+      [
+        { ...question(1, "How much does it cost?"), status: "HIDDEN" as const },
+        ...QUESTIONS.slice(1),
+      ],
+      "Its first question is hidden.",
+    ],
+    [
+      "was merged into another",
+      [
+        { ...question(1, "How much does it cost?"), mergedIntoId: id(3) },
+        ...QUESTIONS.slice(1),
+      ],
+      "Its first question was merged into another.",
+    ],
+    ["is gone", QUESTIONS.slice(1), "Its first question is no longer there."],
+  ])(
+    "will not merge into a first question that %s, and says why",
+    async (_state, questions, reason) => {
+      serve([run()]);
+      renderScreen(
+        <TriagePanel
+          eventId={EVENT_ID}
+          workspaceId={OWNER.activeWorkspace.workspaceId}
+          questions={questions}
+        />,
+        OWNER,
+      );
 
-    await userEvent
-      .setup()
-      .click(screen.getByRole("button", { name: "Suggest groups" }));
+      await userEvent
+        .setup()
+        .click(screen.getByRole("button", { name: "Suggest groups" }));
 
-    expect(
-      await screen.findByRole("checkbox", { name: /How much does it cost\?/ }),
-    ).toBeDisabled();
-    expect(
-      screen.getByText(
-        "Its first question waits for approval: publish it to merge into it.",
-      ),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole("checkbox", { name: /Is it recorded\?/ }),
-    ).toBeEnabled();
-  });
+      const groups = await screen.findByRole("group", {
+        name: /Choose the groups to merge/,
+      });
+      const [first, second] = within(groups).getAllByRole("checkbox");
+      expect(first).toBeDisabled();
+      expect(screen.getByText(reason)).toBeInTheDocument();
+      expect(second).toBeEnabled();
+    },
+  );
 
   it("stops asking when the run cannot be read, and lets the moderator try again", async () => {
     let reads = 0;

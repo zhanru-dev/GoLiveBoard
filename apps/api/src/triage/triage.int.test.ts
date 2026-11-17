@@ -439,6 +439,10 @@ describe("AI question triage (FR-RN-6, ADR-0012)", { timeout: 60_000 }, () => {
     expect((await triaged(client, owner, event.id)).status).toBe("SUCCEEDED");
   });
 
+  const billed = [
+    { model: "claude-opus-5-5", inputTokens: 1_000, outputTokens: 100 },
+  ];
+
   it.each([
     [
       "a provider error",
@@ -447,6 +451,7 @@ describe("AI question triage (FR-RN-6, ADR-0012)", { timeout: 60_000 }, () => {
           new TriageModelError("UNAVAILABLE", "The AI provider answered 529"),
         ),
       "The AI provider answered 529",
+      "NOTHING",
     ],
     [
       "a refusal",
@@ -455,9 +460,37 @@ describe("AI question triage (FR-RN-6, ADR-0012)", { timeout: 60_000 }, () => {
           new TriageModelError(
             "REFUSED",
             "The AI model declined to sort these questions",
+            billed,
           ),
         ),
       "The AI model declined to sort these questions",
+      "ITS COST",
+    ],
+    [
+      "an answer cut off at its output allowance",
+      () =>
+        Promise.reject(
+          new TriageModelError(
+            "MALFORMED",
+            "The AI model's answer was incomplete",
+            billed,
+          ),
+        ),
+      "The AI model's answer was incomplete",
+      "ITS COST",
+    ],
+    [
+      "an answer whose usage could not be read",
+      () =>
+        Promise.reject(
+          new TriageModelError(
+            "MALFORMED",
+            "The AI model's answer was not in the expected form",
+            "UNKNOWN",
+          ),
+        ),
+      "The AI model's answer was not in the expected form",
+      "ITS WORST COST",
     ],
     [
       "suggestions naming a question it was not given",
@@ -471,21 +504,26 @@ describe("AI question triage (FR-RN-6, ADR-0012)", { timeout: 60_000 }, () => {
         );
       },
       "The AI model's suggestions did not match the questions",
+      "ITS COST",
     ],
     [
       "something unexpected",
       () => Promise.reject(new Error("boom")),
       "AI suggestions are unavailable",
+      "ITS WORST COST",
     ],
-  ])(
-    "records %s as a failure, and changes nothing",
-    async (_label, answer, failure) => {
+  ] as const)(
+    "records %s as a failure, changes nothing, and counts what it was billed",
+    async (_label, answer, failure, spend) => {
       const { client, owner, event } = await withQuestions([
         "Can I bring a guest?",
       ]);
       model.answer = answer;
 
-      const run = await triaged(client, owner, event.id);
+      const runId = await started(client, owner, event.id);
+      const { reserved } = await spentToday(client, owner);
+      await worker.get(TriageRunner).run(runId);
+      const run = await runOf(client, owner, runId);
 
       expect(run).toMatchObject({
         status: "FAILED",
@@ -493,6 +531,20 @@ describe("AI question triage (FR-RN-6, ADR-0012)", { timeout: 60_000 }, () => {
         failure,
       });
       expect((await decide(client, owner, run.id, [])).status).toBe(409);
+      // 1,000 × $4/M + 100 × $20/M when billed.
+      const expected = {
+        NOTHING: 0,
+        "ITS COST": 6_000,
+        "ITS WORST COST": reserved,
+      }[spend];
+      expect(await spentToday(client, owner)).toEqual({
+        runs: 1,
+        spent: expected,
+        reserved: 0,
+      });
+      if (spend === "ITS COST") {
+        expect(run.costMicros).toBe(6_000);
+      }
     },
   );
 
@@ -1113,6 +1165,93 @@ describe("AI question triage (FR-RN-6, ADR-0012)", { timeout: 60_000 }, () => {
     await expect(
       worker.get(TriageConsumer).process({ name: "other" }),
     ).rejects.toThrow(/Unknown triage job/);
+  });
+
+  it("settles a run once: a runner that finishes after the sweep closed its run changes nothing", async () => {
+    const { client, owner, event } = await withQuestions(["Is it hybrid?"]);
+    let answer: (value: TriageAnswer) => void = () => undefined;
+    model.answer = () =>
+      new Promise<TriageAnswer>((resolve) => {
+        answer = resolve;
+      });
+    const runId = await started(client, owner, event.id);
+    const { reserved } = await spentToday(client, owner);
+    const sentBefore = model.sent.length;
+    const running = worker.get(TriageRunner).run(runId);
+    await expect.poll(() => model.sent.length).toBe(sentBefore + 1);
+
+    // The worker seems lost: the sweep closes its run.
+    await database.query(
+      "UPDATE triage_runs SET started_at = now() - interval '2 minutes' WHERE id = $1",
+      [runId],
+    );
+    await worker.get(TriageConsumer).process({ name: "sweep" });
+    // Then the runner gets its answer after all.
+    answer(answered({ groups: [], answer_order: [] }));
+    await running;
+
+    expect(await runOf(client, owner, runId)).toMatchObject({
+      status: "TIMED_OUT",
+      failure: "The run was interrupted",
+      costMicros: null,
+    });
+    expect(await spentToday(client, owner)).toEqual({
+      runs: 1,
+      spent: reserved,
+      reserved: 0,
+    });
+  });
+
+  it("counts the reservation of a run deleted with its event as spent, once", async () => {
+    const { client, owner, event } = await withQuestions(["Is there lunch?"]);
+    const runId = await started(client, owner, event.id);
+    const { reserved } = await spentToday(client, owner);
+    // What the demo's reset does: the run goes with its event, unsettled.
+    await database.query("DELETE FROM triage_runs WHERE id = $1", [runId]);
+
+    await worker.get(TriageConsumer).process({ name: "sweep" });
+    await worker.get(TriageConsumer).process({ name: "sweep" });
+
+    expect(await spentToday(client, owner)).toEqual({
+      runs: 1,
+      spent: reserved,
+      reserved: 0,
+    });
+  });
+
+  it("keeps a reservation made while the sweep counts what was orphaned", async () => {
+    const { client, owner, event } = await withQuestions(["Is there lunch?"]);
+    const orphan = await started(client, owner, event.id);
+    const { reserved: orphaned } = await spentToday(client, owner);
+    await database.query("DELETE FROM triage_runs WHERE id = $1", [orphan]);
+    const workspaceId = (await client.me(owner)).activeWorkspace.workspaceId;
+    // A start in progress: it holds the day's row, with a new run's
+    // reservation not yet committed.
+    const block = await holdLock(
+      database.url,
+      `UPDATE triage_spend SET runs = runs + 1, reserved_micros = reserved_micros + 7000
+       WHERE workspace_id = $1 AND day = (now() AT TIME ZONE 'Europe/London')::date`,
+      [workspaceId],
+    );
+    let sweeping: Promise<unknown>;
+    try {
+      await block.run(
+        `INSERT INTO triage_runs (event_id, question_ids, reserved_micros, spend_day)
+         VALUES ($1, ARRAY[uuidv7()], 7000, (now() AT TIME ZONE 'Europe/London')::date)`,
+        [event.id],
+      );
+      sweeping = worker.get(TriageConsumer).process({ name: "sweep" });
+      await block.waitForWaiters(1);
+    } finally {
+      await block.release();
+    }
+    await sweeping;
+
+    expect(await spentToday(client, owner)).toEqual({
+      runs: 2,
+      spent: orphaned,
+      reserved: 7_000,
+    });
   });
 
   it("closes runs a worker left unfinished, so the event can triage again", async () => {

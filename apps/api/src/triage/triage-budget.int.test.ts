@@ -212,6 +212,42 @@ describe("the AI budget", { timeout: 60_000 }, () => {
     expect(statuses.sort()).toEqual([202, 429]);
   });
 
+  it("counts a run in the UK day it started, also just after UK midnight in summer", async () => {
+    // 00:30 on 2 July in London, still 1 July in UTC.
+    const clock = { now: () => new Date("2026-07-01T23:30:00.000Z") };
+    const atNight = await createTestApp({
+      env: env(),
+      mailer: new CapturingMailer(),
+      triageModel: new NeverCalled(),
+      clock,
+    });
+    try {
+      const client = new ApiClient(atNight, newAddress());
+      const owner = await client.newOwner();
+      const event = await openEvent(client, owner);
+      await client.send(owner, "post", `/events/${event.id}/questions`, {
+        body: "Is it recorded?",
+      });
+
+      const started = await start(owner, event.id, atNight);
+
+      expect(started.status, started.text).toBe(202);
+      const workspaceId = (await client.me(owner)).activeWorkspace.workspaceId;
+      const [day] = await database.query<{ day: string; runs: number }>(
+        "SELECT day::text, runs FROM triage_spend WHERE workspace_id = $1",
+        [workspaceId],
+      );
+      const [run] = await database.query<{ spend_day: string }>(
+        "SELECT spend_day::text FROM triage_runs WHERE event_id = $1",
+        [event.id],
+      );
+      expect(day).toEqual({ day: "2026-07-02", runs: 1 });
+      expect(run?.spend_day).toBe("2026-07-02");
+    } finally {
+      await atNight.close();
+    }
+  });
+
   it("holds a real workspace to TRIAGE_DAILY_BUDGET_USD when it is set, and to nothing when not", async () => {
     const capped = await createTestApp({
       env: { ...env(), TRIAGE_DAILY_BUDGET_USD: "0.01" },

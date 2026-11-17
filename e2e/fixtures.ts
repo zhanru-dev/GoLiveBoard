@@ -18,3 +18,11 @@ export const test = base.extend<{ freshRateLimits: undefined }>({
 });
 
 export { expect } from "@playwright/test";
+
+/**
+ * How long landing on the events list may take after signing up or in:
+ * the API hashes the password (argon2, twice on sign-up) and the router
+ * fetches the page, which together can pass the default 5 seconds on a
+ * busy machine.
+ */
+export const SIGNED_IN_MS = 15_000;

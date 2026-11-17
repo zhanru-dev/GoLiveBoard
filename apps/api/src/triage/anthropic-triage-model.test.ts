@@ -163,6 +163,38 @@ describe("AnthropicTriageModel", () => {
     expect(answer.usage).toEqual({ inputTokens: 2500, outputTokens: 90 });
   });
 
+  it("prices a fallback that names no model as the model that answered", async () => {
+    reply = {
+      status: 200,
+      body: message({
+        model: "claude-opus-4-8",
+        usage: {
+          input_tokens: 100,
+          output_tokens: 20,
+          iterations: [
+            {
+              type: "message",
+              model: null,
+              input_tokens: 50,
+              output_tokens: 0,
+            },
+            {
+              type: "fallback_message",
+              model: null,
+              input_tokens: 50,
+              output_tokens: 20,
+            },
+          ],
+        },
+      }),
+    };
+
+    expect((await triage()).attempts.map(({ model }) => model)).toEqual([
+      "claude-opus-5-5",
+      "claude-opus-4-8",
+    ]);
+  });
+
   it("counts cache tokens as input", async () => {
     reply = {
       status: 200,
@@ -204,14 +236,20 @@ describe("AnthropicTriageModel", () => {
       { stop_reason: "max_tokens" },
       "MALFORMED",
     ],
-  ])("turns %s into a failure", async (_label, overrides, kind) => {
-    reply = { status: 200, body: message(overrides) };
+  ])(
+    "turns %s into a failure, with what it was billed",
+    async (_label, overrides, kind) => {
+      reply = { status: 200, body: message(overrides) };
 
-    const failure = await triage().catch((error: unknown) => error);
+      const failure = await triage().catch((error: unknown) => error);
 
-    expect(failure).toBeInstanceOf(TriageModelError);
-    expect((failure as TriageModelError).kind).toBe(kind);
-  });
+      expect(failure).toBeInstanceOf(TriageModelError);
+      expect((failure as TriageModelError).kind).toBe(kind);
+      expect((failure as TriageModelError).spent).toEqual([
+        { model: "claude-opus-5-5", inputTokens: 1200, outputTokens: 80 },
+      ]);
+    },
+  );
 
   it("turns an answer that is not the schema into a failure", async () => {
     reply = {
@@ -225,6 +263,8 @@ describe("AnthropicTriageModel", () => {
 
     expect(failure).toBeInstanceOf(TriageModelError);
     expect((failure as TriageModelError).kind).toBe("MALFORMED");
+    // Billed, but the usage went with the answer.
+    expect((failure as TriageModelError).spent).toBe("UNKNOWN");
   });
 
   it("turns an unreachable provider into 'unavailable'", async () => {
@@ -260,6 +300,7 @@ describe("AnthropicTriageModel", () => {
     expect((failure as TriageModelError).message).toBe(
       "The AI provider answered 529",
     );
+    expect((failure as TriageModelError).spent).toEqual([]);
     expect(seen).toHaveLength(1);
   });
 

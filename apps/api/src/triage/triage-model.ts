@@ -12,11 +12,20 @@ export interface TriageAnswer {
   readonly attempts: readonly Attempt[];
 }
 
+/**
+ * What a failed request was billed: the attempts the provider reported, or
+ * UNKNOWN when it answered but its usage could not be read (the run then
+ * counts its worst cost). None for a request the provider refused or never
+ * received.
+ */
+export type FailedSpend = readonly Attempt[] | "UNKNOWN";
+
 /** Why a model gave no usable answer, in words fit for a moderator. */
 export class TriageModelError extends Error {
   constructor(
     readonly kind: "REFUSED" | "MALFORMED" | "UNAVAILABLE",
     message: string,
+    readonly spent: FailedSpend = [],
     options?: ErrorOptions,
   ) {
     super(message, options);

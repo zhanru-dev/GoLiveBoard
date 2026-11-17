@@ -2,7 +2,7 @@ import { execFileSync } from "node:child_process";
 import { request as httpRequest } from "node:http";
 import { request as httpsRequest } from "node:https";
 
-import { expect, test } from "./fixtures.js";
+import { expect, SIGNED_IN_MS, test } from "./fixtures.js";
 
 import { E2E_TARGET, target } from "./target.js";
 
@@ -133,7 +133,9 @@ test("keeps a new session in secure, HTTP-only cookies", async ({
   await page.getByLabel("Email address").fill(email);
   await page.getByLabel("Password").fill(PASSWORD);
   await page.getByRole("button", { name: "Create account" }).click();
-  await expect(page.getByRole("heading", { name: "Events" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Events" })).toBeVisible({
+    timeout: SIGNED_IN_MS,
+  });
 
   const cookies = await context.cookies();
   expect(
@@ -168,7 +170,9 @@ test("keeps a new session in secure, HTTP-only cookies", async ({
 
   // The session survives a full reload, served again by the web image.
   await page.reload();
-  await expect(page.getByRole("heading", { name: "Events" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Events" })).toBeVisible({
+    timeout: SIGNED_IN_MS,
+  });
 });
 
 test("reports a browser error to Sentry, without the page's secrets", async ({
@@ -214,7 +218,9 @@ test("a visitor signs in to the demo with one click", async ({ page }) => {
 
   await page.getByRole("button", { name: "Try the demo" }).click();
 
-  await expect(page.getByRole("heading", { name: "Events" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Events" })).toBeVisible({
+    timeout: SIGNED_IN_MS,
+  });
   await expect(page.getByRole("note")).toContainText("shared demo workspace");
   await expect(
     page.getByRole("button", { name: "Switch workspace" }),

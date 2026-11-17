@@ -7,7 +7,7 @@ import { CLOCK, type Clock } from "../shared/clock.js";
 import type { Prisma } from "../generated/prisma/client.js";
 import { maxOutputTokens } from "./domain/budget.js";
 import { costMicros } from "./domain/pricing.js";
-import { settle } from "./spend-ledger.js";
+import { settle, settleOrphans } from "./spend-ledger.js";
 import { fromLabels, promptFor } from "./domain/prompt.js";
 import { checkSuggestions } from "./domain/suggestions.js";
 import {
@@ -145,13 +145,45 @@ export class TriageRunner {
         return;
       }
       if (error instanceof TriageModelError) {
-        await this.fail(runId, "FAILED", error.message, { latencyMs });
+        if (error.spent === "UNKNOWN") {
+          // Billed for an answer whose usage was lost: its worst cost.
+          await this.fail(
+            runId,
+            "FAILED",
+            error.message,
+            { latencyMs },
+            "RESERVED",
+          );
+          return;
+        }
+        // What the provider billed, a refused or cut-off answer included.
+        await this.fail(runId, "FAILED", error.message, {
+          latencyMs,
+          ...(error.spent.length > 0 && {
+            model: error.spent.at(-1)?.model,
+            inputTokens: error.spent.reduce(
+              (sum, { inputTokens }) => sum + inputTokens,
+              0,
+            ),
+            outputTokens: error.spent.reduce(
+              (sum, { outputTokens }) => sum + outputTokens,
+              0,
+            ),
+            costMicros: costMicros(error.spent),
+          }),
+        });
         return;
       }
+      // Something unforeseen, perhaps after the provider answered: its
+      // worst cost stays counted.
       this.logger.error({ err: error, runId }, "Triage run failed");
-      await this.fail(runId, "FAILED", "AI suggestions are unavailable", {
-        latencyMs,
-      });
+      await this.fail(
+        runId,
+        "FAILED",
+        "AI suggestions are unavailable",
+        { latencyMs },
+        "RESERVED",
+      );
     }
   }
 
@@ -200,6 +232,7 @@ export class TriageRunner {
         running ? "RUNNING" : "QUEUED",
       );
     }
+    await settleOrphans(this.prisma);
     return closed;
   }
 
