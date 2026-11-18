@@ -204,7 +204,12 @@ describe("authentication", () => {
 
     it("rejects a tampered access token", async () => {
       const { access } = await newSession();
-      const tampered = `${access.slice(0, -2)}xx`;
+      // One character in the middle of the signature. (Its last character
+      // carries unused bits: replacing it can leave the signature as it
+      // was, which once let this test see 200.)
+      const middle = access.length - 20;
+      const changed = access[middle] === "A" ? "B" : "A";
+      const tampered = `${access.slice(0, middle)}${changed}${access.slice(middle + 1)}`;
 
       expect((await me(tampered)).status).toBe(401);
     });
