@@ -1,0 +1,147 @@
+# OpsPilot's alerts (docs/06, section 7), by email to the on-call address.
+# Locally the email lands in Mailpit; in AWS the same rules go to Grafana
+# Cloud (milestone 10). Each names the runbook to follow.
+apiVersion: 1
+
+contactPoints:
+  - orgId: 1
+    name: OpsPilot on call
+    receivers:
+      - uid: opspilot-on-call-email
+        type: email
+        settings:
+          addresses: oncall@opspilot.localhost
+          singleEmail: true
+
+policies:
+  - orgId: 1
+    receiver: OpsPilot on call
+    group_by: [alertname]
+    group_wait: 30s
+    group_interval: 5m
+    repeat_interval: 4h
+
+groups:
+  - orgId: 1
+    name: OpsPilot
+    folder: OpsPilot
+    interval: 30s
+    rules:
+      - uid: opspilot-api-5xx
+        title: API 5xx rate above 2%
+        condition: C
+        for: 5m
+        noDataState: OK
+        execErrState: Error
+        labels:
+          severity: page
+        annotations:
+          summary: More than 2% of API responses have been server errors for 5 minutes.
+          runbook: docs/runbooks/deploy-and-roll-back.md
+        data:
+          - refId: A
+            relativeTimeRange: { from: 600, to: 0 }
+            datasourceUid: prometheus
+            model:
+              refId: A
+              instant: true
+              expr: >-
+                sum(rate(http_server_request_duration_seconds_count{job="opspilot-api",http_response_status_code=~"5.."}[5m]))
+                / sum(rate(http_server_request_duration_seconds_count{job="opspilot-api"}[5m]))
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: gt, params: [0.02] }
+
+      - uid: opspilot-readiness
+        title: API readiness check failing
+        condition: C
+        for: 2m
+        noDataState: Alerting
+        execErrState: Error
+        labels:
+          severity: page
+        annotations:
+          summary: The API's readiness check has not passed for 2 minutes.
+          runbook: docs/runbooks/deploy-and-roll-back.md
+        data:
+          - refId: A
+            relativeTimeRange: { from: 600, to: 0 }
+            datasourceUid: prometheus
+            model:
+              refId: A
+              instant: true
+              expr: >-
+                (max(max_over_time(httpcheck_status{http_status_class="2xx",http_status_code=~"2.."}[1m]))
+                or vector(0))
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: lt, params: [1] }
+
+      - uid: opspilot-queue-age
+        title: Work waiting more than 5 minutes
+        condition: C
+        for: 1m
+        noDataState: OK
+        execErrState: Error
+        labels:
+          severity: page
+        annotations:
+          summary: A job or an outbox message has waited more than 5 minutes; the worker may be down or stuck.
+          runbook: docs/runbooks/demo-reset-failed.md
+        data:
+          - refId: A
+            relativeTimeRange: { from: 600, to: 0 }
+            datasourceUid: prometheus
+            model:
+              refId: A
+              instant: true
+              expr: >-
+                max(opspilot_queue_oldest_job_age_seconds or opspilot_outbox_oldest_message_age_seconds)
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: gt, params: [300] }
+
+      - uid: opspilot-webhook-endpoint-failing
+        title: Webhook endpoint failing
+        condition: C
+        for: 0s
+        noDataState: OK
+        execErrState: Error
+        labels:
+          severity: ticket
+        annotations:
+          summary: Deliveries to one webhook endpoint failed more than 10 times in the last hour.
+          runbook: docs/runbooks/webhook-endpoint-failing.md
+        data:
+          - refId: A
+            relativeTimeRange: { from: 3600, to: 0 }
+            datasourceUid: prometheus
+            model:
+              refId: A
+              instant: true
+              expr: >-
+                max(sum by (opspilot_webhook_endpoint_id)
+                (increase(opspilot_webhook_attempts_total{opspilot_webhook_delivered="false"}[1h])))
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: gt, params: [10] }

@@ -42,7 +42,7 @@ describe("redactAttributes (web server)", () => {
 
   it("exports spans redacted, and reports a failure when the next exporter throws", () => {
     const span = {
-      name: "GET /verify",
+      name: "fetch GET http://api:4301/api/v1/verify?token=secret",
       attributes: { "url.query": "token=secret" },
     } as unknown as ReadableSpan;
     let seen: ReadableSpan[] = [];
@@ -69,6 +69,7 @@ describe("redactAttributes (web server)", () => {
     );
 
     expect(seen[0]?.attributes).toEqual({});
+    expect(seen[0]?.name).toBe("fetch GET http://api:4301/api/v1/verify");
     expect(results.map(({ code }) => code)).toEqual([
       ExportResultCode.SUCCESS,
       ExportResultCode.FAILED,

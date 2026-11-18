@@ -103,7 +103,7 @@ describe("redactAttributes", () => {
 
 describe("RedactingExporter", () => {
   const span = {
-    name: "GET /verify",
+    name: "GET /verify?token=secret",
     attributes: { "url.query": "token=secret", "url.path": "/verify" },
   } as unknown as ReadableSpan;
 

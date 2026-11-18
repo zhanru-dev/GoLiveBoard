@@ -107,7 +107,10 @@ export class RedactingExporter implements SpanExporter {
         spans.map(
           (span): ReadableSpan =>
             // The span itself, with its attributes redacted.
+            // The span itself, with its name and attributes redacted
+            // (Next.js names fetch spans after the whole URL).
             Object.create(span, {
+              name: { value: span.name.split("?", 1)[0] },
               attributes: { value: redactAttributes(span.attributes) },
             }) as ReadableSpan,
         ),
