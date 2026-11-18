@@ -28,6 +28,7 @@ import { StreamChecksConsumer } from "../streams/stream-checks.consumer.js";
 import { StreamMonitor } from "../streams/stream-monitor.js";
 import { RelayRunner } from "./relay-runner.js";
 import { WORKER_OPTIONS, type WorkerOptions } from "./worker-options.js";
+import { QueueMetrics } from "./queue-metrics.js";
 
 export interface WorkerModuleOptions {
   readonly logDestination?: DestinationStream;
@@ -80,6 +81,7 @@ export class WorkerModule {
         MaintenanceConsumer,
         WebhooksConsumer,
         TriageConsumer,
+        QueueMetrics,
       ],
     };
   }

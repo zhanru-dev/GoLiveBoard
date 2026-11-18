@@ -1,5 +1,6 @@
 import type { Attributes } from "@opentelemetry/api";
 import { ExportResultCode, type ExportResult } from "@opentelemetry/core";
+import { OTLPMetricExporter } from "@opentelemetry/exporter-metrics-otlp-http";
 import { OTLPTraceExporter } from "@opentelemetry/exporter-trace-otlp-http";
 import {
   ExpressInstrumentation,
@@ -10,6 +11,7 @@ import { IORedisInstrumentation } from "@opentelemetry/instrumentation-ioredis";
 import { PgInstrumentation } from "@opentelemetry/instrumentation-pg";
 import { UndiciInstrumentation } from "@opentelemetry/instrumentation-undici";
 import { resourceFromAttributes } from "@opentelemetry/resources";
+import { PeriodicExportingMetricReader } from "@opentelemetry/sdk-metrics";
 import { NodeSDK } from "@opentelemetry/sdk-node";
 import type { ReadableSpan, SpanExporter } from "@opentelemetry/sdk-trace";
 import {
@@ -26,6 +28,8 @@ export interface TelemetrySettings {
   readonly serviceName: string;
   readonly release: string;
   readonly environment: string;
+  /** How often metrics are sent. */
+  readonly metricIntervalMs: number;
 }
 
 /** The two processes built from this package. */
@@ -54,7 +58,16 @@ export function telemetrySettings(
     serviceName: env.OTEL_SERVICE_NAME ?? `opspilot-${process}`,
     release: env.SENTRY_RELEASE ?? "development",
     environment: env.SENTRY_ENVIRONMENT ?? env.NODE_ENV ?? "development",
+    metricIntervalMs: metricInterval(env.OTEL_METRIC_EXPORT_INTERVAL),
   };
+}
+
+/** Every 15 seconds unless set (the standard variable, in milliseconds). */
+function metricInterval(value: string | undefined): number {
+  const parsed = Number(value);
+  return value !== undefined && Number.isInteger(parsed) && parsed >= 100
+    ? parsed
+    : 15_000;
 }
 
 /** Attributes whose values may carry a query string (one-time tokens). */
@@ -175,6 +188,15 @@ export function startTelemetry(settings: TelemetrySettings): boolean {
     traceExporter: new RedactingExporter(
       new OTLPTraceExporter({ url: `${base}/v1/traces` }),
     ),
+    // Request rate, errors and duration per route come from the HTTP
+    // instrumentation (http.server.request.duration); the application's
+    // own are in metrics.ts (docs/06, section 7).
+    metricReaders: [
+      new PeriodicExportingMetricReader({
+        exporter: new OTLPMetricExporter({ url: `${base}/v1/metrics` }),
+        exportIntervalMillis: settings.metricIntervalMs,
+      }),
+    ],
     instrumentations: instrumentations(),
   });
   running.start();

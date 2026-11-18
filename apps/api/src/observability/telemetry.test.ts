@@ -24,6 +24,7 @@ describe("telemetrySettings", () => {
       serviceName: "opspilot-api",
       release: "development",
       environment: "development",
+      metricIntervalMs: 15_000,
     });
     expect(
       telemetrySettings({ OTEL_EXPORTER_OTLP_ENDPOINT: " " }, "worker"),
@@ -45,6 +46,7 @@ describe("telemetrySettings", () => {
       serviceName: "opspilot-api",
       release: "abc123",
       environment: "demo",
+      metricIntervalMs: 15_000,
     });
   });
 
@@ -58,6 +60,19 @@ describe("telemetrySettings", () => {
     expect(() =>
       telemetrySettings({ OTEL_EXPORTER_OTLP_ENDPOINT: "not a url" }, "api"),
     ).toThrow();
+  });
+});
+
+describe("the metric interval", () => {
+  it("is 15 seconds unless OTEL_METRIC_EXPORT_INTERVAL sets a sensible one", () => {
+    const interval = (value?: string) =>
+      telemetrySettings({ OTEL_METRIC_EXPORT_INTERVAL: value }, "api")
+        .metricIntervalMs;
+
+    expect(interval()).toBe(15_000);
+    expect(interval("1000")).toBe(1_000);
+    expect(interval("10")).toBe(15_000);
+    expect(interval("soon")).toBe(15_000);
   });
 });
 

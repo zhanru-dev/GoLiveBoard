@@ -30,6 +30,8 @@ import { WebhookFanOut } from "./webhook-fan-out.js";
 import { DELIVERY_TIMEOUT_MS, WebhookSender } from "./webhook-sender.js";
 import { WebhooksConsumer } from "../worker/webhooks.consumer.js";
 import { captureSpans } from "../testing/spans.js";
+import { captureMetrics } from "../testing/metrics.js";
+import { METRICS } from "../observability/metrics.js";
 
 let addressCounter = 0;
 const newAddress = () => `198.18.7.${String((addressCounter += 1) % 250)}`;
@@ -263,7 +265,7 @@ describe(
       expect(requestsTo("/fails")).toHaveLength(5);
     });
 
-    it("traces each attempt with its delivery, endpoint and outcome", async () => {
+    it("traces and counts each attempt with its delivery, endpoint and outcome", async () => {
       const client = api();
       const owner = await client.newOwner();
       const { endpoint } = await endpointFor(
@@ -275,6 +277,7 @@ describe(
       receiver.answer("/traced", 503);
       await cancelled(client, owner);
       const captured = captureSpans();
+      const counted = captureMetrics();
       try {
         await sendDue();
 
@@ -295,8 +298,23 @@ describe(
           "opspilot.webhook.status_code": 503,
           "opspilot.webhook.delivered": false,
         });
+        // The metric the "one endpoint failing" alert reads.
+        const attempts = await counted.points(METRICS.webhookAttempts);
+        expect(
+          attempts.find(
+            ({ attributes }) =>
+              attributes["opspilot.webhook.endpoint_id"] === endpoint.id,
+          ),
+        ).toMatchObject({
+          attributes: {
+            "opspilot.webhook.endpoint_id": endpoint.id,
+            "opspilot.webhook.delivered": false,
+          },
+          value: 1,
+        });
       } finally {
         await captured.stop();
+        await counted.stop();
       }
     });
 

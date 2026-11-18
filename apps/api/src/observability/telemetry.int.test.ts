@@ -45,6 +45,7 @@ const attributesOf = (list: readonly OtlpAttribute[] = []) =>
 /** An OTLP/HTTP collector on 127.0.0.1 that keeps what it is sent (JSON). */
 class FakeCollector {
   readonly bodies: string[] = [];
+  readonly metricBodies: string[] = [];
   private readonly server: Server = createServer((request, response) => {
     let body = "";
     request.on("data", (chunk: Buffer) => {
@@ -53,6 +54,9 @@ class FakeCollector {
     request.on("end", () => {
       if (request.url === "/v1/traces") {
         this.bodies.push(body);
+      }
+      if (request.url === "/v1/metrics") {
+        this.metricBodies.push(body);
       }
       response.writeHead(200, { "content-type": "application/json" });
       response.end("{}");
@@ -192,7 +196,7 @@ function processEnv(
     S3_CREATE_BUCKET: "true",
     TRUST_PROXY_HOPS: "1",
     OTEL_EXPORTER_OTLP_ENDPOINT: endpoint,
-    OTEL_METRICS_EXPORTER: "none",
+    OTEL_METRIC_EXPORT_INTERVAL: "1000",
   };
 }
 
@@ -306,6 +310,12 @@ describe("tracing in the running API", { timeout: 60_000 }, () => {
     expect(exported).not.toContain("203.0.113.77");
     expect(exported).not.toContain("traced.person");
     expect(exported).not.toContain("not the right password");
+    // Request rate, errors and duration per route (docs/06, section 7),
+    // without the visitor's address.
+    const metrics = collector.metricBodies.join("\n");
+    expect(metrics).toContain("http.server.request.duration");
+    expect(metrics).toContain("/api/v1/auth/sign-in");
+    expect(metrics).not.toContain("203.0.113.77");
   });
 
   it("starts no trace for health checks or for the pollers that run every second", () => {

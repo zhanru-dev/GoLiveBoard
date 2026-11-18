@@ -59,6 +59,7 @@ import {
   type RecheckScope,
   scopeRoom,
 } from "./rooms.js";
+import { appMeter, METRICS } from "../observability/metrics.js";
 
 /** Messages one connection may send per window, whatever they are. */
 export const MESSAGES_PER_WINDOW = 30;
@@ -199,6 +200,15 @@ export class RealtimeGateway
     private readonly slots: ConnectionSlots,
   ) {
     this.logger = rootLogger.child({ context: RealtimeGateway.name });
+    appMeter()
+      .createObservableGauge(METRICS.realtimeConnections, {
+        description: "Real-time connections open on this instance",
+      })
+      .addCallback((result) => {
+        if (this.io !== undefined) {
+          result.observe(this.io.of("/").sockets.size);
+        }
+      });
   }
 
   /** Starts serving `/realtime` on the API's HTTP server. */

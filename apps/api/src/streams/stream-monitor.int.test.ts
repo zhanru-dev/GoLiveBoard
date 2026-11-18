@@ -29,6 +29,8 @@ import { StreamCheckScheduler } from "./stream-check-scheduler.js";
 import { StreamChecksConsumer } from "./stream-checks.consumer.js";
 import { StreamMonitor } from "./stream-monitor.js";
 import { captureSpans } from "../testing/spans.js";
+import { captureMetrics } from "../testing/metrics.js";
+import { METRICS } from "../observability/metrics.js";
 
 const Incidents = z.array(Incident);
 const SECOND = 1_000;
@@ -119,10 +121,11 @@ describe("stream checks and incidents (FR-ST-2)", () => {
       (await api.get(owner, `/events/${eventId}/readiness`)).body,
     ).criteria.find((criterion) => criterion.criterion === "STREAM_REACHABLE");
 
-  it("traces each check with its event and whether the stream played", async () => {
+  it("traces and counts each check with its event and whether the stream played", async () => {
     const event = await monitoredEvent();
     stream.behaviour = "NOT_FOUND";
     const captured = captureSpans();
+    const counted = captureMetrics();
     try {
       await checkNow(event.id);
 
@@ -134,8 +137,18 @@ describe("stream checks and incidents (FR-ST-2)", () => {
       expect(span?.attributes["opspilot.stream.latency_ms"]).toBeTypeOf(
         "number",
       );
+      expect(await counted.points(METRICS.streamChecks)).toMatchObject([
+        {
+          attributes: {
+            "opspilot.event_id": event.id,
+            "opspilot.stream.healthy": false,
+          },
+          value: 1,
+        },
+      ]);
     } finally {
       await captured.stop();
+      await counted.stop();
     }
   });
 

@@ -16,6 +16,7 @@ import {
 } from "./domain/incident-rule.js";
 import { probeStream } from "./stream-probe.js";
 import { describeSpan, inSpan } from "../observability/spans.js";
+import { countStreamCheck } from "../observability/metrics.js";
 
 export interface CheckOutcome {
   /** False when this slot was already checked or there is nothing to check. */
@@ -69,6 +70,7 @@ export class StreamMonitor {
       "opspilot.stream.healthy": result.ok,
       "opspilot.stream.latency_ms": latencyMs,
     });
+    countStreamCheck(eventId, result.ok);
     const checkedAt = this.clock.now();
 
     const outcome = await this.prisma.$transaction(async (tx) => {
