@@ -158,17 +158,19 @@ export function attendee() {
       }
       if (frame.startsWith("42")) {
         const [event, payload] = JSON.parse(frame.slice(2));
-        if (event !== "chat.event") {
+        if (event !== "chat.events") {
           return;
         }
-        if (lastSequence >= 0 && payload.sequence > lastSequence + 1) {
-          gaps.add(payload.sequence - lastSequence - 1);
-        }
-        lastSequence = Math.max(lastSequence, payload.sequence);
-        received.add(1);
-        const match = /^t=(\d+) /.exec(payload.message.body ?? "");
-        if (match !== null) {
-          delivery.add(Date.now() - Number(match[1]));
+        for (const entry of payload) {
+          if (lastSequence >= 0 && entry.sequence > lastSequence + 1) {
+            gaps.add(entry.sequence - lastSequence - 1);
+          }
+          lastSequence = Math.max(lastSequence, entry.sequence);
+          received.add(1);
+          const match = /^t=(\d+) /.exec(entry.message.body ?? "");
+          if (match !== null) {
+            delivery.add(Date.now() - Number(match[1]));
+          }
         }
       }
     };

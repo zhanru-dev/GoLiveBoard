@@ -104,8 +104,12 @@ export class RealtimeConnection {
     this.socket.on("connect_error", (error) => {
       void this.onRefused(error.message);
     });
-    this.socket.on("chat.event", (event: ChatEvent) => {
-      this.channels.get("CHAT")?.sequence.receive(event);
+    // Gathered by the server: several in one frame, in order.
+    this.socket.on("chat.events", (events: ChatEvent[]) => {
+      const chat = this.channels.get("CHAT");
+      for (const event of events) {
+        chat?.sequence.receive(event);
+      }
     });
     this.socket.on("questions.event", (event: QuestionsEvent) => {
       this.channels.get("QUESTIONS")?.sequence.receive(event);

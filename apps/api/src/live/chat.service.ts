@@ -208,7 +208,7 @@ export class ChatService {
       };
     });
     if (outcome.deleted && outcome.sequence !== undefined) {
-      this.fanout.toChannel(eventId, "CHAT", "chat.event", {
+      this.fanout.toChat(eventId, {
         sequence: outcome.sequence,
         kind: "MESSAGE_DELETED",
         message: outcome.message,
@@ -331,7 +331,7 @@ export class ChatService {
     kind: ChatEvent["kind"],
     message: ChatMessage,
   ): void {
-    this.fanout.toChannel(eventId, "CHAT", "chat.event", {
+    this.fanout.toChat(eventId, {
       sequence: message.sequence,
       kind,
       message,

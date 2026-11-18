@@ -107,7 +107,7 @@ export interface ConnectionState {
 }
 
 export interface ServerToClient {
-  "chat.event": (event: ChatEvent) => void;
+  "chat.events": (events: ChatEvent[]) => void;
   "questions.event": (event: QuestionsEvent) => void;
   "event.status": (event: EventStatusChanged) => void;
   "session.revoked": (event: SessionRevoked) => void;

@@ -62,13 +62,21 @@ export type ChatMessage = z.infer<typeof ChatMessage>;
 export const ChatEventKind = z.enum(["MESSAGE_CREATED", "MESSAGE_DELETED"]);
 export type ChatEventKind = z.infer<typeof ChatEventKind>;
 
-/** server → client `chat.event`, and the entries of a CHAT replay. */
+/** A chat event: the entries of `chat.events` and of a CHAT replay. */
 export const ChatEvent = z.object({
   sequence: Sequence,
   kind: ChatEventKind,
   message: ChatMessage,
 });
 export type ChatEvent = z.infer<typeof ChatEvent>;
+
+/**
+ * server → client `chat.events`: the chat events of one event in order,
+ * gathered over at most 100 ms so each connection gets one frame for them
+ * (NFR-4).
+ */
+export const ChatEvents = z.array(ChatEvent).min(1);
+export type ChatEvents = z.infer<typeof ChatEvents>;
 
 /** What a chat message may say. */
 export const ChatBody = z.string().trim().min(1).max(1000);

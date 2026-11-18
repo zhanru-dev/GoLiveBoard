@@ -202,7 +202,7 @@ sequenceDiagram
   C->>S: chat.send { slug, clientMessageId, body }
   S->>D: BEGIN · next sequence · insert message + journal · COMMIT
   S-->>C: ack { message (sequence 58) }
-  S-->>C: chat.event { sequence: 58, kind: "MESSAGE_CREATED", message }
+  S-->>C: chat.events [{ sequence: 58, kind: "MESSAGE_CREATED", message }]
   Note over C: duplicates ignored by sequence
 ```
 
@@ -214,7 +214,7 @@ sequenceDiagram
 | client → server | `channel.leave`   | `{ slug, channel }`                            |                                                                                                                                                                                                                                                                                            |
 | client → server | `chat.send`       | `{ slug, clientMessageId, body }`              | Ack returns the stored message; retrying with the same `clientMessageId` returns the same message and sends nothing again. Attendees, Managers and Owners; not Analysts                                                                                                                    |
 | client → server | `watch.heartbeat` | `{ slug }`                                     | Every 30 s while an attendee watches a `LIVE` event: one attendance row per attendee and minute (FR-RN-7)                                                                                                                                                                                  |
-| server → client | `chat.event`      | `{ sequence, kind, message }`                  | `kind`: `MESSAGE_CREATED`, `MESSAGE_DELETED`                                                                                                                                                                                                                                               |
+| server → client | `chat.events`     | `[{ sequence, kind, message }, …]`             | `kind`: `MESSAGE_CREATED`, `MESSAGE_DELETED`. One event's chat events, in order, gathered over at most 100 ms into one frame per connection (NFR-4: a frame per message is a write per attendee per message)                                                                               |
 | server → client | `questions.event` | `{ sequence, kind, question }`                 | `kind`: `CREATED`, `UPDATED`, `VOTED`, `MERGED`. A change to a question the viewer may not see (pending, hidden) comes as `{ sequence, kind: "WITHDRAWN", questionId? }`, so no viewer sees a gap; `questionId` only if the question was ever public (the viewer may hold it and drops it) |
 | server → client | `event.status`    | `{ slug, status }`                             | The current public status, whenever it may have changed (it can repeat); switches the watch page from holding slate to stream                                                                                                                                                              |
 | server → client | `session.revoked` | `{ reason: "SIGNED_OUT" \| "ACCESS_REVOKED" }` | Sent before the server disconnects a client whose session ended, or whose access or role on Q&A changed                                                                                                                                                                                    |

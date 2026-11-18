@@ -127,8 +127,8 @@ describe("RealtimeConnection", () => {
       loadSnapshot: () => Promise.resolve(4),
       apply: (event) => applied.push(event.sequence),
     });
-    socket.fire("chat.event", message(6));
-    socket.fire("chat.event", message(6));
+    socket.fire("chat.events", [message(6)]);
+    socket.fire("chat.events", [message(6)]);
     socket.fire("disconnect", "transport close");
     socket.answer = (): ChannelJoinAck => ({
       ok: true,
@@ -143,6 +143,27 @@ describe("RealtimeConnection", () => {
       { slug: "launch", channel: "CHAT", afterSequence: 4 },
       { slug: "launch", channel: "CHAT", afterSequence: 6 },
     ]);
+  });
+
+  it("applies every chat event of a frame, in order (NFR-4: the server gathers them)", async () => {
+    const { socket, connection } = setUp();
+    const applied: number[] = [];
+    socket.answer = (): ChannelJoinAck => ({
+      ok: true,
+      latestSequence: 1,
+      replay: [message(1)],
+    });
+    connection.connect();
+    socket.fire("connect");
+    await connection.follow({
+      channel: "CHAT",
+      loadSnapshot: () => Promise.resolve(0),
+      apply: (event) => applied.push(event.sequence),
+    });
+
+    socket.fire("chat.events", [message(2), message(3), message(4)]);
+
+    expect(applied).toEqual([1, 2, 3, 4]);
   });
 
   it("reloads the snapshot when the server says it is too far behind", async () => {

@@ -494,8 +494,13 @@ describe("live chat (FR-RN-2, FR-RN-3)", { timeout: 30_000 }, () => {
       expect(response.status, response.text).toBe(200);
       const tombstone = ChatMessage.parse(response.body);
       expect(tombstone).toEqual({ ...message, body: "", deleted: true });
+      // The message's creation may reach the listener too: chat events
+      // go out in frames gathered over 100 ms, and it joined within them.
       await expect
-        .poll(() => listener.chat, { timeout: DELIVERY_MS })
+        .poll(
+          () => listener.chat.filter(({ kind }) => kind === "MESSAGE_DELETED"),
+          { timeout: DELIVERY_MS },
+        )
         .toEqual([
           { sequence: 2, kind: "MESSAGE_DELETED", message: tombstone },
         ]);

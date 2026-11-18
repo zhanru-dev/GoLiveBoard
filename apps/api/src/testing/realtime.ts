@@ -45,7 +45,9 @@ export class RealtimeClient {
 
   private constructor(socket: Socket) {
     this.socket = socket;
-    socket.on("chat.event", (event: ChatEvent) => this.chat.push(event));
+    socket.on("chat.events", (events: ChatEvent[]) =>
+      this.chat.push(...events),
+    );
     socket.on("event.status", (event: EventStatusChanged) =>
       this.statuses.push(event),
     );
