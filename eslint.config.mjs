@@ -63,6 +63,15 @@ export default defineConfig([
     files: ["**/*.js", "**/*.mjs", "**/*.cjs"],
     extends: [tseslint.configs.disableTypeChecked],
   },
+  {
+    // k6 scripts (load/k6) run in k6, not Node.js: its globals and modules.
+    files: ["load/k6/**/*.js"],
+    languageOptions: {
+      globals: { __ENV: "readonly", open: "readonly" },
+    },
+    // What went wrong goes to k6's log.
+    rules: { "no-console": "off" },
+  },
   // Last, so formatting rules never fight Prettier.
   prettier,
 ]);

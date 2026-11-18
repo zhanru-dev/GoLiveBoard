@@ -13,6 +13,7 @@ coverage/
 *.tsbuildinfo
 
 # Test output
+load/out/
 playwright-report/
 test-results/
 blob-report/

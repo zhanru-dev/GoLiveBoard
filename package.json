@@ -31,6 +31,7 @@
     "test:watch": "vitest --project \"!*-int\"",
     "test:coverage": "vitest run --project \"!*-int\" --coverage",
     "check": "npm run format:check && npm run lint && npm run typecheck && npm run depcruise",
+    "load:nfr4": "node load/run.mjs",
     "lighthouse": "lhci autorun --config=lighthouserc.cjs && node scripts/lighthouse-inp.mjs"
   },
   "engines": {
