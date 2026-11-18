@@ -16,6 +16,7 @@ import {
   type QueueName,
   TRIAGE_JOBS,
   TRIAGE_QUEUE,
+  queueTelemetry,
 } from "../queues/queues.js";
 import { TriageRunner } from "../triage/triage-runner.js";
 import { WORKER_OPTIONS, type WorkerOptions } from "./worker-options.js";
@@ -56,6 +57,7 @@ export class TriageConsumer
     this.worker = new Worker(TRIAGE_QUEUE, (job) => this.process(job), {
       connection: consumerConnection(this.config),
       prefix: this.config.queues.prefix,
+      telemetry: queueTelemetry(),
       concurrency: 4,
     });
     this.worker.on("failed", (job, error) => {

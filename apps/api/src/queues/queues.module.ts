@@ -9,6 +9,7 @@ import {
   producerConnection,
   QUEUE_NAMES,
   type QueueName,
+  queueTelemetry,
 } from "./queues.js";
 
 /** Injection token for the map of queue name to BullMQ queue. */
@@ -28,6 +29,7 @@ export const QUEUES = Symbol("QUEUES");
               connection: producerConnection(config),
               prefix: config.queues.prefix,
               defaultJobOptions: DEFAULT_JOB_OPTIONS,
+              telemetry: queueTelemetry(),
             }),
           ]),
         ),

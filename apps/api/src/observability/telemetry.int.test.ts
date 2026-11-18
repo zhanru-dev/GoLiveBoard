@@ -4,16 +4,26 @@ import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { fileURLToPath } from "node:url";
 
+import type { NestExpressApplication } from "@nestjs/platform-express";
 import { afterAll, beforeAll, describe, expect, inject, it } from "vitest";
 
-import { TEST_S3_BUCKET, TEST_S3_CREDENTIALS } from "../testing/containers.js";
+import { ACCESS_COOKIE } from "../auth/cookies.js";
+import { ApiClient } from "../testing/api-client.js";
 import { TEST_ENV, TEST_ORIGIN } from "../testing/config.js";
+import { TEST_S3_BUCKET, TEST_S3_CREDENTIALS } from "../testing/containers.js";
 import { createTestDatabase, type TestDatabase } from "../testing/database.js";
+import { createEvent } from "../testing/events.js";
+import { CapturingMailer } from "../testing/fakes.js";
+import { createTestApp } from "../testing/test-app.js";
+
+/** A trace a browser started (W3C example IDs). */
+const BROWSER_TRACE = "4bf92f3577b34da6a3ce929d0e0e4736";
 
 const API_ROOT = fileURLToPath(new URL("../..", import.meta.url));
 const REPOSITORY_ROOT = fileURLToPath(new URL("../../../..", import.meta.url));
 
 interface ExportedSpan {
+  readonly service: string;
   readonly traceId: string;
   readonly spanId: string;
   readonly parentSpanId?: string;
@@ -21,6 +31,16 @@ interface ExportedSpan {
   readonly scope: string;
   readonly attributes: Record<string, unknown>;
 }
+
+interface OtlpAttribute {
+  readonly key: string;
+  readonly value: Record<string, unknown>;
+}
+
+const attributesOf = (list: readonly OtlpAttribute[] = []) =>
+  Object.fromEntries(
+    list.map(({ key, value }) => [key, Object.values(value)[0]]),
+  );
 
 /** An OTLP/HTTP collector on 127.0.0.1 that keeps what it is sent (JSON). */
 class FakeCollector {
@@ -50,6 +70,7 @@ class FakeCollector {
     return this.bodies.flatMap((body) => {
       const parsed = JSON.parse(body) as {
         resourceSpans: {
+          resource: { attributes?: OtlpAttribute[] };
           scopeSpans: {
             scope: { name: string };
             spans: {
@@ -57,28 +78,27 @@ class FakeCollector {
               spanId: string;
               parentSpanId?: string;
               name: string;
-              attributes?: { key: string; value: Record<string, unknown> }[];
+              attributes?: OtlpAttribute[];
             }[];
           }[];
         }[];
       };
-      return parsed.resourceSpans.flatMap(({ scopeSpans }) =>
-        scopeSpans.flatMap(({ scope, spans }) =>
+      return parsed.resourceSpans.flatMap(({ resource, scopeSpans }) => {
+        const service = String(
+          attributesOf(resource.attributes)["service.name"],
+        );
+        return scopeSpans.flatMap(({ scope, spans }) =>
           spans.map((span) => ({
+            service,
             traceId: span.traceId,
             spanId: span.spanId,
             parentSpanId: span.parentSpanId,
             name: span.name,
             scope: scope.name,
-            attributes: Object.fromEntries(
-              (span.attributes ?? []).map(({ key, value }) => [
-                key,
-                Object.values(value)[0],
-              ]),
-            ),
+            attributes: attributesOf(span.attributes),
           })),
-        ),
-      );
+        );
+      });
     });
   }
 
@@ -98,6 +118,109 @@ async function freePort(): Promise<number> {
   return port;
 }
 
+/** A process of the compiled API package, started as in production. */
+class Started {
+  output = "";
+  private readonly exited: Promise<unknown>;
+
+  constructor(readonly child: ChildProcess) {
+    this.exited = once(child, "exit");
+    const keep = (chunk: Buffer) => {
+      this.output += chunk.toString("utf8");
+    };
+    child.stdout?.on("data", keep);
+    child.stderr?.on("data", keep);
+  }
+
+  /** Its JSON log lines. */
+  lines(): Record<string, unknown>[] {
+    return this.output
+      .split("\n")
+      .filter((line) => line.startsWith("{"))
+      .map((line) => JSON.parse(line) as Record<string, unknown>);
+  }
+
+  async waitFor(ready: () => Promise<boolean> | boolean, what: string) {
+    const deadline = Date.now() + 30_000;
+    while (!(await ready())) {
+      if (Date.now() > deadline || this.child.exitCode !== null) {
+        throw new Error(`${what} did not start:\n${this.output}`);
+      }
+      await new Promise((resolve) => setTimeout(resolve, 250));
+    }
+  }
+
+  /** Stops it as a deploy does (SIGTERM), killing it if it hangs. */
+  async stop(): Promise<void> {
+    if (this.child.exitCode !== null) {
+      return;
+    }
+    this.child.kill("SIGTERM");
+    const timer = setTimeout(() => this.child.kill("SIGKILL"), 15_000);
+    await this.exited;
+    clearTimeout(timer);
+  }
+}
+
+function start(
+  entry: "dist/main.js" | "dist/worker.js",
+  env: Record<string, string | undefined>,
+): Started {
+  return new Started(
+    spawn(process.execPath, ["--import", "./dist/telemetry.js", entry], {
+      cwd: API_ROOT,
+      env: { PATH: process.env.PATH, ...env },
+      stdio: ["ignore", "pipe", "pipe"],
+    }),
+  );
+}
+
+function processEnv(
+  database: TestDatabase,
+  endpoint: string,
+): Record<string, string> {
+  return {
+    ...TEST_ENV,
+    LOG_LEVEL: "info",
+    DATABASE_URL: database.url,
+    VALKEY_URL: inject("valkeyUrl"),
+    S3_ENDPOINT: inject("s3Endpoint"),
+    S3_BUCKET: TEST_S3_BUCKET,
+    S3_ACCESS_KEY_ID: TEST_S3_CREDENTIALS.accessKeyId,
+    S3_SECRET_ACCESS_KEY: TEST_S3_CREDENTIALS.secretAccessKey,
+    S3_FORCE_PATH_STYLE: "true",
+    S3_CREATE_BUCKET: "true",
+    TRUST_PROXY_HOPS: "1",
+    OTEL_EXPORTER_OTLP_ENDPOINT: endpoint,
+    OTEL_METRICS_EXPORTER: "none",
+  };
+}
+
+async function startApi(env: Record<string, string>) {
+  const port = await freePort();
+  const base = `http://127.0.0.1:${String(port)}`;
+  const api = start("dist/main.js", { ...env, API_PORT: String(port) });
+  await api.waitFor(async () => {
+    const live = await fetch(`${base}/api/v1/health/live`).catch(
+      () => undefined,
+    );
+    return live?.ok === true;
+  }, "The API");
+  return { api, base };
+}
+
+beforeAll(() => {
+  // The processes run what was compiled: build it as CI's image would.
+  execFileSync("npm", ["run", "build", "-w", "@opspilot/contracts"], {
+    cwd: REPOSITORY_ROOT,
+    stdio: "ignore",
+  });
+  execFileSync("npm", ["run", "build", "-w", "@opspilot/api"], {
+    cwd: REPOSITORY_ROOT,
+    stdio: "ignore",
+  });
+}, 240_000);
+
 /**
  * NFR-7 and ADR-0011, on the compiled API started as in production:
  * `node --import ./dist/telemetry.js dist/main.js`. Instrumentation that
@@ -106,76 +229,21 @@ async function freePort(): Promise<number> {
 describe("tracing in the running API", { timeout: 60_000 }, () => {
   let database: TestDatabase;
   const collector = new FakeCollector();
-  let api: ChildProcess;
-  let output = "";
+  let api: Started;
   let base: string;
 
   beforeAll(async () => {
-    // The process runs what was compiled: build it as CI's image would.
-    execFileSync("npm", ["run", "build", "-w", "@opspilot/contracts"], {
-      cwd: REPOSITORY_ROOT,
-      stdio: "ignore",
-    });
-    execFileSync("npm", ["run", "build", "-w", "@opspilot/api"], {
-      cwd: REPOSITORY_ROOT,
-      stdio: "ignore",
-    });
     database = await createTestDatabase();
     const endpoint = await collector.start();
-    const port = await freePort();
-    base = `http://127.0.0.1:${String(port)}`;
-    api = spawn(
-      process.execPath,
-      ["--import", "./dist/telemetry.js", "dist/main.js"],
-      {
-        cwd: API_ROOT,
-        env: {
-          PATH: process.env.PATH,
-          ...TEST_ENV,
-          LOG_LEVEL: "info",
-          DATABASE_URL: database.url,
-          VALKEY_URL: inject("valkeyUrl"),
-          S3_ENDPOINT: inject("s3Endpoint"),
-          S3_BUCKET: TEST_S3_BUCKET,
-          S3_ACCESS_KEY_ID: TEST_S3_CREDENTIALS.accessKeyId,
-          S3_SECRET_ACCESS_KEY: TEST_S3_CREDENTIALS.secretAccessKey,
-          S3_FORCE_PATH_STYLE: "true",
-          S3_CREATE_BUCKET: "true",
-          API_PORT: String(port),
-          TRUST_PROXY_HOPS: "1",
-          OTEL_EXPORTER_OTLP_ENDPOINT: endpoint,
-          // Spans leave only when the process stops: that proves the flush.
-          OTEL_BSP_SCHEDULE_DELAY: "600000",
-          OTEL_METRICS_EXPORTER: "none",
-        },
-        stdio: ["ignore", "pipe", "pipe"],
-      },
-    );
-    api.stdout?.on("data", (chunk: Buffer) => {
-      output += chunk.toString("utf8");
-    });
-    api.stderr?.on("data", (chunk: Buffer) => {
-      output += chunk.toString("utf8");
-    });
-    const deadline = Date.now() + 30_000;
-    for (;;) {
-      const live = await fetch(`${base}/api/v1/health/live`).catch(
-        () => undefined,
-      );
-      if (live?.ok === true) {
-        break;
-      }
-      if (Date.now() > deadline || api.exitCode !== null) {
-        throw new Error(`The API did not start:\n${output}`);
-      }
-      await new Promise((resolve) => setTimeout(resolve, 250));
-    }
-  }, 240_000);
+    ({ api, base } = await startApi({
+      ...processEnv(database, endpoint),
+      // Spans leave only when the process stops: that proves the flush.
+      OTEL_BSP_SCHEDULE_DELAY: "600000",
+    }));
+  }, 60_000);
 
   afterAll(async () => {
-    if (api.exitCode === null) {
-      api.kill("SIGKILL");
-    }
+    await api.stop();
     await collector.stop();
     await database.drop();
   });
@@ -189,6 +257,8 @@ describe("tracing in the running API", { timeout: 60_000 }, () => {
           "content-type": "application/json",
           origin: TEST_ORIGIN,
           "x-forwarded-for": "203.0.113.77",
+          // As the browser's API client sends it.
+          traceparent: `00-${BROWSER_TRACE}-00f067aa0ba902b7-01`,
         },
         body: JSON.stringify({
           email: "traced.person@example.com",
@@ -202,8 +272,7 @@ describe("tracing in the running API", { timeout: 60_000 }, () => {
     // time to, so its queries are among what is exported.
     await new Promise((resolve) => setTimeout(resolve, 3_000));
     // Stopping flushes what is queued (OTEL_BSP_SCHEDULE_DELAY is ten minutes).
-    api.kill("SIGTERM");
-    await once(api, "exit");
+    await api.stop();
 
     const spans = collector.spans();
     const server = spans.find(
@@ -211,17 +280,19 @@ describe("tracing in the running API", { timeout: 60_000 }, () => {
         span.scope.endsWith("instrumentation-http") &&
         span.attributes["http.route"] === "/api/v1/auth/sign-in",
     );
-    expect(server, output).toBeDefined();
+    expect(server, api.output).toBeDefined();
+    expect(server?.service).toBe("opspilot-api");
+    // The trace the browser started goes on in the API.
+    expect(server?.traceId).toBe(BROWSER_TRACE);
+    expect(server?.parentSpanId).toBe("00f067aa0ba902b7");
     const inTrace = spans.filter((span) => span.traceId === server?.traceId);
     const scopes = new Set(inTrace.map(({ scope }) => scope.split("/").pop()));
     expect(scopes).toContain("instrumentation-express");
     expect(scopes).toContain("instrumentation-pg");
     expect(scopes).toContain("instrumentation-ioredis");
     // The log line of the request carries the same trace.
-    const completed = output
-      .split("\n")
-      .filter((line) => line.startsWith("{"))
-      .map((line) => JSON.parse(line) as Record<string, unknown>)
+    const completed = api
+      .lines()
       .find(
         (line) =>
           line.msg === "request completed" &&
@@ -253,3 +324,107 @@ describe("tracing in the running API", { timeout: 60_000 }, () => {
     ).toEqual([]);
   });
 });
+
+/**
+ * NFR-7: one trace follows a request from the API, through the outbox and
+ * its queue, into the job the worker runs for it.
+ */
+describe(
+  "one trace from a request to the worker's job",
+  { timeout: 60_000 },
+  () => {
+    let database: TestDatabase;
+    const collector = new FakeCollector();
+    let helper: NestExpressApplication;
+    let api: Started;
+    let worker: Started;
+    let base: string;
+
+    beforeAll(async () => {
+      database = await createTestDatabase();
+      const endpoint = await collector.start();
+      const env = {
+        ...processEnv(database, endpoint),
+        OTEL_BSP_SCHEDULE_DELAY: "100",
+      };
+      ({ api, base } = await startApi(env));
+      worker = start("dist/worker.js", env);
+      await worker.waitFor(
+        () => worker.lines().some((line) => line.msg === "Worker started"),
+        "The worker",
+      );
+      // Accounts and events are set up in process, on the same database.
+      helper = await createTestApp({
+        env: {
+          DATABASE_URL: database.url,
+          VALKEY_URL: inject("valkeyUrl"),
+          TRUST_PROXY_HOPS: "1",
+        },
+        mailer: new CapturingMailer(),
+      });
+    }, 90_000);
+
+    afterAll(async () => {
+      await api.stop();
+      await worker.stop();
+      await helper.close();
+      await collector.stop();
+      await database.drop();
+    });
+
+    const transitionSpan = () =>
+      collector
+        .spans()
+        .find(
+          (span) =>
+            span.service === "opspilot-api" &&
+            span.attributes["http.route"] ===
+              "/api/v1/events/:eventId/transitions",
+        );
+
+    it("continues the request's trace in the job its outbox message started", async () => {
+      const client = new ApiClient(helper, "198.18.30.1");
+      const owner = await client.newOwner();
+      const event = await createEvent(client, owner);
+
+      // Through the running API: the transition writes an outbox message.
+      const moved = await fetch(
+        `${base}/api/v1/events/${event.id}/transitions`,
+        {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            origin: TEST_ORIGIN,
+            cookie: `${ACCESS_COOKIE}=${owner.access}`,
+          },
+          body: JSON.stringify({ to: "CONFIGURING" }),
+        },
+      );
+      expect(moved.status, await moved.clone().text()).toBe(200);
+
+      await expect.poll(transitionSpan, { timeout: 10_000 }).toBeDefined();
+      const traceId = transitionSpan()?.traceId;
+      // The worker relays the message and processes its job in that trace.
+      await expect
+        .poll(
+          () =>
+            collector
+              .spans()
+              .filter(
+                (span) =>
+                  span.traceId === traceId &&
+                  span.service === "opspilot-worker",
+              )
+              .map(({ name }) => name),
+          { timeout: 15_000 },
+        )
+        .toEqual(expect.arrayContaining([expect.stringMatching(/process/)]));
+      const [row] = await database.query<{ trace_context: unknown }>(
+        "SELECT trace_context FROM outbox_messages WHERE type = 'event.transitioned'",
+      );
+      expect(row?.trace_context).toMatchObject({
+        traceparent: expect.stringContaining(traceId ?? "none") as unknown,
+      });
+    });
+  },
+);

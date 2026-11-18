@@ -3,6 +3,7 @@ import { InjectPinoLogger, PinoLogger } from "nestjs-pino";
 
 import { PRISMA } from "../database/prisma.js";
 import type { PrismaClient } from "../generated/prisma/client.js";
+import { inTraceOf } from "../observability/trace-context.js";
 import { JobPublisher } from "../queues/job-publisher.js";
 import { CLOCK, type Clock } from "../shared/clock.js";
 import { type RelayedMessage, routeOutboxMessage } from "./outbox-routes.js";
@@ -38,15 +39,19 @@ export class OutboxRelay {
   /** Relays one batch. @returns how many messages were marked dispatched */
   async relayOnce(): Promise<number> {
     return this.prisma.$transaction(async (tx) => {
-      const messages = await tx.$queryRaw<RelayedMessage[]>`
-        SELECT id, type, payload
+      const messages = await tx.$queryRaw<
+        (RelayedMessage & { trace_context: unknown })[]
+      >`
+        SELECT id, type, payload, trace_context
         FROM outbox_messages
         WHERE dispatched_at IS NULL
         ORDER BY created_at, id
         LIMIT ${RELAY_BATCH_SIZE}
         FOR UPDATE SKIP LOCKED`;
       for (const message of messages) {
-        await this.relay(message);
+        // Queued in the trace of the request that wrote the message, so
+        // the job continues it.
+        await inTraceOf(message.trace_context, () => this.relay(message));
       }
       const dispatched = messages.map((message) => message.id);
       if (dispatched.length > 0) {

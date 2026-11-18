@@ -38,6 +38,7 @@ import {
   TriageModelError,
 } from "./triage-model.js";
 import { TriageRunner } from "./triage-runner.js";
+import { captureSpans } from "../testing/spans.js";
 
 let addressCounter = 0;
 const newAddress = () => `198.18.11.${String((addressCounter += 1) % 250)}`;
@@ -577,6 +578,27 @@ describe("AI question triage (FR-RN-6, ADR-0012)", { timeout: 60_000 }, () => {
       outputTokens: 200,
       costMicros: 6_000 + 7_500,
     });
+  });
+
+  it("traces the run as a business operation, with its run and question count", async () => {
+    const { client, owner, event } = await withQuestions([
+      "Is it in English?",
+      "Will there be subtitles?",
+    ]);
+    model.answer = () =>
+      Promise.resolve(answered({ groups: [], answer_order: [] }));
+    const captured = captureSpans();
+    try {
+      const run = await triaged(client, owner, event.id);
+
+      const span = captured.spans().find(({ name }) => name === "triage.run");
+      expect(span?.attributes).toEqual({
+        "opspilot.triage.run_id": run.id,
+        "opspilot.triage.question_count": 2,
+      });
+    } finally {
+      await captured.stop();
+    }
   });
 
   it("is unavailable, and Q&A unaffected, when no model is configured", async () => {

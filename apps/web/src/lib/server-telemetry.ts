@@ -1,0 +1,125 @@
+import type { Attributes } from "@opentelemetry/api";
+import { ExportResultCode, type ExportResult } from "@opentelemetry/core";
+import { OTLPTraceExporter } from "@opentelemetry/exporter-trace-otlp-http";
+import { UndiciInstrumentation } from "@opentelemetry/instrumentation-undici";
+import { resourceFromAttributes } from "@opentelemetry/resources";
+import { NodeSDK } from "@opentelemetry/sdk-node";
+import type { ReadableSpan, SpanExporter } from "@opentelemetry/sdk-trace";
+import {
+  ATTR_SERVICE_NAME,
+  ATTR_SERVICE_VERSION,
+} from "@opentelemetry/semantic-conventions";
+
+/** Attributes whose values may carry a query string (one-time tokens). */
+const URL_ATTRIBUTES = ["url.full", "http.url", "http.target", "url.original"];
+/** Attributes that identify a person: the visitor's address. */
+const DROPPED_ATTRIBUTES = ["url.query", "client.address", "http.client_ip"];
+
+/**
+ * A span's attributes as they may leave the web server (NFR-2): no query
+ * strings, which carry one-time tokens in verification links, and no
+ * visitor addresses. The same rule as the API's
+ * (apps/api/src/observability/telemetry.ts).
+ */
+export function redactAttributes(attributes: Attributes): Attributes {
+  const redacted: Attributes = {};
+  for (const [key, value] of Object.entries(attributes)) {
+    if (DROPPED_ATTRIBUTES.includes(key)) {
+      continue;
+    }
+    redacted[key] =
+      URL_ATTRIBUTES.includes(key) && typeof value === "string"
+        ? value.split("?", 1)[0]
+        : value;
+  }
+  return redacted;
+}
+
+/** Hands spans on with their attributes redacted. */
+export class RedactingExporter implements SpanExporter {
+  constructor(private readonly next: SpanExporter) {}
+
+  export(
+    spans: ReadableSpan[],
+    resultCallback: (result: ExportResult) => void,
+  ): void {
+    try {
+      this.next.export(
+        spans.map(
+          (span): ReadableSpan =>
+            Object.create(span, {
+              attributes: { value: redactAttributes(span.attributes) },
+            }) as ReadableSpan,
+        ),
+        resultCallback,
+      );
+    } catch (error) {
+      resultCallback({
+        code: ExportResultCode.FAILED,
+        error: error instanceof Error ? error : new Error(String(error)),
+      });
+    }
+  }
+
+  shutdown(): Promise<void> {
+    return this.next.shutdown();
+  }
+
+  forceFlush(): Promise<void> {
+    return this.next.forceFlush?.() ?? Promise.resolve();
+  }
+}
+
+/** The OTLP/HTTP endpoint traces go to, or undefined when tracing is off. */
+export function telemetryEndpoint(
+  env: Readonly<Record<string, string | undefined>>,
+): string | undefined {
+  const endpoint = env.OTEL_EXPORTER_OTLP_ENDPOINT?.trim();
+  if (endpoint === undefined || endpoint === "") {
+    return undefined;
+  }
+  const url = new URL(endpoint);
+  if (url.protocol !== "http:" && url.protocol !== "https:") {
+    throw new Error(
+      `OTEL_EXPORTER_OTLP_ENDPOINT must be an http(s) URL, not ${url.protocol}`,
+    );
+  }
+  return endpoint.replace(/\/+$/, "");
+}
+
+let running: NodeSDK | undefined;
+
+/**
+ * Starts tracing in the web server (ADR-0011) when an endpoint is set.
+ * Next.js records its own spans for pages and route handlers once a tracer
+ * provider is registered; Node's fetch (undici) is traced here, which also
+ * puts the trace on the web server's calls to the API.
+ *
+ * @returns whether tracing is on
+ */
+export function startServerTelemetry(
+  env: Readonly<Record<string, string | undefined>> = process.env,
+): boolean {
+  const endpoint = telemetryEndpoint(env);
+  if (endpoint === undefined || running !== undefined) {
+    return running !== undefined;
+  }
+  running = new NodeSDK({
+    resource: resourceFromAttributes({
+      [ATTR_SERVICE_NAME]: env.OTEL_SERVICE_NAME ?? "opspilot-web",
+      [ATTR_SERVICE_VERSION]: env.SENTRY_RELEASE ?? "development",
+      "deployment.environment.name":
+        env.SENTRY_ENVIRONMENT ?? env.NODE_ENV ?? "development",
+    }),
+    traceExporter: new RedactingExporter(
+      new OTLPTraceExporter({ url: `${endpoint}/v1/traces` }),
+    ),
+    instrumentations: [new UndiciInstrumentation()],
+  });
+  running.start();
+  // Send what is queued as the container stops.
+  process.once("SIGTERM", () => {
+    void running?.shutdown();
+  });
+  return true;
+}

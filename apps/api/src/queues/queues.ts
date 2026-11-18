@@ -1,3 +1,4 @@
+import { BullMQOtel } from "bullmq-otel";
 import type { ConnectionOptions, DefaultJobOptions } from "bullmq";
 
 import type { AppConfig } from "../config/app-config.js";
@@ -70,6 +71,14 @@ export const QUEUE_NAMES = [
 export type QueueName = (typeof QUEUE_NAMES)[number];
 
 /** A queue command that has not answered by then fails (relay, scheduler). */
+/**
+ * Traces jobs (ADR-0011): a job carries the trace it was queued in, and is
+ * processed in it, so one trace runs from a request to the work it caused.
+ */
+export function queueTelemetry(): BullMQOtel {
+  return new BullMQOtel({ tracerName: "opspilot-queues" });
+}
+
 export const QUEUE_COMMAND_TIMEOUT_MS = 2_000;
 /** How long shutdown waits for a queue or worker to close cleanly. */
 export const SHUTDOWN_GRACE_MS = 3_000;

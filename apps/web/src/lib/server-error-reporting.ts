@@ -16,6 +16,10 @@ export function initServerErrorReporting(
   }
   Sentry.init({
     ...sentryOptions(settings, "web-server"),
+    // Errors only. Sentry's Next.js SDK would otherwise register its own
+    // tracer provider and turn off Next.js's fetch spans; tracing is
+    // OpenTelemetry's (lib/server-telemetry.ts, ADR-0011).
+    enableOpenTelemetrySetup: false,
     integrations: [
       // Sentry's default ("warn") would keep the server running after an
       // unhandled rejection, in a state nobody planned for. Like Node.js

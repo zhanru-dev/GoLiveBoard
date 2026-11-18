@@ -9,6 +9,7 @@ import { isSuccess, nextAttemptAt } from "./domain/retries.js";
 import type { SecretBox } from "./secret-box.js";
 import { SECRET_BOX } from "./secret-box.provider.js";
 import { signatureHeader } from "./signing.js";
+import { describeSpan, inSpan } from "../observability/spans.js";
 
 /** docs/04 section 6.1: success is a 2xx within 10 seconds. */
 export const DELIVERY_TIMEOUT_MS = 10_000;
@@ -75,7 +76,20 @@ export class WebhookSender {
     return claimed.length;
   }
 
-  private async send(delivery: Claimed): Promise<void> {
+  private send(delivery: Claimed): Promise<void> {
+    return inSpan(
+      "webhook.send",
+      {
+        "opspilot.webhook.delivery_id": delivery.id,
+        "opspilot.webhook.endpoint_id": delivery.endpoint_id,
+        "opspilot.webhook.event_type": delivery.event_type,
+        "opspilot.webhook.attempt": delivery.attempts + 1,
+      },
+      () => this.attempt(delivery),
+    );
+  }
+
+  private async attempt(delivery: Claimed): Promise<void> {
     const startedAt = this.clock.now();
     const started = performance.now();
     let statusCode: number | null = null;
@@ -106,6 +120,10 @@ export class WebhookSender {
         );
       }
     }
+    describeSpan({
+      "opspilot.webhook.status_code": statusCode ?? 0,
+      "opspilot.webhook.delivered": error === null,
+    });
     await this.record(delivery, {
       attemptedAt: startedAt,
       statusCode,

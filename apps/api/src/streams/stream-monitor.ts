@@ -15,6 +15,7 @@ import {
   type IncidentChange,
 } from "./domain/incident-rule.js";
 import { probeStream } from "./stream-probe.js";
+import { describeSpan, inSpan } from "../observability/spans.js";
 
 export interface CheckOutcome {
   /** False when this slot was already checked or there is nothing to check. */
@@ -46,7 +47,13 @@ export class StreamMonitor {
    * Nothing is recorded for an archived event (FR-EV-4), including a check
    * that was already queued or running when the event was archived.
    */
-  async check(eventId: string, slot: Date): Promise<CheckOutcome> {
+  check(eventId: string, slot: Date): Promise<CheckOutcome> {
+    return inSpan("stream.check", { "opspilot.event_id": eventId }, () =>
+      this.checkSlot(eventId, slot),
+    );
+  }
+
+  private async checkSlot(eventId: string, slot: Date): Promise<CheckOutcome> {
     const event = await this.prisma.event.findUnique({
       where: { id: eventId },
       select: { status: true, streamUrl: true },
@@ -58,6 +65,10 @@ export class StreamMonitor {
     const started = performance.now();
     const result = await probeStream(this.http, url);
     const latencyMs = Math.round(performance.now() - started);
+    describeSpan({
+      "opspilot.stream.healthy": result.ok,
+      "opspilot.stream.latency_ms": latencyMs,
+    });
     const checkedAt = this.clock.now();
 
     const outcome = await this.prisma.$transaction(async (tx) => {

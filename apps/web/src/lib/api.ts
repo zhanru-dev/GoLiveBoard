@@ -1,5 +1,6 @@
 import { ProblemDetails } from "@opspilot/contracts";
 import type { z } from "zod";
+import { traceparent } from "./traceparent";
 
 /** An error response from the API, with its problem details. */
 export class ApiError extends Error {
@@ -102,7 +103,7 @@ async function send(
   method: string,
   options: RequestOptions<unknown>,
 ) {
-  const headers: Record<string, string> = {};
+  const headers: Record<string, string> = { traceparent: traceparent() };
   if (options.body !== undefined) {
     headers["Content-Type"] = "application/json";
   }

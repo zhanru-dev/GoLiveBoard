@@ -15,6 +15,7 @@ import {
   type TriageModel,
   TriageModelError,
 } from "./triage-model.js";
+import { describeSpan, inSpan } from "../observability/spans.js";
 
 /** FR-RN-6: a run that has not answered in 8 seconds has failed. */
 export const TRIAGE_TIMEOUT_MS = 8_000;
@@ -44,7 +45,13 @@ export class TriageRunner {
   ) {}
 
   /** Runs a queued run once; a run already taken is left alone. */
-  async run(runId: string): Promise<void> {
+  run(runId: string): Promise<void> {
+    return inSpan("triage.run", { "opspilot.triage.run_id": runId }, () =>
+      this.runOnce(runId),
+    );
+  }
+
+  private async runOnce(runId: string): Promise<void> {
     const { count } = await this.prisma.triageRun.updateMany({
       where: { id: runId, status: "QUEUED" },
       data: { status: "RUNNING", startedAt: this.clock.now() },
@@ -83,6 +90,7 @@ export class TriageRunner {
       );
       return;
     }
+    describeSpan({ "opspilot.triage.question_count": questions.length });
     const prompt = promptFor(questions);
     const started = performance.now();
     const signal = AbortSignal.timeout(TRIAGE_TIMEOUT_MS);

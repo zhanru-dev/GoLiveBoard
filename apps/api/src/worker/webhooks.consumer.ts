@@ -16,6 +16,7 @@ import {
   type QueueName,
   WEBHOOK_JOBS,
   WEBHOOKS_QUEUE,
+  queueTelemetry,
 } from "../queues/queues.js";
 import { WebhookFanOut } from "../webhooks/webhook-fan-out.js";
 import { SecretResealer } from "../webhooks/secret-resealer.js";
@@ -68,6 +69,7 @@ export class WebhooksConsumer
     this.worker = new Worker(WEBHOOKS_QUEUE, (job) => this.process(job), {
       connection: consumerConnection(this.config),
       prefix: this.config.queues.prefix,
+      telemetry: queueTelemetry(),
       concurrency: 1,
     });
     this.worker.on("failed", (job, error) => {

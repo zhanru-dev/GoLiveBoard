@@ -16,6 +16,7 @@ import {
   type QueueName,
   STREAM_CHECK_JOBS,
   STREAM_CHECKS_QUEUE,
+  queueTelemetry,
 } from "../queues/queues.js";
 import {
   WORKER_OPTIONS,
@@ -63,6 +64,7 @@ export class StreamChecksConsumer
     this.worker = new Worker(STREAM_CHECKS_QUEUE, (job) => this.process(job), {
       connection: consumerConnection(this.config),
       prefix: this.config.queues.prefix,
+      telemetry: queueTelemetry(),
       concurrency: CONCURRENCY,
     });
     this.worker.on("failed", (job, error) => {

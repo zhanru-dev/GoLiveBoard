@@ -1,3 +1,5 @@
+import { traceparent } from "./traceparent";
+
 /**
  * Calls the API from the public event page. Deliberately small: no Zod, no
  * session refresh, no React Query. The page has a performance budget
@@ -28,7 +30,10 @@ export async function postPublic(
     response = await fetch(new URL(`/api/v1${path}`, window.location.href), {
       method: "POST",
       credentials: "same-origin",
-      headers: body === undefined ? {} : { "Content-Type": "application/json" },
+      headers:
+        body === undefined
+          ? { traceparent: traceparent() }
+          : { "Content-Type": "application/json", traceparent: traceparent() },
       body: body === undefined ? undefined : JSON.stringify(body),
     });
   } catch {

@@ -1,8 +1,9 @@
 import * as Sentry from "@sentry/nextjs";
 
 /**
- * Runs once when the web server starts (docs/02, section 7.9). Reporting is
- * on only when SENTRY_DSN is set.
+ * Runs once when the web server starts (docs/02, section 7.9). Tracing is
+ * on when OTEL_EXPORTER_OTLP_ENDPOINT is set (ADR-0011), reporting when
+ * SENTRY_DSN is.
  */
 export async function register(): Promise<void> {
   // Pages, route handlers and the proxy all run on Node.js. This file is
@@ -11,6 +12,9 @@ export async function register(): Promise<void> {
   if (process.env.NEXT_RUNTIME !== "nodejs") {
     return;
   }
+  // Tracing first: Sentry must find the tracer provider already ours.
+  const { startServerTelemetry } = await import("./lib/server-telemetry");
+  startServerTelemetry();
   const { initServerErrorReporting } =
     await import("./lib/server-error-reporting");
   initServerErrorReporting();

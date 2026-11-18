@@ -27,6 +27,22 @@ describe("api", () => {
     Reflect.deleteProperty(navigator, "locks");
   });
 
+  it("starts a trace with each call (ADR-0011)", async () => {
+    const seen: (string | null)[] = [];
+    server.use(
+      http.get("*/api/v1/events/e1", ({ request }) => {
+        seen.push(request.headers.get("traceparent"));
+        return HttpResponse.json({});
+      }),
+    );
+
+    await api("/events/e1");
+    await api("/events/e1");
+
+    expect(seen[0]).toMatch(/^00-[0-9a-f]{32}-[0-9a-f]{16}-01$/);
+    expect(seen[1]).not.toBe(seen[0]);
+  });
+
   it("sends the version a change is based on and the idempotency key", async () => {
     let headers: Headers | undefined;
     server.use(

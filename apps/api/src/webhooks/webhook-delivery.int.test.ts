@@ -29,6 +29,7 @@ import { SIGNATURE_TOLERANCE_SECONDS, verifySignature } from "./signing.js";
 import { WebhookFanOut } from "./webhook-fan-out.js";
 import { DELIVERY_TIMEOUT_MS, WebhookSender } from "./webhook-sender.js";
 import { WebhooksConsumer } from "../worker/webhooks.consumer.js";
+import { captureSpans } from "../testing/spans.js";
 
 let addressCounter = 0;
 const newAddress = () => `198.18.7.${String((addressCounter += 1) % 250)}`;
@@ -260,6 +261,43 @@ describe(
       clock.advance(24 * 60 * MINUTE_MS);
       await sendDue();
       expect(requestsTo("/fails")).toHaveLength(5);
+    });
+
+    it("traces each attempt with its delivery, endpoint and outcome", async () => {
+      const client = api();
+      const owner = await client.newOwner();
+      const { endpoint } = await endpointFor(
+        client,
+        owner,
+        ["event.cancelled"],
+        "/traced",
+      );
+      receiver.answer("/traced", 503);
+      await cancelled(client, owner);
+      const captured = captureSpans();
+      try {
+        await sendDue();
+
+        const [delivery] = await deliveriesOf(client, owner, endpoint.id);
+        const span = captured
+          .spans()
+          .find(
+            (candidate) =>
+              candidate.name === "webhook.send" &&
+              candidate.attributes["opspilot.webhook.endpoint_id"] ===
+                endpoint.id,
+          );
+        expect(span?.attributes).toEqual({
+          "opspilot.webhook.delivery_id": delivery?.id,
+          "opspilot.webhook.endpoint_id": endpoint.id,
+          "opspilot.webhook.event_type": "event.cancelled",
+          "opspilot.webhook.attempt": 1,
+          "opspilot.webhook.status_code": 503,
+          "opspilot.webhook.delivered": false,
+        });
+      } finally {
+        await captured.stop();
+      }
     });
 
     it("refuses at sending time a host that now resolves to a private address", async () => {

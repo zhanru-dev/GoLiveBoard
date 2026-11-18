@@ -36,6 +36,14 @@ const nextConfig: NextConfig = {
   // that appears for some developers and not others makes `git status` differ
   // from machine to machine, so the project opts out.
   agentRules: false,
+  // The web server's OpenTelemetry SDK (src/lib/server-telemetry.ts) loads
+  // from node_modules at run time rather than being bundled: it carries
+  // exporters and transports the server never uses.
+  serverExternalPackages: [
+    "@opentelemetry/sdk-node",
+    "@opentelemetry/exporter-trace-otlp-http",
+    "@opentelemetry/instrumentation-undici",
+  ],
   headers: () =>
     Promise.resolve([{ source: "/:path*", headers: SECURITY_HEADERS }]),
   turbopack: {

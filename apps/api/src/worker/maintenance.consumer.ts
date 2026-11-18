@@ -16,6 +16,7 @@ import {
   MAINTENANCE_JOBS,
   MAINTENANCE_QUEUE,
   type QueueName,
+  queueTelemetry,
 } from "../queues/queues.js";
 import {
   WORKER_OPTIONS,
@@ -113,6 +114,7 @@ export class MaintenanceConsumer
     this.worker = new Worker(MAINTENANCE_QUEUE, (job) => this.process(job), {
       connection: consumerConnection(this.config),
       prefix: this.config.queues.prefix,
+      telemetry: queueTelemetry(),
       concurrency: 1,
     });
     this.worker.on("failed", (job, error) => {

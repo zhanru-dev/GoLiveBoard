@@ -29,6 +29,10 @@ const on = initServerErrorReporting({
   SENTRY_ENVIRONMENT: "test",
 });
 console.log("REPORTING_ON=" + String(on));
+// Sentry turns Next.js's fetch spans off when it sets up OpenTelemetry.
+console.log("NEXT_FETCH_SPANS_OFF=" + String(process.env.NEXT_OTEL_FETCH_DISABLED));
+const { trace } = await import("@opentelemetry/api");
+console.log("TRACER_PROVIDER=" + trace.getTracerProvider().constructor.name);
 void Promise.reject(new Error("Nobody handles this"));
 setTimeout(() => console.log("PROCESS_STILL_ALIVE"), 4000);
 `;
@@ -66,5 +70,12 @@ describe("initServerErrorReporting", () => {
     expect(output).toContain("REPORTING_ON=true");
     expect(output).not.toContain("PROCESS_STILL_ALIVE");
     expect(code, output).not.toBe(0);
+  }, 20_000);
+
+  it("leaves tracing to OpenTelemetry: no tracer provider of Sentry's, Next.js's fetch spans on", async () => {
+    const { output } = await runChild();
+
+    expect(output).toContain("NEXT_FETCH_SPANS_OFF=undefined");
+    expect(output).not.toMatch(/TRACER_PROVIDER=Sentry/);
   }, 20_000);
 });

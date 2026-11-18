@@ -1,4 +1,5 @@
 import type { Prisma } from "../generated/prisma/client.js";
+import { currentTraceCarrier } from "../observability/trace-context.js";
 
 export interface OutboxEntry {
   readonly workspaceId: string;
@@ -10,7 +11,8 @@ export interface OutboxEntry {
 /**
  * Records a side effect to perform after the change commits (ADR-0007).
  * Takes the transaction client on purpose: the message exists if and only if
- * the change does. The worker's relay picks it up within a second.
+ * the change does. The worker's relay picks it up within a second, and the
+ * job it starts joins the trace of the request that wrote it (ADR-0011).
  */
 export async function writeOutbox(
   tx: Prisma.TransactionClient,
@@ -21,6 +23,7 @@ export async function writeOutbox(
       workspaceId: entry.workspaceId,
       type: entry.type,
       payload: entry.payload,
+      traceContext: currentTraceCarrier() ?? undefined,
     },
   });
 }

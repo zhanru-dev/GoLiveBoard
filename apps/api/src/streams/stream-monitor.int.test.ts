@@ -28,6 +28,7 @@ import { TestStream } from "../testing/test-stream.js";
 import { StreamCheckScheduler } from "./stream-check-scheduler.js";
 import { StreamChecksConsumer } from "./stream-checks.consumer.js";
 import { StreamMonitor } from "./stream-monitor.js";
+import { captureSpans } from "../testing/spans.js";
 
 const Incidents = z.array(Incident);
 const SECOND = 1_000;
@@ -117,6 +118,26 @@ describe("stream checks and incidents (FR-ST-2)", () => {
     Readiness.parse(
       (await api.get(owner, `/events/${eventId}/readiness`)).body,
     ).criteria.find((criterion) => criterion.criterion === "STREAM_REACHABLE");
+
+  it("traces each check with its event and whether the stream played", async () => {
+    const event = await monitoredEvent();
+    stream.behaviour = "NOT_FOUND";
+    const captured = captureSpans();
+    try {
+      await checkNow(event.id);
+
+      const span = captured.spans().find(({ name }) => name === "stream.check");
+      expect(span?.attributes).toMatchObject({
+        "opspilot.event_id": event.id,
+        "opspilot.stream.healthy": false,
+      });
+      expect(span?.attributes["opspilot.stream.latency_ms"]).toBeTypeOf(
+        "number",
+      );
+    } finally {
+      await captured.stop();
+    }
+  });
 
   it("opens an incident after two failures in a row and resolves it after two successes", async () => {
     const event = await monitoredEvent();
