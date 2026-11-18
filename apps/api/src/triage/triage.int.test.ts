@@ -631,6 +631,37 @@ describe("AI question triage (FR-RN-6, ADR-0012)", { timeout: 60_000 }, () => {
     ).toHaveLength(1);
   });
 
+  it("runs one at a time per event when two starts meet on the event's lock", async () => {
+    const { client, owner, event } = await withQuestions([
+      "Where is the venue?",
+    ]);
+    const block = await holdLock(
+      database.url,
+      "SELECT 1 FROM events WHERE id = $1 FOR UPDATE",
+      [event.id],
+    );
+    let ids: string[];
+    try {
+      const both = Promise.all([
+        started(client, owner, event.id),
+        started(client, owner, event.id),
+      ]);
+      await block.waitForWaiters(2);
+      await block.release();
+      ids = await both;
+    } catch (error) {
+      await block.release().catch(() => undefined);
+      throw error;
+    }
+
+    expect(new Set(ids).size).toBe(1);
+    expect(
+      await database.query("SELECT 1 FROM triage_runs WHERE event_id = $1", [
+        event.id,
+      ]),
+    ).toHaveLength(1);
+  });
+
   it("refuses to sort nothing", async () => {
     const client = api();
     const owner = await client.newOwner();
@@ -1253,8 +1284,18 @@ describe("AI question triage (FR-RN-6, ADR-0012)", { timeout: 60_000 }, () => {
        VALUES ($1, (now() AT TIME ZONE 'Europe/London')::date - 1, 1, 1000000)`,
       [workspaceId],
     );
+    // And one running now, in a third event.
+    const third = await openEvent(client, owner);
+    await asked(await attendee(third.slug), third.slug, "Is there tea?");
+    const runningId = await started(client, owner, third.id);
+    await database.query(
+      "UPDATE triage_runs SET status = 'RUNNING', started_at = now() WHERE id = $1",
+      [runningId],
+    );
+    const { reserved: running } = await spentToday(client, owner);
     const runId = await started(client, owner, event.id);
-    const { reserved, spent } = await spentToday(client, owner);
+    const { reserved: both, spent } = await spentToday(client, owner);
+    const reserved = both - running;
     // What the demo's reset does: the run goes with its event, unsettled.
     await database.query("DELETE FROM triage_runs WHERE id = $1", [runId]);
 
@@ -1263,9 +1304,9 @@ describe("AI question triage (FR-RN-6, ADR-0012)", { timeout: 60_000 }, () => {
 
     expect(spent).toBe(6_000);
     expect(await spentToday(client, owner)).toEqual({
-      runs: 2,
+      runs: 3,
       spent: 6_000 + reserved,
-      reserved: 0,
+      reserved: running,
     });
     const [yesterday] = await database.query<{
       spent: string;
@@ -1313,6 +1354,62 @@ describe("AI question triage (FR-RN-6, ADR-0012)", { timeout: 60_000 }, () => {
       reserved: both - orphaned,
     });
     expect((await runOf(client, owner, live)).status).toBe("QUEUED");
+  });
+
+  it("counts nothing when the day holds less than its runs reserve", async () => {
+    const { client, owner, event } = await withQuestions(["Is there coffee?"]);
+    await started(client, owner, event.id);
+    const workspaceId = (await client.me(owner)).activeWorkspace.workspaceId;
+    await database.query(
+      `UPDATE triage_spend SET reserved_micros = reserved_micros - 1000
+       WHERE workspace_id = $1`,
+      [workspaceId],
+    );
+    const before = await spentToday(client, owner);
+
+    await worker.get(TriageConsumer).process({ name: "sweep" });
+
+    expect(await spentToday(client, owner)).toEqual(before);
+    expect(before.spent).toBe(0);
+  });
+
+  it("counts an orphan and a live run's cost once each when the sweep meets the run's settlement", async () => {
+    const { client, owner, event } = await withQuestions(["Is there lunch?"]);
+    const second = await openEvent(client, owner);
+    await asked(await attendee(second.slug), second.slug, "Is there dinner?");
+    const orphan = await started(client, owner, event.id);
+    const { reserved: orphaned } = await spentToday(client, owner);
+    const live = await started(client, owner, second.id);
+    await database.query("DELETE FROM triage_runs WHERE id = $1", [orphan]);
+    model.answer = () =>
+      Promise.resolve(answered({ groups: [], answer_order: [] }));
+    const workspaceId = (await client.me(owner)).activeWorkspace.workspaceId;
+    const block = await holdLock(
+      database.url,
+      `SELECT 1 FROM triage_spend WHERE workspace_id = $1
+       AND day = (now() AT TIME ZONE 'Europe/London')::date FOR UPDATE`,
+      [workspaceId],
+    );
+    let both: Promise<unknown>;
+    try {
+      both = Promise.all([
+        // The run finishes: its settlement waits on the day's row.
+        worker.get(TriageRunner).run(live),
+        worker.get(TriageConsumer).process({ name: "sweep" }),
+      ]);
+      await block.waitForWaiters(2);
+    } finally {
+      await block.release();
+    }
+    await both;
+
+    expect((await runOf(client, owner, live)).status).toBe("SUCCEEDED");
+    // 1,000 × $4/M + 100 × $20/M for the run that answered.
+    expect(await spentToday(client, owner)).toEqual({
+      runs: 2,
+      spent: orphaned + 6_000,
+      reserved: 0,
+    });
   });
 
   it("keeps a reservation made while the sweep counts what was orphaned", async () => {

@@ -102,6 +102,8 @@ export function settleOrphans(prisma: PrismaClient): Promise<number> {
       ) AS orphaned
       WHERE spend.workspace_id = orphaned.workspace_id
         AND spend.day = orphaned.day
+        -- Never less than its runs reserve, by construction; a day that
+        -- held less would otherwise be given money back.
         AND orphaned.micros > 0`;
   });
 }

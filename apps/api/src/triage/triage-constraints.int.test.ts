@@ -196,6 +196,32 @@ describe("triage run constraints", () => {
     ]);
   });
 
+  it("holds one active run per event, whatever the code does", async () => {
+    const seeded = await seedEvent(database, {
+      startsAt: new Date(),
+      status: "LIVE",
+    });
+    await run({ event_id: seeded.eventId });
+
+    await expect(
+      run({
+        event_id: seeded.eventId,
+        status: "RUNNING",
+        started_at: new Date(),
+      }),
+    ).rejects.toMatchObject({
+      code: "23505",
+      constraint: "triage_runs_one_active_key",
+    });
+    // A finished one does not count.
+    await run({
+      event_id: seeded.eventId,
+      status: "FAILED",
+      failure: "x",
+      finished_at: new Date(),
+    });
+  });
+
   it("refuses negative counts", async () => {
     for (const column of [
       "latency_ms",

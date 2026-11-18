@@ -31,6 +31,10 @@ export default defineConfig({
           // Starting containers takes seconds, and minutes when an image is
           // downloaded for the first time.
           hookTimeout: 180_000,
+          // Each test drives a real API against PostgreSQL and Valkey; a
+          // shared CI runner once stalled two 90 ms tests past the default
+          // 5 seconds. Tests that need longer still say so.
+          testTimeout: 30_000,
           // Every file starts API instances (the real-time tests several)
           // against the same PostgreSQL, Valkey and Docker. With a worker
           // per core, a 16-core machine ran at a load of 100+ and timed out
