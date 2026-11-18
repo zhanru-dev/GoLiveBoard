@@ -134,14 +134,14 @@ services:
       - ./infra/docker/seaweedfs-s3.json:/etc/seaweedfs/s3.json:ro
       - s3-data:/data
     healthcheck:
+      # The S3 gateway answering is not enough: until the volume server has
+      # registered with the master, every upload fails ("failed to find
+      # writable volumes", seen once in CI after a slow start). Healthy
+      # means the master has room for a volume too.
       test:
         [
-          "CMD",
-          "wget",
-          "-q",
-          "-O",
-          "/dev/null",
-          "http://127.0.0.1:8333/healthz",
+          "CMD-SHELL",
+          'wget -q -O /dev/null http://127.0.0.1:8333/healthz && wget -q -O - http://127.0.0.1:9333/dir/status | grep -q ''"Free":[1-9]''',
         ]
       interval: 5s
       timeout: 3s
