@@ -131,6 +131,14 @@ jobs:
         with:
           node-version-file: .nvmrc
           cache: npm
+      # The hosted runner comes with toolchains this job never uses; with
+      # the images and Grafana's data the disk filled to 95%, and object
+      # storage then had no room to grow its volumes (CI run 44404770745).
+      - name: Free disk space for the images and the stack
+        run: |
+          df -h /
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+          df -h /
       - name: Build the api and web images
         run: docker compose --file docker-compose.prod.yml build
       # Fixable HIGH and CRITICAL vulnerabilities fail the build, and so does
