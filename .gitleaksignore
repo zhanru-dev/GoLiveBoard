@@ -4,3 +4,8 @@
 # A constant in a unit test (cb56b47), a made-up HMAC key for the test; the
 # test now generates its keys at run time.
 cb56b4707b0d7970a856c799422d167aaaf9f423:apps/api/src/attendees/unsubscribe-token.test.ts:generic-api-key:8
+#
+# A URL in a unit test (5fa8137): the web server's internal address for
+# the API (host "api", port 4301), whose path gitleaks read as a key after
+# the host name. The test now uses another host name.
+5fa8137d2514d34187fae5f273a647409c888b8a:apps/web/src/lib/server-telemetry.test.ts:generic-api-key:72
