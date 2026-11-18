@@ -8,7 +8,7 @@
 # `api` runs three ways from one image, so what is migrated, served and
 # worked on is always the same build:
 #   (default)                                   the HTTP API
-#   node dist/worker.js                         the background worker
+#   node --import ./dist/telemetry.js dist/worker.js   the background worker
 #   node ../../node_modules/prisma/build/index.js migrate deploy
 #                                               the migrations
 #
@@ -99,7 +99,7 @@ WORKDIR /app/apps/api
 USER node
 EXPOSE 4301
 ENTRYPOINT ["/sbin/tini", "--"]
-CMD ["node", "--enable-source-maps", "dist/main.js"]
+CMD ["node", "--enable-source-maps", "--import", "./dist/telemetry.js", "dist/main.js"]
 
 # Next.js standalone output: the server and only the files it traced as used.
 FROM runtime AS web

@@ -7,15 +7,18 @@ import {
 import type { Logger } from "pino";
 
 import { flushErrorReports } from "./error-reporting.js";
+import { stopTelemetry } from "./telemetry.js";
 import { createHttpLogger, HTTP_LOGGER, ROOT_LOGGER } from "./logger.js";
 
 /**
- * Sends error reports still queued when the process stops, such as the one
- * for the error that is stopping it.
+ * Sends spans and error reports still queued when the process stops, such
+ * as the report for the error that is stopping it.
  */
 @Injectable()
 export class ErrorReportFlusher implements OnApplicationShutdown {
   async onApplicationShutdown(): Promise<void> {
+    // Spans first: the error reports may be about them.
+    await stopTelemetry();
     await flushErrorReports();
   }
 }

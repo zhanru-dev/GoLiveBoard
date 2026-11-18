@@ -1,3 +1,4 @@
+import { context, isSpanContextValid, trace } from "@opentelemetry/api";
 import {
   pino,
   type DestinationStream,
@@ -55,6 +56,21 @@ function pathOf(url: string | undefined): string {
   return url?.split("?", 1)[0] ?? "";
 }
 
+/**
+ * The trace a line was logged in, so logs and traces join up (NFR-7). Empty
+ * when tracing is off or nothing is being traced.
+ */
+export function traceFields(): { trace_id?: string; span_id?: string } {
+  const span = trace.getSpan(context.active());
+  if (span === undefined) {
+    return {};
+  }
+  const spanContext = span.spanContext();
+  return isSpanContextValid(spanContext)
+    ? { trace_id: spanContext.traceId, span_id: spanContext.spanId }
+    : {};
+}
+
 /** pino's number for the `error` level; `fatal` is above it. */
 const ERROR_LEVEL = 50;
 
@@ -104,6 +120,7 @@ export function createLogger(
   const options: LoggerOptions = {
     level: config.log.level,
     redact: { paths: REDACTED_PATHS, censor: REDACTION_CENSOR },
+    mixin: traceFields,
     hooks: {
       logMethod(args, method, level) {
         if (level >= ERROR_LEVEL) {

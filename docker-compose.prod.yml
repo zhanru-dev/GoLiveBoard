@@ -146,7 +146,14 @@ services:
 
   worker:
     <<: [*api-image, *hardened]
-    command: ["node", "--enable-source-maps", "dist/worker.js"]
+    command:
+      [
+        "node",
+        "--enable-source-maps",
+        "--import",
+        "./dist/telemetry.js",
+        "dist/worker.js",
+      ]
     environment: *app-environment
     depends_on:
       migrate:
