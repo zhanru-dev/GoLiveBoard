@@ -23,14 +23,16 @@ The public event page is the page attendees land on from an invitation (FR-AD-1)
 
 The median run of each.
 
-| Run                                                              | Performance | Accessibility | Best practices | LCP    | CLS | TBT    | INP   | JavaScript |
-| ---------------------------------------------------------------- | ----------- | ------------- | -------------- | ------ | --- | ------ | ----- | ---------- |
-| CI run 44437926750, 2026-11-19, `a352246`, GitHub's amd64 runner | **0.99**    | **1.00**      | 0.96           | 0.80 s | 0   | 139 ms | 49 ms | 141.7 kB   |
-| Local stack, 2026-11-19, with the icon fix, Intel i9-9880H       | **0.96**    | **1.00**      | **1.00**       | 0.80 s | 0   | 215 ms | 75 ms | 141.7 kB   |
+| Run                                                                             | Performance | Accessibility | Best practices | LCP    | CLS | TBT    | INP   | JavaScript |
+| ------------------------------------------------------------------------------- | ----------- | ------------- | -------------- | ------ | --- | ------ | ----- | ---------- |
+| CI run 44437926750, 2026-11-19, `a352246`, GitHub's amd64 runner                | **0.99**    | **1.00**      | 0.96           | 0.80 s | 0   | 139 ms | 49 ms | 141.7 kB   |
+| Local stack, 2026-11-19, with the icon fix, Intel i9-9880H                      | **0.96**    | **1.00**      | **1.00**       | 0.80 s | 0   | 215 ms | 75 ms | 141.7 kB   |
+| CI run 44446991150, 2026-11-19, `7a65072` (the icon fix), GitHub's amd64 runner | **0.92**    | **1.00**      | **1.00**       | 0.96 s | 0   | 345 ms | 63 ms | 141.7 kB   |
 
-All three runs of each were within a few points of the median:
+The three runs of each:
 
-- **CI:** performance 0.95–0.99, LCP 0.80–0.96 s.
+- **CI, `a352246`:** performance 0.95–0.99, LCP 0.80–0.96 s.
+- **CI, `7a65072`:** performance 0.85–0.92, LCP 0.82–1.02 s, TBT 345–586 ms. The page did not change between the two runs except for the icon; Total Blocking Time is the measure that moves most with the runner's load, and the one that is a warning, not a gate.
 - **Local:** performance 0.94–0.96, LCP 0.80–0.83 s.
 
 **Best practices, 0.96 → 1.00.**
@@ -42,7 +44,7 @@ All three runs of each were within a few points of the median:
 **Headroom.**
 
 - **JavaScript:** 141.7 kB of 150 kB. The next dependency added to the public page should be weighed against this budget.
-- **Total Blocking Time:** the one measure near its line, as explained above.
+- **Total Blocking Time:** the one measure near or over its line (139–345 ms in the medians above). It is the next performance work if the public page grows.
 
 **Not measured by Lighthouse:**
 
