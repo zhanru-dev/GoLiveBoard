@@ -93,6 +93,10 @@ async function typeInto(page: Page, target: Locator, text: string) {
  * no fill: every control is reached with Tab and used with Enter, Space or
  * typing, as someone who cannot use a pointer would.
  */
+// A browser set to UTC, as CI's runner is: Chromium lists no "UTC" among
+// its time zones, which once left the new event's zone empty.
+test.use({ timezoneId: "UTC" });
+
 test("the golden flow works by keyboard alone, with focus always visible (NFR-6)", async ({
   page,
   browser,

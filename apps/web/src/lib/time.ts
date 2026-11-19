@@ -159,7 +159,17 @@ export function timeInZone(iso: string, timeZone: string): string {
   }).format(new Date(iso));
 }
 
-/** Every zone the browser knows, for the time-zone picker. */
-export function timeZones(): string[] {
-  return Intl.supportedValuesOf("timeZone");
+/**
+ * Every zone the browser knows, for the time-zone picker, with UTC and the
+ * browser's own zone always among them: Chromium lists no "UTC", and a new
+ * event starts in the browser's zone, so on a machine set to UTC the
+ * picker had no option for it and the zone came out empty.
+ */
+export function timeZones(
+  own: string = Intl.DateTimeFormat().resolvedOptions().timeZone,
+): string[] {
+  const zones = new Set(Intl.supportedValuesOf("timeZone"));
+  zones.add("UTC");
+  zones.add(own);
+  return [...zones].sort();
 }

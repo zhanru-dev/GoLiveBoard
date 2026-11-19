@@ -151,6 +151,16 @@ describe("resolveZonedTime", () => {
     },
   );
 
+  it("offers UTC and the browser's own zone, which Chromium may not list", () => {
+    const zones = timeZones("Etc/UTC");
+
+    expect(zones).toContain("UTC");
+    expect(zones).toContain("Etc/UTC");
+    expect(zones).toContain("Europe/London");
+    expect(zones).toEqual([...zones].sort());
+    expect(new Set(zones).size).toBe(zones.length);
+  });
+
   // A correctness check over about 400 zones, not a speed limit: it takes
   // about 2 s alone and has taken over 5 s in a busy full run.
   it(
