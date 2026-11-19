@@ -20,6 +20,14 @@
 	# client, so one trustworthy ID follows the request through the logs.
 	request_header X-Request-Id {http.request.uuid}
 
+	# As in production (Caddyfile.prod): methods no page or API uses are
+	# refused here, rather than reaching Next.js, which answers TRACE with a
+	# 500 (docs/security-review.md, F4).
+	@unused_method method TRACE TRACK CONNECT
+	handle @unused_method {
+		respond 405
+	}
+
 	@api path /api/* /realtime /realtime/*
 	handle @api {
 		reverse_proxy {$API_UPSTREAM} {

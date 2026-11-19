@@ -1,12 +1,57 @@
+import {
+  defaultTextMapGetter,
+  propagation,
+  ROOT_CONTEXT,
+  SpanKind,
+  trace,
+  TraceFlags,
+} from "@opentelemetry/api";
 import { ExportResultCode, type ExportResult } from "@opentelemetry/core";
-import type { ReadableSpan, SpanExporter } from "@opentelemetry/sdk-trace";
+import {
+  type ReadableSpan,
+  SamplingDecision,
+  type SpanExporter,
+} from "@opentelemetry/sdk-trace";
 import { describe, expect, it } from "vitest";
 
 import {
   RedactingExporter,
   redactAttributes,
   telemetryEndpoint,
+  tracePolicy,
 } from "./server-telemetry";
+
+describe("tracePolicy", () => {
+  it("takes the parent from a visitor's traceparent, but records the request whatever it asks and reads no baggage", () => {
+    const { sampler, textMapPropagator } = tracePolicy();
+    const visitorTrace = "0af7651916cd43dd8448eb211c80319c";
+    const parent = textMapPropagator.extract(
+      ROOT_CONTEXT,
+      {
+        // "Do not record this", with data to pass on.
+        traceparent: `00-${visitorTrace}-b7ad6b7169203331-00`,
+        baggage: "injected=from-the-browser",
+      },
+      defaultTextMapGetter,
+    );
+
+    expect(trace.getSpanContext(parent)).toMatchObject({
+      traceId: visitorTrace,
+      traceFlags: TraceFlags.NONE,
+    });
+    expect(
+      sampler.shouldSample(
+        parent,
+        visitorTrace,
+        "GET /",
+        SpanKind.SERVER,
+        {},
+        [],
+      ).decision,
+    ).toBe(SamplingDecision.RECORD_AND_SAMPLED);
+    expect(propagation.getBaggage(parent)).toBeUndefined();
+  });
+});
 
 describe("telemetryEndpoint", () => {
   it("is off without an endpoint, and refuses one that is not http(s)", () => {

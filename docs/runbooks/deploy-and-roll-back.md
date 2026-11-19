@@ -4,11 +4,12 @@
 
 - every release;
 - a smoke test that fails after a deploy;
-- the alerts "API 5xx rate above 2%" or "API readiness check failing".
+- the alerts "API 5xx rate above 2%", "API readiness check failing", "Worker not reporting" or "Work waiting more than 5 minutes".
 
 ## Symptoms
 
 - **Alert email:** "API readiness check failing" (no successful check for 2 minutes) or "API 5xx rate above 2%" (for 5 minutes).
+- **Alert email about the worker:** "Worker not reporting" (no metrics from it for over 5 minutes: down, crash-looping, or cut off from the database) or "Work waiting more than 5 minutes" (it runs, but a job or an outbox message has waited that long: stuck or overloaded).
 - **Dashboard:** "Readiness check" drops to 0, or "Share of 5xx responses" rises.
 - **Users:** pages answer 502, or a new release behaves wrongly.
 
@@ -26,6 +27,11 @@
    - Locally: `docker compose -f docker-compose.prod.yml logs --tail 50 api`.
    - A crash loop shows the same start-up error again and again.
 4. **A dependency?** If readiness says `database` or `valkey` is down, this is not the release. Restore the dependency (PostgreSQL or Valkey) first.
+5. **The worker?** For the worker's alerts:
+   - `docker compose -f docker-compose.prod.yml ps worker` and `logs --tail 50 worker`: stopped, restarting, or erroring.
+   - Stopped with no error (a host restart, a manual stop): start it, `docker compose -f docker-compose.prod.yml up -d --wait worker`. What it missed is in the outbox and the queues, and runs when it is back.
+   - Crash-looping after a deploy: roll back, as below.
+   - Running but work waits: its logs show what it is stuck on. A job that never finishes holds its queue; restarting the worker hands the job to the next try.
 
 ## Actions
 
@@ -62,7 +68,8 @@ STACK_API_IMAGE=opspilot-api:previous STACK_WEB_IMAGE=opspilot-web:previous \
 
 ## Rehearsals
 
-| Date       | Where       | What                                                              | Result                                                                                                                                                           |
-| ---------- | ----------- | ----------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 2026-11-18 | Local stack | Stopped Valkey: readiness 503                                     | "API readiness check failing" fired, and its email reached Mailpit after 231 s. Valkey restarted; the alert resolved                                             |
-| 2026-11-19 | Local stack | Deployed a release that fails on start (`opspilot-api:release-b`) | `ps`: `Restarting`; readiness `502`; logs: the start-up error repeated. Rolled back to `release-a`: **healthy 20 s after the rollback started**, readiness `200` |
+| Date       | Where       | What                                                                             | Result                                                                                                                                                                                                                                   |
+| ---------- | ----------- | -------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 2026-11-18 | Local stack | Stopped Valkey: readiness 503                                                    | "API readiness check failing" fired, and its email reached Mailpit after 231 s. Valkey restarted; the alert resolved                                                                                                                     |
+| 2026-11-19 | Local stack | Deployed a release that fails on start (`opspilot-api:release-b`)                | `ps`: `Restarting`; readiness `502`; logs: the start-up error repeated. Rolled back to `release-a`: **healthy 20 s after the rollback started**, readiness `200`                                                                         |
+| 2026-11-19 | Local stack | Stopped the worker, with nothing queued (the case the M9 review found unalerted) | "Worker not reporting": pending 5 min 20 s after the stop, firing a minute later, **email after 425 s**. "Work waiting more than 5 minutes" stayed quiet, as designed. Worker started (`up -d --wait worker`): resolved about 40 s later |

@@ -1,5 +1,9 @@
-import type { Attributes } from "@opentelemetry/api";
-import { ExportResultCode, type ExportResult } from "@opentelemetry/core";
+import type { Attributes, TextMapPropagator } from "@opentelemetry/api";
+import {
+  ExportResultCode,
+  type ExportResult,
+  W3CTraceContextPropagator,
+} from "@opentelemetry/core";
 import { OTLPMetricExporter } from "@opentelemetry/exporter-metrics-otlp-http";
 import { OTLPTraceExporter } from "@opentelemetry/exporter-trace-otlp-http";
 import {
@@ -13,7 +17,12 @@ import { UndiciInstrumentation } from "@opentelemetry/instrumentation-undici";
 import { resourceFromAttributes } from "@opentelemetry/resources";
 import { PeriodicExportingMetricReader } from "@opentelemetry/sdk-metrics";
 import { NodeSDK } from "@opentelemetry/sdk-node";
-import type { ReadableSpan, SpanExporter } from "@opentelemetry/sdk-trace";
+import {
+  AlwaysOnSampler,
+  type ReadableSpan,
+  type Sampler,
+  type SpanExporter,
+} from "@opentelemetry/sdk-trace";
 import {
   ATTR_SERVICE_NAME,
   ATTR_SERVICE_VERSION,
@@ -168,6 +177,24 @@ export function instrumentations() {
   ];
 }
 
+/**
+ * How a request's own W3C trace headers are taken. A visitor can send them
+ * (the browser does, with its API calls). They name the parent, nothing
+ * more: every request is recorded whatever its sampled flag says, so a
+ * visitor cannot hide their requests from the traces, and no baggage is
+ * read or passed on, so a visitor cannot put data into the outbox or into
+ * the headers of outgoing calls.
+ */
+export function tracePolicy(): {
+  sampler: Sampler;
+  textMapPropagator: TextMapPropagator;
+} {
+  return {
+    sampler: new AlwaysOnSampler(),
+    textMapPropagator: new W3CTraceContextPropagator(),
+  };
+}
+
 let running: NodeSDK | undefined;
 
 /**
@@ -191,6 +218,8 @@ export function startTelemetry(settings: TelemetrySettings): boolean {
     traceExporter: new RedactingExporter(
       new OTLPTraceExporter({ url: `${base}/v1/traces` }),
     ),
+    ...tracePolicy(),
+
     // Request rate, errors and duration per route come from the HTTP
     // instrumentation (http.server.request.duration); the application's
     // own are in metrics.ts (docs/06, section 7).
@@ -206,9 +235,42 @@ export function startTelemetry(settings: TelemetrySettings): boolean {
   return true;
 }
 
-/** Sends the spans still queued; called as the process stops. */
-export async function stopTelemetry(): Promise<void> {
+/**
+ * How long stopping may take. The exporters' own timeout is 10 seconds,
+ * Docker's grace period too: an unreachable collector would hold the stop
+ * until the process is killed, losing the error reports sent after it.
+ */
+export const TELEMETRY_STOP_MS = 2_000;
+
+/**
+ * Sends the spans and metrics still queued; called as the process stops.
+ * Gives up after `timeoutMs`: telemetry is not worth a stop that hangs.
+ *
+ * @returns whether everything was sent in time
+ */
+export async function stopTelemetry(
+  timeoutMs: number = TELEMETRY_STOP_MS,
+): Promise<boolean> {
   const sdk = running;
   running = undefined;
-  await sdk?.shutdown();
+  if (sdk === undefined) {
+    return true;
+  }
+  let timer: NodeJS.Timeout | undefined;
+  const timedOut = new Promise<false>((resolve) => {
+    timer = setTimeout(() => {
+      resolve(false);
+    }, timeoutMs);
+  });
+  try {
+    return await Promise.race([
+      sdk.shutdown().then(
+        () => true,
+        () => false,
+      ),
+      timedOut,
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
 }

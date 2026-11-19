@@ -266,6 +266,9 @@ export class RealtimeGateway
     clearInterval(this.sweepTimer);
     clearInterval(this.pollTimer);
     clearInterval(this.slotTimer);
+    // Chat gathered for the next frame goes out while this instance's
+    // clients are still connected to receive it.
+    this.fanout.flushAll();
     if (this.io !== undefined) {
       // This instance's clients only: through the adapter, a plain
       // disconnectSockets reaches every instance's.

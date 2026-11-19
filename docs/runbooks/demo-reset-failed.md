@@ -3,8 +3,10 @@
 **When:**
 
 - the public demo workspace still shows yesterday's visitors' changes in the morning;
-- the worker logged `Maintenance job failed` for `demo-reset`;
-- the alert "Work waiting more than 5 minutes" fired around 03:00 UK time.
+- an error report in Sentry, `Maintenance job failed` for `demo-reset` (the worker's error log lines are reported);
+- the alert "Worker not reporting" overnight: no worker, no reset.
+
+No alert watches the reset itself. A failed reset job is `failed`, not waiting, so "Work waiting more than 5 minutes" does not see it.
 
 **How the reset works** (docs/06, section 10):
 
@@ -15,8 +17,8 @@
 ## Symptoms
 
 - Visitors see others' events, messages or uploads in the demo.
-- The worker's log has `"Maintenance job failed"` with `jobName: "demo-reset"`, and no `"Demo workspace reset"` that night.
-- **Dashboard:** "Oldest waiting job" on `maintenance` is high when the worker is down or stuck.
+- The worker's log has `"Maintenance job failed"` with `jobName: "demo-reset"`, and no `"Demo workspace reset"` that night. The same line reaches Sentry.
+- **Dashboard:** "Jobs per queue and state" shows a `failed` job on `maintenance`.
 
 ## Checks
 
@@ -26,8 +28,8 @@
 2. **Is demo mode on?**
    - The worker's `DEMO_MODE` must be `true`. With it off, the scheduler is removed on start, and nothing resets: that is by design.
 3. **Is the worker running and consuming?**
-   - `docker compose ... ps worker`, and the dashboard's queue panels.
-   - If no worker ran at 03:00, the job waits. It runs when one starts.
+   - `docker compose ... ps worker`; the alert "Worker not reporting".
+   - If no worker ran at 03:00, do not count on the missed run happening when one starts: reset by hand once it is back.
 4. **What failed?**
    - The error in the failure log names it. Usually the database or storage was unreachable at 03:00, so check `/api/v1/health/ready`.
    - A seed that no longer fits the schema (after a migration) fails every night: that needs a code fix.

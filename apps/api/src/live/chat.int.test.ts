@@ -171,6 +171,26 @@ describe("live chat (FR-RN-2, FR-RN-3)", { timeout: 30_000 }, () => {
       });
     });
 
+    it("sends what it gathered to its own clients before it stops", async () => {
+      const closing = await createTestApp({ env: env(), mailer });
+      const closingUrl = await listen(closing);
+      const { event } = await setUp();
+      const visitor = await attendee(event.slug);
+      const sender = await watching(visitor.cookie, event.slug, closingUrl);
+      const listener = await watching(
+        (await attendee(event.slug)).cookie,
+        event.slug,
+        closingUrl,
+      );
+
+      // Stopped within the 100 ms the message waits to be sent with others.
+      sentMessage(await sender.send(event.slug, "Last words"));
+      await closing.close();
+
+      await listener.untilDisconnected(1_000);
+      expect(listener.chat.map(({ sequence }) => sequence)).toEqual([1]);
+    });
+
     it("shows a staff member as staff, by name", async () => {
       const { owner, event } = await setUp();
       const staff = await connect(staffCookie(owner));

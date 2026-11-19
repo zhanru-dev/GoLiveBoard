@@ -1,6 +1,6 @@
 import { context, propagation, ROOT_CONTEXT } from "@opentelemetry/api";
 
-/** A trace's W3C headers (`traceparent`, `tracestate`), as stored. */
+/** A trace's W3C `traceparent` header, as stored. */
 export type TraceCarrier = Readonly<Record<string, string>>;
 
 /**
@@ -10,7 +10,11 @@ export type TraceCarrier = Readonly<Record<string, string>>;
 export function currentTraceCarrier(): TraceCarrier | null {
   const carrier: Record<string, string> = {};
   propagation.inject(context.active(), carrier);
-  return carrier.traceparent === undefined ? null : carrier;
+  // Only the traceparent: a tracestate may come from a visitor's request,
+  // and the outbox keeps nothing a visitor chose.
+  return carrier.traceparent === undefined
+    ? null
+    : { traceparent: carrier.traceparent };
 }
 
 /** Whether a stored value is a carrier this process wrote. */

@@ -170,7 +170,7 @@ The holding slate is uploaded straight to object storage with a presigned PUT.
 
 ## Dynamic scan
 
-ZAP 2.17.0 (`zaproxy/zap-stable`, pinned by digest) ran against the production-like stack, inside its network, over HTTPS.
+ZAP 2.17.0 (`zaproxy/zap-stable:2.17.0@sha256:9624669db72f54d86c4b46a7064518bd9bf79d8c61a4c31befa9923489f328af`) ran against the production-like stack, inside its network, over HTTPS. [`scripts/zap-scan.sh`](../scripts/zap-scan.sh) runs the three scans below exactly as they ran: `bash scripts/zap-scan.sh <output directory> [baseline|signed-in|active]`.
 
 | Scan                                                           | URLs | Fail | Warnings                                                       |
 | -------------------------------------------------------------- | ---- | ---- | -------------------------------------------------------------- |
@@ -179,7 +179,7 @@ ZAP 2.17.0 (`zaproxy/zap-stable`, pinned by digest) ran against the production-l
 | Baseline, signed in, AJAX spider                               | 54   | 0    | 6: as above                                                    |
 | Active scan, signed in (attacks: injection, traversal, XSS, …) | 34   | 0    | 6: A1–A3, F4 (before its fix), and two below; 137 rules passed |
 
-The active scan used the traditional spider, so it reached the pages and the API routes they link to. The signed-in AJAX spider (which runs scripts) made the scan's browser run out of memory alongside the stack. Endpoints that only scripts call are covered by the API's own tests instead: validation, roles and cross-workspace scoping for every one.
+**Which spider ran where.** The signed-in **baseline** ran the AJAX spider, which runs the pages' scripts, and finished (54 URLs). The **active** scan was first started with the AJAX spider too; that run's browser ran out of memory alongside the stack, so the active scan ran with the traditional spider (and two threads per host). It reached the pages and the API routes they link to; the routes only scripts call were not attacked by ZAP, and are covered by the API's own tests instead: validation, roles and cross-workspace scoping for every one.
 
 Two warnings came from the active scan alone:
 

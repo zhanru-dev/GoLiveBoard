@@ -27,6 +27,10 @@ x-app-environment: &app-environment
   JWT_SECRET: ${STACK_JWT_SECRET:-stack-local-only-signing-key-not-a-secret}
   # Base64 of "stack-local-only-key-not-secret!" (32 bytes).
   WEBHOOK_ENCRYPTION_KEY: ${STACK_WEBHOOK_ENCRYPTION_KEY:-c3RhY2stbG9jYWwtb25seS1rZXktbm90LXNlY3JldCE=}
+  # The previous keys while a rotation is under way (docs/runbooks/
+  # rotate-a-secret.md); blank, as by default, means none.
+  JWT_SECRET_PREVIOUS: ${STACK_JWT_SECRET_PREVIOUS:-}
+  WEBHOOK_ENCRYPTION_KEY_PREVIOUS: ${STACK_WEBHOOK_ENCRYPTION_KEY_PREVIOUS:-}
   SMTP_URL: smtp://mailpit:1025
   MAIL_FROM: OpsPilot <no-reply@opspilot.localhost>
   S3_ENDPOINT: http://s3:8333

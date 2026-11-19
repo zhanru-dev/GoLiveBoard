@@ -1,20 +1,30 @@
 import {
   context,
+  defaultTextMapGetter,
+  INVALID_SPAN_CONTEXT,
+  propagation,
   ROOT_CONTEXT,
+  SpanKind,
   type SpanContext,
   trace,
   TraceFlags,
 } from "@opentelemetry/api";
 import { AsyncLocalStorageContextManager } from "@opentelemetry/context-async-hooks";
 import { ExportResultCode, type ExportResult } from "@opentelemetry/core";
-import type { ReadableSpan, SpanExporter } from "@opentelemetry/sdk-trace";
+import {
+  type ReadableSpan,
+  SamplingDecision,
+  type SpanExporter,
+} from "@opentelemetry/sdk-trace";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { traceFields } from "./logger.js";
 import {
+  instrumentations,
   RedactingExporter,
   redactAttributes,
   telemetrySettings,
+  tracePolicy,
 } from "./telemetry.js";
 
 describe("telemetrySettings", () => {
@@ -146,6 +156,63 @@ describe("RedactingExporter", () => {
   });
 });
 
+describe("tracePolicy", () => {
+  it("takes the parent from a visitor's traceparent, but records the request whatever it asks and reads no baggage", () => {
+    const { sampler, textMapPropagator } = tracePolicy();
+    const visitorTrace = "0af7651916cd43dd8448eb211c80319c";
+    const parent = textMapPropagator.extract(
+      ROOT_CONTEXT,
+      {
+        traceparent: `00-${visitorTrace}-b7ad6b7169203331-00`,
+        baggage: "injected=from-the-browser",
+      },
+      defaultTextMapGetter,
+    );
+
+    expect(trace.getSpanContext(parent)).toMatchObject({
+      traceId: visitorTrace,
+      traceFlags: TraceFlags.NONE,
+    });
+    expect(
+      sampler.shouldSample(
+        parent,
+        visitorTrace,
+        "POST",
+        SpanKind.SERVER,
+        {},
+        [],
+      ).decision,
+    ).toBe(SamplingDecision.RECORD_AND_SAMPLED);
+    expect(propagation.getBaggage(parent)).toBeUndefined();
+  });
+});
+
+describe("instrumentations", () => {
+  it("traces outgoing calls, queries and Valkey commands only inside a request or a job", () => {
+    // Pollers run every second: as roots of their own they would bury the
+    // traces that matter (telemetry.int.test.ts shows none leave).
+    const configs = new Map(
+      instrumentations().map((instrumentation): [string, unknown] => [
+        instrumentation.instrumentationName.split("/").pop() ?? "",
+        instrumentation.getConfig(),
+      ]),
+    );
+
+    expect(configs.get("instrumentation-http")).toMatchObject({
+      requireParentforOutgoingSpans: true,
+    });
+    expect(configs.get("instrumentation-undici")).toMatchObject({
+      requireParentforSpans: true,
+    });
+    expect(configs.get("instrumentation-pg")).toMatchObject({
+      requireParentSpan: true,
+    });
+    expect(configs.get("instrumentation-ioredis")).toMatchObject({
+      requireParentSpan: true,
+    });
+  });
+});
+
 describe("traceFields", () => {
   const manager = new AsyncLocalStorageContextManager();
 
@@ -173,5 +240,16 @@ describe("traceFields", () => {
       span_id: "b7ad6b7169203331",
     });
     expect(traceFields()).toEqual({});
+    // A span with no real trace (an unsampled stand-in) adds nothing either,
+    // rather than an all-zero ID that would match every such line.
+    expect(
+      context.with(
+        trace.setSpan(
+          ROOT_CONTEXT,
+          trace.wrapSpanContext(INVALID_SPAN_CONTEXT),
+        ),
+        traceFields,
+      ),
+    ).toEqual({});
   });
 });

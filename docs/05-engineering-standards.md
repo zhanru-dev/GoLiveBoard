@@ -98,6 +98,7 @@ Further rules:
 
 ## 7. Security checklist (every pull request)
 
+- [ ] A change to a real-time or server-sent message keeps the previous release's form working for one release (docs/04, section 4).
 - [ ] All new input is validated with a contracts schema.
 - [ ] New endpoints declare their roles, and queries are scoped by `workspaceId`.
 - [ ] A cross-workspace test exists for each new endpoint.

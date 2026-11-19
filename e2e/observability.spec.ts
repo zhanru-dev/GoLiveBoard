@@ -36,7 +36,7 @@ async function servicesOf(traceId: string): Promise<string[]> {
 test.describe("observability (NFR-7, docs/06 section 7)", () => {
   test.skip(E2E_TARGET !== "stack", "Grafana runs in the stack only");
 
-  test("Grafana has the overview dashboard and the four alert rules", async () => {
+  test("Grafana has the overview dashboard and the five alert rules", async () => {
     const dashboards = (await (
       await fetch(`${GRAFANA}/api/search?query=OpsPilot%20overview`)
     ).json()) as { uid: string }[];
@@ -50,11 +50,17 @@ test.describe("observability (NFR-7, docs/06 section 7)", () => {
       "opspilot-queue-age",
       "opspilot-readiness",
       "opspilot-webhook-endpoint-failing",
+      "opspilot-worker-silent",
     ]);
   });
 
   test("every alert rule evaluates, and every dashboard query runs", async () => {
-    // Each rule has been evaluated at least once, without an error.
+    // Each rule has been evaluated since this test started, without an
+    // error: an evaluation from before (a stack reused across changes)
+    // proves nothing about the rules provisioned now. Rules are evaluated
+    // every 30 seconds, so this waits up to that long and more.
+    test.setTimeout(150_000);
+    const started = Date.now();
     await expect
       .poll(
         async () => {
@@ -71,12 +77,14 @@ test.describe("observability (NFR-7, docs/06 section 7)", () => {
           return body.data.groups
             .flatMap(({ rules }) => rules)
             .map(({ health, lastEvaluation }) =>
-              lastEvaluation.startsWith("0001") ? "not evaluated yet" : health,
+              Date.parse(lastEvaluation) < started
+                ? "not evaluated since the test started"
+                : health,
             );
         },
         { timeout: 90_000 },
       )
-      .toEqual(["ok", "ok", "ok", "ok"]);
+      .toEqual(["ok", "ok", "ok", "ok", "ok"]);
 
     const dashboard = (await (
       await fetch(`${GRAFANA}/api/dashboards/uid/opspilot-overview`)
@@ -109,6 +117,61 @@ test.describe("observability (NFR-7, docs/06 section 7)", () => {
         `${GRAFANA}/api/datasources/proxy/uid/prometheus/api/v1/query?query=${encodeURIComponent(query)}`,
       );
       expect(result.status, query).toBe(200);
+    }
+  });
+
+  test("each alert rule fires past its threshold, and only then", async () => {
+    // Grafana evaluates each provisioned rule with its query replaced by a
+    // constant, on either side of the threshold: a threshold that can never
+    // be crossed, or one on the wrong side, fails here. The real queries are
+    // checked above.
+    const cases: Record<string, { breach: string; normal: string }> = {
+      "opspilot-api-5xx": { breach: "vector(0.03)", normal: "vector(0.02)" },
+      "opspilot-readiness": { breach: "vector(0)", normal: "vector(1)" },
+      "opspilot-queue-age": { breach: "vector(301)", normal: "vector(300)" },
+      // absent() gives 1 when the worker is silent, nothing otherwise.
+      "opspilot-worker-silent": {
+        breach: "vector(1)",
+        normal: "absent(vector(1))",
+      },
+      "opspilot-webhook-endpoint-failing": {
+        breach: "vector(11)",
+        normal: "vector(10)",
+      },
+    };
+    interface Rule {
+      condition: string;
+      data: { refId: string; model: { expr?: string } }[];
+    }
+    const fires = async (uid: string, expr: string) => {
+      const rule = (await (
+        await fetch(`${GRAFANA}/api/v1/provisioning/alert-rules/${uid}`)
+      ).json()) as Rule;
+      const data = rule.data.map((query) =>
+        query.model.expr === undefined
+          ? query
+          : { ...query, model: { ...query.model, expr } },
+      );
+      const response = await fetch(`${GRAFANA}/api/v1/eval`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ data, condition: rule.condition }),
+      });
+      expect(response.status, uid).toBe(200);
+      const body = (await response.json()) as {
+        results: Record<
+          string,
+          { frames?: { data: { values: (number | null)[][] } }[] }
+        >;
+      };
+      return (body.results[rule.condition]?.frames ?? []).some(({ data }) =>
+        data.values.some((values) => values.includes(1)),
+      );
+    };
+
+    for (const [uid, { breach, normal }] of Object.entries(cases)) {
+      expect(await fires(uid, breach), `${uid} at ${breach}`).toBe(true);
+      expect(await fires(uid, normal), `${uid} at ${normal}`).toBe(false);
     }
   });
 

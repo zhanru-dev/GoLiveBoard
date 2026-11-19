@@ -1,7 +1,11 @@
 import { type ChildProcess, execFileSync, spawn } from "node:child_process";
 import { once } from "node:events";
 import { createServer, type Server } from "node:http";
-import type { AddressInfo } from "node:net";
+import {
+  type AddressInfo,
+  createServer as createTcpServer,
+  type Socket,
+} from "node:net";
 import { fileURLToPath } from "node:url";
 
 import type { NestExpressApplication } from "@nestjs/platform-express";
@@ -435,6 +439,114 @@ describe(
       expect(row?.trace_context).toMatchObject({
         traceparent: expect.stringContaining(traceId ?? "none") as unknown,
       });
+    });
+
+    it("takes only the parent from a visitor's trace headers: not their sampling, baggage or tracestate", async () => {
+      const client = new ApiClient(helper, "198.18.30.2");
+      const owner = await client.newOwner();
+      const event = await createEvent(client, owner);
+      const visitorTrace = "0af7651916cd43dd8448eb211c80319c";
+
+      const moved = await fetch(
+        `${base}/api/v1/events/${event.id}/transitions`,
+        {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            origin: TEST_ORIGIN,
+            cookie: `${ACCESS_COOKIE}=${owner.access}`,
+            // "Do not record this", with data for the outbox and onwards.
+            traceparent: `00-${visitorTrace}-b7ad6b7169203331-00`,
+            tracestate: "visitor=chosen-by-the-browser",
+            baggage: "injected=from-the-browser",
+          },
+          body: JSON.stringify({ to: "CONFIGURING" }),
+        },
+      );
+      expect(moved.status, await moved.clone().text()).toBe(200);
+
+      // Recorded all the same, under the visitor's trace.
+      await expect
+        .poll(
+          () =>
+            collector
+              .spans()
+              .some(
+                (span) =>
+                  span.traceId === visitorTrace &&
+                  span.attributes["http.route"] ===
+                    "/api/v1/events/:eventId/transitions",
+              ),
+          { timeout: 10_000 },
+        )
+        .toBe(true);
+      const [row] = await database.query<{ trace_context: unknown }>(
+        "SELECT trace_context FROM outbox_messages WHERE payload->>'eventId' = $1 AND type = 'event.transitioned'",
+        [event.id],
+      );
+      // The outbox keeps the traceparent alone, marked as recorded.
+      expect(row?.trace_context).toEqual({
+        traceparent: expect.stringMatching(
+          new RegExp(`^00-${visitorTrace}-[0-9a-f]{16}-01$`),
+        ) as unknown,
+      });
+    });
+  },
+);
+
+/**
+ * A collector that accepts connections and never answers: the stop must
+ * not wait for it beyond its time limit (Docker kills after 10 seconds).
+ */
+describe(
+  "stopping while the collector does not answer",
+  { timeout: 60_000 },
+  () => {
+    let database: TestDatabase;
+    const sockets = new Set<Socket>();
+    const silent = createTcpServer((socket) => {
+      sockets.add(socket);
+    });
+
+    beforeAll(async () => {
+      database = await createTestDatabase();
+      silent.listen(0, "127.0.0.1");
+      await once(silent, "listening");
+    });
+
+    afterAll(async () => {
+      for (const socket of sockets) {
+        socket.destroy();
+      }
+      silent.close();
+      await database.drop();
+    });
+
+    it("stops within a few seconds, telemetry given up rather than waited for", async () => {
+      const { port } = silent.address() as AddressInfo;
+      const { api, base } = await startApi({
+        ...processEnv(database, `http://127.0.0.1:${String(port)}`),
+        // Everything queued is sent at the stop.
+        OTEL_BSP_SCHEDULE_DELAY: "600000",
+        OTEL_METRIC_EXPORT_INTERVAL: "600000",
+      });
+      const signIn = await fetch(`${base}/api/v1/auth/sign-in`, {
+        method: "POST",
+        headers: { "content-type": "application/json", origin: TEST_ORIGIN },
+        body: JSON.stringify({
+          email: "a@example.com",
+          password: "x".repeat(12),
+        }),
+      });
+      expect(signIn.status).toBe(401);
+
+      const stopping = Date.now();
+      await api.stop();
+      const took = Date.now() - stopping;
+
+      expect(api.child.signalCode, api.output).not.toBe("SIGKILL");
+      // TELEMETRY_STOP_MS is 2 seconds; the exporters alone would wait 10.
+      expect(took, api.output).toBeLessThan(6_000);
     });
   },
 );

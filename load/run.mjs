@@ -18,6 +18,31 @@ const attendees = process.env.ATTENDEES ?? "500";
 const K6_IMAGE =
   "grafana/k6:2.3.0@sha256:2dd4756ec6e14e62778916e1eb850108e4b499304c02df56760fa0bdb0fba0b8";
 
+/**
+ * The stack's network, named after its Compose project (by default the
+ * directory it runs from, or COMPOSE_PROJECT_NAME), found from its API.
+ */
+function stackNetwork() {
+  const api = execFileSync(
+    "docker",
+    ["compose", "--file", "docker-compose.prod.yml", "ps", "-q", "api"],
+    { cwd: root, encoding: "utf8" },
+  ).trim();
+  if (api === "") {
+    throw new Error("The stack is not running: npm run stack:up");
+  }
+  return execFileSync(
+    "docker",
+    [
+      "inspect",
+      "--format",
+      "{{range $name, $_ := .NetworkSettings.Networks}}{{$name}}{{end}}",
+      api,
+    ],
+    { encoding: "utf8" },
+  ).trim();
+}
+
 const sql = execFileSync("node", ["load/seed.mjs", attendees], {
   cwd: root,
   encoding: "utf8",
@@ -60,7 +85,7 @@ execFileSync(
           `${String(process.getuid())}:${String(process.getgid?.() ?? 0)}`,
         ]),
     "--network",
-    "opspilot-stack_default",
+    stackNetwork(),
     // Enough open files for 500 sockets and their reads.
     "--ulimit",
     "nofile=65536:65536",

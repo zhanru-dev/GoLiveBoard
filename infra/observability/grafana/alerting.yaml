@@ -96,8 +96,8 @@ groups:
         labels:
           severity: page
         annotations:
-          summary: A job or an outbox message has waited more than 5 minutes; the worker may be down or stuck.
-          runbook: docs/runbooks/demo-reset-failed.md
+          summary: A job or an outbox message has waited more than 5 minutes; the worker is stuck or too slow. (A worker that is down reports nothing; "Worker not reporting" covers that.)
+          runbook: docs/runbooks/deploy-and-roll-back.md
         data:
           - refId: A
             relativeTimeRange: { from: 600, to: 0 }
@@ -115,6 +115,39 @@ groups:
               expression: A
               conditions:
                 - evaluator: { type: gt, params: [300] }
+
+      # Only the worker reports queue and outbox metrics, so a worker that is
+      # down makes "Work waiting" see no data, and no data is not an alert
+      # there: nothing waits while nothing is queued. This rule alerts on the
+      # silence itself. Prometheus keeps a series for 5 minutes after its
+      # last sample, so it fires about 6 minutes after the worker stops.
+      - uid: opspilot-worker-silent
+        title: Worker not reporting
+        condition: C
+        for: 1m
+        noDataState: OK
+        execErrState: Error
+        labels:
+          severity: page
+        annotations:
+          summary: The worker has sent no metrics for over 5 minutes; it is down or cannot reach the database. Nothing is relayed, delivered, checked or reset.
+          runbook: docs/runbooks/deploy-and-roll-back.md
+        data:
+          - refId: A
+            relativeTimeRange: { from: 600, to: 0 }
+            datasourceUid: prometheus
+            model:
+              refId: A
+              instant: true
+              expr: absent(opspilot_outbox_oldest_message_age_seconds)
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: gt, params: [0] }
 
       - uid: opspilot-webhook-endpoint-failing
         title: Webhook endpoint failing

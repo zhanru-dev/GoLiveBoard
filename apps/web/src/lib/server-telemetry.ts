@@ -1,10 +1,19 @@
-import type { Attributes } from "@opentelemetry/api";
-import { ExportResultCode, type ExportResult } from "@opentelemetry/core";
+import type { Attributes, TextMapPropagator } from "@opentelemetry/api";
+import {
+  ExportResultCode,
+  type ExportResult,
+  W3CTraceContextPropagator,
+} from "@opentelemetry/core";
 import { OTLPTraceExporter } from "@opentelemetry/exporter-trace-otlp-http";
 import { UndiciInstrumentation } from "@opentelemetry/instrumentation-undici";
 import { resourceFromAttributes } from "@opentelemetry/resources";
 import { NodeSDK } from "@opentelemetry/sdk-node";
-import type { ReadableSpan, SpanExporter } from "@opentelemetry/sdk-trace";
+import {
+  AlwaysOnSampler,
+  type ReadableSpan,
+  type Sampler,
+  type SpanExporter,
+} from "@opentelemetry/sdk-trace";
 import {
   ATTR_SERVICE_NAME,
   ATTR_SERVICE_VERSION,
@@ -90,6 +99,23 @@ export function telemetryEndpoint(
   return endpoint.replace(/\/+$/, "");
 }
 
+/**
+ * How a request's own W3C trace headers are taken. A visitor can send them
+ * (the browser does, with its API calls). They name the parent, nothing
+ * more: every request is recorded whatever its sampled flag says, so a
+ * visitor cannot hide their requests from the traces, and no baggage is
+ * read or passed on to the API.
+ */
+export function tracePolicy(): {
+  sampler: Sampler;
+  textMapPropagator: TextMapPropagator;
+} {
+  return {
+    sampler: new AlwaysOnSampler(),
+    textMapPropagator: new W3CTraceContextPropagator(),
+  };
+}
+
 let running: NodeSDK | undefined;
 
 /**
@@ -117,6 +143,8 @@ export function startServerTelemetry(
     traceExporter: new RedactingExporter(
       new OTLPTraceExporter({ url: `${endpoint}/v1/traces` }),
     ),
+    ...tracePolicy(),
+
     instrumentations: [new UndiciInstrumentation()],
   });
   running.start();

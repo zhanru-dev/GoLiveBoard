@@ -17,9 +17,9 @@ import { createHttpLogger, HTTP_LOGGER, ROOT_LOGGER } from "./logger.js";
 @Injectable()
 export class ErrorReportFlusher implements OnApplicationShutdown {
   async onApplicationShutdown(): Promise<void> {
-    // Spans first: the error reports may be about them.
-    await stopTelemetry();
-    await flushErrorReports();
+    // Side by side, each with its own time limit: a collector that does not
+    // answer must not hold back the error report about why we stop.
+    await Promise.all([stopTelemetry(), flushErrorReports()]);
   }
 }
 

@@ -67,11 +67,20 @@ export class Fanout implements OnApplicationShutdown {
     this.pendingChat.set(eventId, { events: [event], timer });
   }
 
-  /** What is still gathered goes out as the instance stops. */
-  onApplicationShutdown(): void {
+  /**
+   * Sends what is still gathered at once. The gateway calls it as the
+   * instance stops, before it closes its clients' connections; sent later,
+   * it would reach only other instances' clients.
+   */
+  flushAll(): void {
     for (const eventId of [...this.pendingChat.keys()]) {
       this.flushChat(eventId);
     }
+  }
+
+  /** Anything gathered since the gateway closed goes to other instances. */
+  onApplicationShutdown(): void {
+    this.flushAll();
   }
 
   private flushChat(eventId: string): void {
