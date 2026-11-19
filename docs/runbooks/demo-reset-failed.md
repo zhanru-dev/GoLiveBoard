@@ -38,7 +38,7 @@
 2. **Then reset by hand.** Do not wait for 03:00. The reset is safe to run at any time, and repeating it changes nothing.
    - Locally: `docker compose -f docker-compose.prod.yml exec worker node --enable-source-maps dist/demo/seed.js`
    - In development: `npm run db:seed`
-   - In AWS (milestone 10): run the worker's task once with the command `node dist/demo/seed.js` (`aws ecs run-task` with a command override).
+   - In AWS (milestone 10): the same command on the EC2 host, through an SSM session (`aws ssm start-session`), in the deployment's compose directory.
 3. **If the seed itself is broken:** fix it in code, deploy, and run step 2.
    - Until then, close the demo to new visitors: `DEMO_MODE=false` on the web server hides "Try the demo", and on the API refuses demo sign-ins. Leave the worker's on, or its scheduler is removed. The banner promises a nightly reset, and what one visitor typed must not stay in front of the next for days.
 

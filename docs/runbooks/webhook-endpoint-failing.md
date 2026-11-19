@@ -30,7 +30,7 @@
    - **`statusCode` 5xx, or an `error` with no status (such as "Timed out after 10 seconds"):** the receiver is down or slow.
    - **`error` about DNS or TLS:** the domain moved or its certificate expired.
 3. **Is it only this endpoint?**
-   - If every endpoint fails at once, the problem is ours: the worker's egress (NAT gateway in AWS), DNS, or the clock (signatures carry a timestamp).
+   - If every endpoint fails at once, the problem is ours: the host's outbound network (the EC2 host's security group or routing in AWS), DNS, or the clock (signatures carry a timestamp).
    - Check the dashboard and the worker's logs before contacting anyone.
 
 ## Actions

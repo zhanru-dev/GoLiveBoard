@@ -78,11 +78,13 @@ flowchart LR
 
 - **Scope**: end-to-end OpenTelemetry tracing including jobs; dashboards and alerts; k6 load test for NFR-4; full accessibility audit with a keyboard walkthrough; security review against the checklist and OWASP ASVS areas in scope; runbooks; database restore rehearsal.
 - **Exit criteria**: load test results and Lighthouse scores recorded in the repository; every runbook exercised once.
+- **Recorded**: [load test](load-tests/2026-11-18-nfr4-local.md), [Lighthouse scores](lighthouse.md), [accessibility audit](accessibility-audit.md), [security review](security-review.md), and the [runbooks](runbooks/README.md) with their rehearsals. The load test and the runbooks ran on the local production-like stack; both run again on AWS in milestone 10.
 
 ### M10 · Deployment and launch
 
 - **Scope**: Terraform for the AWS demo environment; GitHub OIDC; deploy pipeline with migrations, smoke test and automatic rollback; SES production access and DNS; README with architecture diagram, live link, demo instructions and trade-offs; final ADR review; a two-minute demo video; a real small online event run on OpsPilot, with its report.
 - **Exit criteria**: a merge to `main` reaches the demo environment with no manual step; a deliberately failing smoke test rolls back automatically; a reviewer who has never seen the project can understand, run and try it from the README alone.
+- **Carried over from M9**: Grafana Cloud in place of the local `grafana/otel-lgtm`, with logs shipped to it; the k6 load test against the AWS environment; each runbook's AWS steps rehearsed there; a screen-reader pass of the golden flow before the public demo.
 - **Career milestone**: the full-stack CV goes out with a live link from here.
 - **Start early**: open the AWS account, request SES production access and register the domain about a week before this milestone; approvals take days, deployment does not.
 

@@ -83,7 +83,9 @@ export async function flushErrorReports(timeoutMs = 2000): Promise<void> {
 
 /**
  * Starts Sentry for this process when a DSN is configured (docs/02,
- * section 7.9). Errors only: tracing arrives with OpenTelemetry in milestone 9.
+ * section 7.9). Errors only: traces are OpenTelemetry's (ADR-0011), and
+ * Sentry registers no tracer provider of its own (`enableOpenTelemetrySetup`
+ * is off by default in @sentry/node).
  *
  * Nothing personal leaves the process: no collected request data, user
  * details or local variables, no breadcrumbs (they would carry URLs and log

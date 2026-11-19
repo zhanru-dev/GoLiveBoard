@@ -50,8 +50,8 @@ STACK_API_IMAGE=opspilot-api:previous STACK_WEB_IMAGE=opspilot-web:previous \
 
 **In AWS** (milestone 10):
 
-- The deploy pipeline runs the smoke test after each deploy and rolls back to the previous image digests by itself when it fails.
-- By hand, re-run the deploy workflow on the previous commit. The images are immutable, tagged with the commit SHA.
+- The deploy pipeline runs the smoke test after each deploy and, when it fails, deploys the previous commit's images by itself.
+- By hand, run the deploy workflow for the previous commit: it runs `deploy <previous sha>` on the EC2 host through SSM. The images are immutable, tagged with the commit SHA (docs/06, section 4).
 
 ## Verification
 

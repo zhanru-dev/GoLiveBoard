@@ -13,6 +13,16 @@ These documents define what OpsPilot is, how it is built and how it is delivered
 7. **[Delivery plan](07-delivery-plan.md)** — the order of work, with exit criteria per milestone.
 8. **[Architecture decision records](adr/README.md)** — the reasoning behind significant decisions, including the options we rejected.
 
+## Evidence
+
+What milestone 9 measured and checked, kept next to the documents it holds to account:
+
+- **[Load test](load-tests/2026-11-18-nfr4-local.md)** — NFR-4 (chat delivery under load), with the k6 script in `load/`.
+- **[Lighthouse scores](lighthouse.md)** — the public event page against its budgets (NFR-3).
+- **[Accessibility audit](accessibility-audit.md)** — WCAG 2.2 AA, criterion by criterion, with the keyboard walkthrough.
+- **[Security review](security-review.md)** — OWASP ASVS 5.0 level 2, with a ZAP scan.
+- **[Runbooks](runbooks/README.md)** — what to do when something goes wrong, each rehearsed once.
+
 ## Conventions used in these documents
 
 - **Requirement IDs** — `FR-<area>-<n>` for functional requirements and `NFR-<n>` for non-functional ones. Tests, pull requests and ADRs reference them.

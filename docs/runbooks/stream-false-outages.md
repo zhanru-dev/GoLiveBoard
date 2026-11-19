@@ -23,7 +23,7 @@
    docker compose -f docker-compose.prod.yml exec worker \
      node -e "fetch('<manifest url>').then(async r => console.log(r.status, (await r.text()).slice(0, 80)))"
    ```
-   In AWS: from a task in the worker's subnets (`aws ecs execute-command`).
+   In AWS: the same command on the EC2 host, through an SSM session (`aws ssm start-session`).
 3. **Match it to a cause:**
 
    | The checker gets                                 | Viewers get        | Usually                                                                                                                               |
@@ -37,7 +37,7 @@
 ## Actions
 
 - **Wrong URL:** set the URL the player actually uses: Launch Control, stream panel, or `PUT /api/v1/events/<id>/stream`. Use the master manifest, not a single rendition.
-- **The CDN blocks the checker:** ask the stream provider to allow the worker's egress address (the NAT gateway's Elastic IP in AWS), or to allow the manifest without a viewer token. Do not loosen anything for viewers.
+- **The CDN blocks the checker:** ask the stream provider to allow the address checks come from (the EC2 host's Elastic IP in AWS), or to allow the manifest without a viewer token. Do not loosen anything for viewers.
 - **Slow origin:** usually a provider issue. If it lasts, raise it with them; the 5-second budget stays (NFR-3).
 - **Until it is fixed:**
   - The incident stays open, and that is correct: checks resolve it, nobody does by hand.
