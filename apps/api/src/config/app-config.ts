@@ -103,7 +103,9 @@ const AppConfigSchema = z
      * The previous signing key during a rotation: tokens it signed stay valid
      * until they expire, so rotating the key signs nobody out.
      */
-    JWT_SECRET_PREVIOUS: Secret.optional(),
+    // Blank once a rotation is over, as WEBHOOK_ENCRYPTION_KEY_PREVIOUS
+    // may be: not set, rather than too short.
+    JWT_SECRET_PREVIOUS: optional(Secret),
     /**
      * Seals webhook signing secrets at rest (AES-256-GCM): 32 random bytes,
      * base64 (`openssl rand -base64 32`). Without it, webhook endpoints

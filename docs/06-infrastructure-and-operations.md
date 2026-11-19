@@ -224,16 +224,16 @@ Restores are rehearsed once before the public demo, following the runbook.
 
 ## 9. Runbooks
 
-Each runbook lives in `docs/runbooks/` and follows the same shape: **symptoms → checks → actions → verification**.
+Each runbook lives in `docs/runbooks/` ([index](runbooks/README.md)) and follows the same shape: **symptoms → checks → actions → verification**, with a section for the local stack and one for AWS. Each was rehearsed on the local stack in milestone 9, and the rehearsal is logged at its end.
 
-| Runbook                                 | When                                    |
-| --------------------------------------- | --------------------------------------- |
-| Deploy and roll back                    | Every release; failed smoke test        |
-| Restore the database to a point in time | Data loss or corruption                 |
-| Rotate a secret                         | Suspected leak; scheduled rotation      |
-| Webhook endpoint failing                | Delivery alert                          |
-| Stream check reports false outages      | Incidents opened while the stream plays |
-| Demo reset failed                       | Demo workspace not reset by 06:00       |
+| Runbook                                                                 | When                                    |
+| ----------------------------------------------------------------------- | --------------------------------------- |
+| [Deploy and roll back](runbooks/deploy-and-roll-back.md)                | Every release; failed smoke test        |
+| [Restore the database to a point in time](runbooks/restore-database.md) | Data loss or corruption                 |
+| [Rotate a secret](runbooks/rotate-a-secret.md)                          | Suspected leak; scheduled rotation      |
+| [Webhook endpoint failing](runbooks/webhook-endpoint-failing.md)        | Delivery alert                          |
+| [Stream check reports false outages](runbooks/stream-false-outages.md)  | Incidents opened while the stream plays |
+| [Demo reset failed](runbooks/demo-reset-failed.md)                      | Demo workspace not reset by 06:00       |
 
 ## 10. Demo mode
 

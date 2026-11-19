@@ -84,6 +84,21 @@ describe("loadConfig", () => {
     });
   });
 
+  it("treats the previous keys, blanked after a rotation, as not set", () => {
+    const config = loadConfig({
+      ...REQUIRED,
+      JWT_SECRET_PREVIOUS: "",
+      WEBHOOK_ENCRYPTION_KEY_PREVIOUS: "",
+    });
+
+    expect(config.auth.jwtPreviousSecret).toBeUndefined();
+    expect(config.webhooks.previousEncryptionKey).toBeUndefined();
+    // A previous key that is set must still be long enough.
+    expect(() =>
+      loadConfig({ ...REQUIRED, JWT_SECRET_PREVIOUS: "short" }),
+    ).toThrow(/JWT_SECRET_PREVIOUS/);
+  });
+
   it.each(["not a url", "ftp://public@sentry.example/1"])(
     "rejects the Sentry DSN %j",
     (dsn) => {
