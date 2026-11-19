@@ -300,7 +300,11 @@ function Invitations({
         Revoking an invitation also revokes whoever registered with it.
       </p>
       {control.canEdit ? (
-        <form onSubmit={submit} className="flex flex-wrap items-end gap-2">
+        <form
+          method="post"
+          onSubmit={submit}
+          className="flex flex-wrap items-end gap-2"
+        >
           <div className="min-w-64 grow">
             <FormField
               label="Invite by email"

@@ -32,6 +32,14 @@
 		Strict-Transport-Security "max-age=31536000; includeSubDomains"
 		-Server
 	}
+	# Methods no page or API uses are refused here: Next.js answered TRACE
+	# with a 500, an error report and a 5xx for the alert to count
+	# (docs/security-review.md, F4).
+	# (Its own handle, first: handle blocks run before respond.)
+	@unused_method method TRACE TRACK CONNECT
+	handle @unused_method {
+		respond 405
+	}
 }
 
 {$SITE_HOST} {

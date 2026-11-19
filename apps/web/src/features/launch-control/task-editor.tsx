@@ -110,7 +110,12 @@ function TaskDraft({
   }
 
   return (
-    <form onSubmit={submit} noValidate className="grid w-full gap-3">
+    <form
+      method="post"
+      onSubmit={submit}
+      noValidate
+      className="grid w-full gap-3"
+    >
       {changedElsewhere ? (
         <Alert role="alert">
           <AlertDescription className="flex flex-wrap items-center gap-2">

@@ -50,7 +50,11 @@ export function QuestionsPanel({
         Questions
       </h2>
       {onAsk !== undefined && disabledReason === undefined ? (
-        <form onSubmit={(form) => void submit(form)} className="flex gap-2">
+        <form
+          method="post"
+          onSubmit={(form) => void submit(form)}
+          className="flex gap-2"
+        >
           <label htmlFor="question-body" className="sr-only">
             Your question
           </label>

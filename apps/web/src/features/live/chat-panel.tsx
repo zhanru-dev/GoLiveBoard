@@ -109,7 +109,7 @@ export function ChatPanel({
         </ol>
       </div>
       {disabledReason === undefined ? (
-        <form onSubmit={submit} className="flex gap-2">
+        <form method="post" onSubmit={submit} className="flex gap-2">
           <label htmlFor="chat-message" className="sr-only">
             Your message
           </label>

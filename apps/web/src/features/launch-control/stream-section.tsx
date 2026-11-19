@@ -81,7 +81,7 @@ function StreamUrlForm({
   }
 
   return (
-    <form onSubmit={submit} noValidate className="grid gap-3">
+    <form method="post" onSubmit={submit} noValidate className="grid gap-3">
       <FormAlert message={error} />
       <FormField
         label="HLS playback URL"

@@ -62,6 +62,7 @@ export function AddTaskForm({
 
   return (
     <form
+      method="post"
       onSubmit={submit}
       noValidate
       className="grid gap-3 rounded-lg border border-dashed p-3"

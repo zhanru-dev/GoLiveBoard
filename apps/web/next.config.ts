@@ -22,6 +22,11 @@ export const SECURITY_HEADERS = [
     key: "Permissions-Policy",
     value: "camera=(), microphone=(), geolocation=()",
   },
+  // No other site's window keeps a handle on ours, and no other site embeds
+  // our pages' resources. (Cross-Origin-Embedder-Policy would also refuse
+  // the customer's stream, served from its own origin.)
+  { key: "Cross-Origin-Opener-Policy", value: "same-origin" },
+  { key: "Cross-Origin-Resource-Policy", value: "same-origin" },
 ];
 
 const nextConfig: NextConfig = {

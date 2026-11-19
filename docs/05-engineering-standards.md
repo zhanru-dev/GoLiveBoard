@@ -103,6 +103,7 @@ Further rules:
 - [ ] A cross-workspace test exists for each new endpoint.
 - [ ] No secrets, tokens or personal data in code, logs, errors or test snapshots.
 - [ ] Outbound requests to user-supplied URLs go through the SSRF-safe client.
+- [ ] Forms that send data declare `method="post"`: if the page's script has not loaded, the browser then posts instead of putting the fields (passwords included) in the URL.
 - [ ] New dependencies are maintained, permissively licensed and justified in the pull request.
 
 ## 8. Accessibility

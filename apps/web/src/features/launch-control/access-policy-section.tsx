@@ -133,7 +133,7 @@ function PolicyForm({
     );
   }
   return (
-    <form onSubmit={submit} noValidate className="grid gap-4">
+    <form method="post" onSubmit={submit} noValidate className="grid gap-4">
       <FormAlert message={error} />
       <NativeSelect
         label="Who can register"

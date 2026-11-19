@@ -281,4 +281,4 @@ OpsPilot-Signature: t=1795000000,v1=5f2c…
 
 ## 7. OpenAPI document
 
-`npm run contracts:openapi` builds an OpenAPI 3.1 document from the route registry in `packages/contracts` (each route declares its method, path, roles and Zod schemas). CI fails if the committed document is out of date, so API changes are visible in pull-request diffs. Swagger UI serves it at `/api/docs` in non-production environments.
+**Planned, not built yet** (found in the milestone 9 security review). The intent: `npm run contracts:openapi` builds an OpenAPI 3.1 document from the Zod schemas in `packages/contracts`, and CI fails if the committed document is out of date, so API changes are visible in pull-request diffs. Until then, the schemas in `packages/contracts` are the reference.

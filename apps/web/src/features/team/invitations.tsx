@@ -80,6 +80,7 @@ export function InviteForm() {
 
   return (
     <form
+      method="post"
       onSubmit={(event) => void onSubmit(event)}
       noValidate
       className="grid gap-4 sm:grid-cols-[1fr_10rem_auto] sm:items-start"

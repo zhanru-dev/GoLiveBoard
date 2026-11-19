@@ -151,6 +151,7 @@ function CreateAccount({ token, onAccepted }: StepProps) {
 
   return (
     <form
+      method="post"
       onSubmit={(event) => void onSubmit(event)}
       noValidate
       className="grid gap-4"

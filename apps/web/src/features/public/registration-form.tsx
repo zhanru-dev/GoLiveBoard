@@ -107,6 +107,7 @@ export function RegistrationForm({
 
   return (
     <form
+      method="post"
       onSubmit={(event) => void submit(event)}
       noValidate
       className="grid gap-4"
