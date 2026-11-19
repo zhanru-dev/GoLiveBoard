@@ -1,0 +1,108 @@
+# Accessibility audit: WCAG 2.2 level AA (milestone 9)
+
+Audited on 19 November 2026 against **WCAG 2.2 level AA** (NFR-6), over every page of the golden flow (docs/01, section 3): the public event page, registration and verification, the watch page with chat and Q&A, sign-in and sign-up, and the signed-in app (events, Launch Control, the operations room, the report, the audit trail, team and integrations).
+
+## How it was checked
+
+| Method                                                 | What it covers                                                                                                                                                                                                                                                                                      | Where                                             |
+| ------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------- |
+| **axe-core** on every page, with and without a session | The machine-checkable rules for WCAG 2.0–2.2 A and AA                                                                                                                                                                                                                                               | `e2e/accessibility.spec.ts`, every CI run         |
+| **Keyboard-only walkthrough** of the golden flow       | Prepare → Admit → Run, done with Tab, Shift+Tab, Enter, Space and typing only. At every tab stop it checks for a visible focus indicator (an outline, or a ring that is opaque and has size, read once the browser has drawn it), for focus that keeps moving, and that each control can be reached | `e2e/keyboard.spec.ts`, every CI run on the stack |
+| **Reflow and target size** at 320 CSS pixels           | No sideways scrolling. Targets of at least 24 × 24 px, or spaced so a 24 px circle around them touches nothing else                                                                                                                                                                                 | `e2e/layout.spec.ts`, every CI run on the stack   |
+| **Token contrast**                                     | Text 4.5:1; field edges and the focus ring 3:1, against the background                                                                                                                                                                                                                              | `apps/web/src/app/tokens.test.ts`, every CI run   |
+| **Reading the code and the pages**                     | What tools cannot judge: names, structure, wording, timing, media                                                                                                                                                                                                                                   | This document                                     |
+
+**Not done: testing with a screen reader** (VoiceOver, NVDA). The structure that screen readers rely on is checked: landmarks, headings, names and live regions. How the pages actually sound has not been heard, and that remains to be done by a person before the public demo.
+
+## Findings and fixes
+
+| #   | Criterion                             | Found                                                                                                                                                                                                                                 | Fixed                                                                                                                                                                                                                  |
+| --- | ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | **1.4.10 Reflow**                     | At 320 px, every page of the signed-in app scrolled sideways (699 px wide). The header's links did not wrap. On Launch Control, the holding slate's file control (316 px) and the chat field's natural width each kept the page wider | The header and its navigation wrap, and a long workspace name is truncated (the full name stays in its accessible name). The file control and the fields shrink with the page. Side padding is 16 px on narrow screens |
+| 2   | **1.4.11 Non-text Contrast**          | The edge of every text field was 1.26:1 against the background. The focus ring, drawn at half opacity, was 1.54:1                                                                                                                     | `--input` is now 4:1 and `--ring` 3.7:1 as drawn. `tokens.test.ts` keeps them there                                                                                                                                    |
+| 3   | **2.4.1 Bypass Blocks** (improvement) | The signed-in app's header puts seven tab stops before the content. Landmarks already satisfy the criterion                                                                                                                           | A "Skip to content" link comes first, visible when focused                                                                                                                                                             |
+
+Before the fixes, axe reported no violations on any of these pages. Every finding above needed the walkthrough, the layout check or the contrast arithmetic.
+
+## Criteria
+
+**Status:** pass, fixed (see above), or not applicable (n/a), with the evidence. "axe" means the automated checks, "keyboard" the walkthrough, "layout" the reflow and target-size checks, "tokens" the contrast test, and "review" reading the code and pages.
+
+### Perceivable
+
+| Criterion                                                  | Level | Status            | Evidence                                                                                                                                                           |
+| ---------------------------------------------------------- | ----- | ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 1.1.1 Non-text Content                                     | A     | Pass              | axe. Icons are `aria-hidden` beside text; the holding slate has its alternative ("Current holding slate"); the video is named after the event                      |
+| 1.2.1 Audio-only and Video-only (Prerecorded)              | A     | n/a               | No prerecorded media of OpsPilot's own                                                                                                                             |
+| 1.2.2 Captions (Prerecorded)                               | A     | n/a               | As above                                                                                                                                                           |
+| 1.2.3 Audio Description or Media Alternative (Prerecorded) | A     | n/a               | As above                                                                                                                                                           |
+| 1.2.4 Captions (Live)                                      | AA    | Customer's stream | The player plays the customer's HLS stream. Captions in the stream (WebVTT or CEA-608/708) are shown by the native controls; providing them is the customer's part |
+| 1.2.5 Audio Description (Prerecorded)                      | AA    | n/a               | No prerecorded media                                                                                                                                               |
+| 1.3.1 Info and Relationships                               | A     | Pass              | axe; review: labelled fields, fieldsets with legends, tables with headers, lists, headings in order                                                                |
+| 1.3.2 Meaningful Sequence                                  | A     | Pass              | keyboard: tab order follows the reading order on every page of the flow                                                                                            |
+| 1.3.3 Sensory Characteristics                              | A     | Pass              | review: no instruction depends on shape, colour or position                                                                                                        |
+| 1.3.4 Orientation                                          | AA    | Pass              | review: no orientation lock; layout at 320 px                                                                                                                      |
+| 1.3.5 Identify Input Purpose                               | AA    | Pass              | review: `autocomplete` on every personal field (`name`, `email`, `current-password`, `new-password`)                                                               |
+| 1.4.1 Use of Color                                         | A     | Pass              | review: status, readiness and errors all say it in text too                                                                                                        |
+| 1.4.2 Audio Control                                        | A     | Pass              | review: the stream starts muted, with native controls                                                                                                              |
+| 1.4.3 Contrast (Minimum)                                   | AA    | Pass              | axe; tokens: text 4.5:1 or more                                                                                                                                    |
+| 1.4.4 Resize Text                                          | AA    | Pass              | layout: at 320 px (400% of 1280 px) nothing is cut off; text in rem                                                                                                |
+| 1.4.5 Images of Text                                       | AA    | Pass              | review: none                                                                                                                                                       |
+| 1.4.10 Reflow                                              | AA    | **Fixed** (1)     | layout                                                                                                                                                             |
+| 1.4.11 Non-text Contrast                                   | AA    | **Fixed** (2)     | tokens                                                                                                                                                             |
+| 1.4.12 Text Spacing                                        | AA    | Pass              | review: no fixed heights on text containers; fields are fixed height (32 px) but single-line                                                                       |
+| 1.4.13 Content on Hover or Focus                           | AA    | Pass              | review: menus open on activation, close with Escape, stay while hovered (Radix)                                                                                    |
+
+### Operable
+
+| Criterion                              | Level | Status             | Evidence                                                                                                                                                                                           |
+| -------------------------------------- | ----- | ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 2.1.1 Keyboard                         | A     | Pass               | keyboard: the whole golden flow, the file picker included                                                                                                                                          |
+| 2.1.2 No Keyboard Trap                 | A     | Pass               | keyboard: focus moves on at every stop. Dialogs trap focus on purpose and close with Escape                                                                                                        |
+| 2.1.4 Character Key Shortcuts          | A     | n/a                | No single-key shortcuts                                                                                                                                                                            |
+| 2.2.1 Timing Adjustable                | A     | Pass               | review: sessions refresh silently, with no time limit on reading or typing. One-time links expire, by design for security (exception)                                                              |
+| 2.2.2 Pause, Stop, Hide                | A     | Pass               | review: chat and questions update live in a log the user scrolls; no moving or blinking content; the video has controls                                                                            |
+| 2.3.1 Three Flashes or Below Threshold | A     | Pass               | review: nothing flashes (the stream is the customer's)                                                                                                                                             |
+| 2.4.1 Bypass Blocks                    | A     | Pass, improved (3) | review: landmarks; skip link                                                                                                                                                                       |
+| 2.4.2 Page Titled                      | A     | Pass               | review: every page has a title ("Launch Control · OpsPilot", the event's title on public pages), announced on navigation                                                                           |
+| 2.4.3 Focus Order                      | A     | Pass               | keyboard                                                                                                                                                                                           |
+| 2.4.4 Link Purpose (In Context)        | A     | Pass               | axe; review                                                                                                                                                                                        |
+| 2.4.5 Multiple Ways                    | AA    | Pass               | review: navigation, the events list with search, and links between an event's pages                                                                                                                |
+| 2.4.6 Headings and Labels              | AA    | Pass               | review                                                                                                                                                                                             |
+| 2.4.7 Focus Visible                    | AA    | Pass               | keyboard: every stop shows its focus. Checked to fail when the field ring is removed                                                                                                               |
+| 2.4.11 Focus Not Obscured (Minimum)    | AA    | Pass               | review: no sticky header or footer. Launch Control's readiness panel stays in view on wide screens, but in its own column, never over the content. Toasts appear in a corner and do not take focus |
+| 2.5.1 Pointer Gestures                 | A     | Pass               | review: no multipoint or path gestures                                                                                                                                                             |
+| 2.5.2 Pointer Cancellation             | A     | Pass               | review: native buttons act on release                                                                                                                                                              |
+| 2.5.3 Label in Name                    | A     | Pass               | review: names contain the visible label (the workspace switcher by design)                                                                                                                         |
+| 2.5.4 Motion Actuation                 | A     | n/a                | None                                                                                                                                                                                               |
+| 2.5.7 Dragging Movements               | AA    | n/a                | No dragging                                                                                                                                                                                        |
+| 2.5.8 Target Size (Minimum)            | AA    | Pass               | layout: no undersized target crowds another on any page                                                                                                                                            |
+
+### Understandable
+
+| Criterion                                       | Level | Status | Evidence                                                                                          |
+| ----------------------------------------------- | ----- | ------ | ------------------------------------------------------------------------------------------------- |
+| 3.1.1 Language of Page                          | A     | Pass   | `lang="en-GB"`                                                                                    |
+| 3.1.2 Language of Parts                         | AA    | n/a    | Attendees' messages are theirs; no fixed text in another language                                 |
+| 3.2.1 On Focus                                  | A     | Pass   | keyboard: focusing changes nothing                                                                |
+| 3.2.2 On Input                                  | A     | Pass   | review: changes apply on an explicit button, except checkboxes whose effect is stated beside them |
+| 3.2.3 Consistent Navigation                     | AA    | Pass   | review: one header on every signed-in page                                                        |
+| 3.2.4 Consistent Identification                 | AA    | Pass   | review                                                                                            |
+| 3.2.6 Consistent Help                           | A     | Pass   | review: no help mechanism repeated across pages, so nothing to keep consistent                    |
+| 3.3.1 Error Identification                      | A     | Pass   | review: errors in text, linked to their field (`aria-describedby`, `aria-invalid`)                |
+| 3.3.2 Labels or Instructions                    | A     | Pass   | axe; review                                                                                       |
+| 3.3.3 Error Suggestion                          | AA    | Pass   | review: field errors say what is expected (lengths, formats)                                      |
+| 3.3.4 Error Prevention (Legal, Financial, Data) | AA    | Pass   | review: cancelling an event, deleting and revoking are confirmed; consent is explicit             |
+| 3.3.7 Redundant Entry                           | A     | Pass   | review: nothing asked twice in a process                                                          |
+| 3.3.8 Accessible Authentication (Minimum)       | AA    | Pass   | review: email and password with password managers allowed (no paste blocking), no cognitive test  |
+
+### Robust
+
+| Criterion               | Level | Status | Evidence                                                                                                               |
+| ----------------------- | ----- | ------ | ---------------------------------------------------------------------------------------------------------------------- |
+| 4.1.2 Name, Role, Value | A     | Pass   | axe; keyboard (each control found by its role and name)                                                                |
+| 4.1.3 Status Messages   | AA    | Pass   | review: `role="status"` and polite live regions for saves, chat and questions, `role="alert"` for errors and incidents |
+
+## Before each release
+
+`npm run test:e2e:stack` runs the keyboard walkthrough, the layout checks and axe, and CI runs them on every change. A person still listens with a screen reader before the public demo (milestone 10) and records what they heard here.

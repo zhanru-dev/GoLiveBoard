@@ -121,7 +121,7 @@ export function ChatPanel({
             onChange={(change) => {
               setDraft(change.target.value);
             }}
-            className="h-8 min-w-0 grow rounded-lg border border-input bg-transparent px-2.5 text-base md:text-sm"
+            className="h-8 w-0 min-w-0 grow rounded-lg border border-input bg-transparent px-2.5 text-base md:text-sm"
           />
           <PublicButton type="submit" disabled={draft.trim() === ""}>
             Send

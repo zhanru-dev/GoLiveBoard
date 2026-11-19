@@ -140,7 +140,9 @@ export function HoldingSlateSection({
             accept="image/jpeg,image/png,image/webp"
             disabled={upload.isPending}
             onChange={choose}
-            className="text-sm"
+            // The browser's file control is wide; on a narrow screen it
+            // shrinks with the page instead (WCAG 1.4.10).
+            className="w-full min-w-0 text-sm"
           />
           {upload.isPending ? <p role="status">Uploading…</p> : null}
         </div>

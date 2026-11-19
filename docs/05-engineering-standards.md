@@ -132,7 +132,7 @@ How they are checked, in CI's images job on every pull request (`npm run lightho
 
 To stay within the JavaScript budget, the public event page loads no Zod, no form library, no Radix and no Tailwind class-merging engine (its controls are in `src/features/public/public-ui.tsx`), and the browser loads the Sentry SDK only when the first error happens.
 
-**Accessibility.** Every page is checked with axe against WCAG 2.2 AA in the browser tests (`e2e/accessibility.spec.ts`), with and without a session; a violation fails CI.
+**Accessibility.** Every page is checked with axe against WCAG 2.2 AA in the browser tests (`e2e/accessibility.spec.ts`), with and without a session; a violation fails CI. Beyond what axe can judge: the golden flow is walked by keyboard alone, every tab stop checked for a visible focus indicator (`e2e/keyboard.spec.ts`); pages are checked at 320 CSS pixels for reflow and target size (`e2e/layout.spec.ts`); and the design tokens' contrast is computed (`apps/web/src/app/tokens.test.ts`). The audit, criterion by criterion, is [docs/accessibility-audit.md](accessibility-audit.md).
 
 ## 10. Git workflow
 

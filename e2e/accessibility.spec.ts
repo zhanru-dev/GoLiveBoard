@@ -7,8 +7,8 @@ import { E2E_TARGET } from "./target.js";
 
 /**
  * NFR-6: automated axe checks on every page, against WCAG 2.2 level AA.
- * (The keyboard walkthrough of the golden flow is done by hand before each
- * release, milestone 9.)
+ * The keyboard walkthrough of the golden flow is keyboard.spec.ts, reflow
+ * and target size layout.spec.ts (docs/accessibility-audit.md).
  */
 const WCAG = ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"];
 

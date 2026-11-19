@@ -63,8 +63,18 @@ export function AppShell({
 
   return (
     <MeProvider value={me}>
+      {/* First on the page for keyboard users: past the header in one key
+          (WCAG 2.4.1). Hidden until focused. */}
+      <a
+        href="#content"
+        className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-50 focus:rounded-lg focus:bg-background focus:px-3 focus:py-2 focus:ring-3 focus:ring-ring/50"
+      >
+        Skip to content
+      </a>
       <header className="border-b">
-        <div className="mx-auto flex max-w-5xl items-center gap-4 px-6 py-3">
+        {/* Wraps on a narrow screen or at high zoom, so nothing scrolls
+            sideways (WCAG 1.4.10). */}
+        <div className="mx-auto flex max-w-5xl flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3 sm:px-6">
           <Link href="/events" className="font-semibold">
             OpsPilot
           </Link>
@@ -74,9 +84,12 @@ export function AppShell({
                   users can say what they see. */}
               <Button
                 variant="ghost"
+                className="max-w-56"
                 aria-label={`Switch workspace: ${me.activeWorkspace.workspaceName}`}
               >
-                {me.activeWorkspace.workspaceName}
+                <span className="truncate">
+                  {me.activeWorkspace.workspaceName}
+                </span>
                 <ChevronsUpDown aria-hidden="true" />
               </Button>
             </DropdownMenuTrigger>
@@ -95,7 +108,10 @@ export function AppShell({
               ))}
             </DropdownMenuContent>
           </DropdownMenu>
-          <nav aria-label="Main" className="flex gap-4 text-sm">
+          <nav
+            aria-label="Main"
+            className="flex flex-wrap gap-x-4 gap-y-1 text-sm"
+          >
             <Link href="/events">Events</Link>
             <Link href="/audit">Audit trail</Link>
             <Link href="/settings/team">Team</Link>
@@ -133,8 +149,10 @@ export function AppShell({
       ) : null}
       {/* Keyed by workspace: nothing from the previous one survives a switch. */}
       <main
+        id="content"
+        tabIndex={-1}
         key={me.activeWorkspace.workspaceId}
-        className="mx-auto max-w-5xl px-6 py-8"
+        className="mx-auto max-w-5xl px-4 py-8 sm:px-6"
       >
         {switching || refreshing ? (
           <p role="status">Switching workspace…</p>
