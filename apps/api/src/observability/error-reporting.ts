@@ -76,9 +76,16 @@ export function throttleReports(
   };
 }
 
-/** Waits for queued events to be sent, at shutdown. */
-export async function flushErrorReports(timeoutMs = 2000): Promise<void> {
-  await Sentry.flush(timeoutMs);
+/**
+ * Waits for queued events to be sent, at shutdown.
+ *
+ * @returns whether they were sent in time (true when reporting is off)
+ */
+export async function flushErrorReports(timeoutMs = 2000): Promise<boolean> {
+  if (Sentry.getClient() === undefined) {
+    return true;
+  }
+  return Sentry.flush(timeoutMs);
 }
 
 /**

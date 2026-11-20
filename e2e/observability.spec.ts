@@ -175,6 +175,55 @@ test.describe("observability (NFR-7, docs/06 section 7)", () => {
     }
   });
 
+  test("the web server records a page request whose traceparent says not to (-00)", async ({
+    request,
+  }) => {
+    // A visitor's request may name a parent and ask not to be recorded; the
+    // web server records it all the same (ADR-0011, tracePolicy()).
+    test.setTimeout(90_000);
+    const traceId = Array.from({ length: 32 }, () =>
+      Math.floor(Math.random() * 16).toString(16),
+    ).join("");
+    const response = await request.get("/sign-in", {
+      headers: { traceparent: `00-${traceId}-b7ad6b7169203331-00` },
+    });
+    expect(response.status()).toBe(200);
+
+    await expect
+      .poll(() => servicesOf(traceId), { timeout: 60_000 })
+      .toContain("opspilot-web");
+  });
+
+  test("Worker not reporting watches a metric only the worker sends", async () => {
+    // The rule's whole point is the worker's silence: a metric another
+    // process also sends would never go absent while that process runs.
+    test.setTimeout(90_000);
+    const rule = (await (
+      await fetch(
+        `${GRAFANA}/api/v1/provisioning/alert-rules/opspilot-worker-silent`,
+      )
+    ).json()) as { data: { model: { expr?: string } }[] };
+    const expr = rule.data.find(({ model }) => model.expr)?.model.expr ?? "";
+    const metric = /^absent\(([a-z_]+)\)$/.exec(expr)?.[1];
+    expect(metric, expr).toBeDefined();
+
+    await expect
+      .poll(
+        async () => {
+          const body = (await (
+            await fetch(
+              `${GRAFANA}/api/datasources/proxy/uid/prometheus/api/v1/query?query=${encodeURIComponent(`count by (service_name) (${metric ?? ""})`)}`,
+            )
+          ).json()) as {
+            data: { result: { metric: { service_name: string } }[] };
+          };
+          return body.data.result.map(({ metric }) => metric.service_name);
+        },
+        { timeout: 60_000 },
+      )
+      .toEqual(["opspilot-worker"]);
+  });
+
   test("one trace follows a click from the browser through the API to the worker", async ({
     page,
   }) => {

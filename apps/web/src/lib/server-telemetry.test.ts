@@ -17,6 +17,7 @@ import { describe, expect, it } from "vitest";
 import {
   RedactingExporter,
   redactAttributes,
+  serverSdkOptions,
   telemetryEndpoint,
   tracePolicy,
 } from "./server-telemetry";
@@ -41,6 +42,40 @@ describe("tracePolicy", () => {
     });
     expect(
       sampler.shouldSample(
+        parent,
+        visitorTrace,
+        "GET /",
+        SpanKind.SERVER,
+        {},
+        [],
+      ).decision,
+    ).toBe(SamplingDecision.RECORD_AND_SAMPLED);
+    expect(propagation.getBaggage(parent)).toBeUndefined();
+  });
+});
+
+describe("serverSdkOptions", () => {
+  it("starts the SDK with the trace policy, so a visitor's -00 cannot hide their page requests", () => {
+    const { sampler, textMapPropagator } = serverSdkOptions(
+      "http://collector:4318",
+      {},
+    );
+    const visitorTrace = "0af7651916cd43dd8448eb211c80319c";
+    const parent = (textMapPropagator ?? propagation).extract(
+      ROOT_CONTEXT,
+      {
+        traceparent: `00-${visitorTrace}-b7ad6b7169203331-00`,
+        baggage: "injected=from-the-browser",
+      },
+      defaultTextMapGetter,
+    );
+
+    // Without them the SDK falls back to its defaults: a sampler that
+    // follows the parent's flag, and a propagator that reads baggage.
+    expect(sampler).toBeDefined();
+    expect(textMapPropagator).toBeDefined();
+    expect(
+      sampler?.shouldSample(
         parent,
         visitorTrace,
         "GET /",

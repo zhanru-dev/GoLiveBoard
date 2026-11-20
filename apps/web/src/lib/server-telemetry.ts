@@ -7,7 +7,7 @@ import {
 import { OTLPTraceExporter } from "@opentelemetry/exporter-trace-otlp-http";
 import { UndiciInstrumentation } from "@opentelemetry/instrumentation-undici";
 import { resourceFromAttributes } from "@opentelemetry/resources";
-import { NodeSDK } from "@opentelemetry/sdk-node";
+import { NodeSDK, type NodeSDKConfiguration } from "@opentelemetry/sdk-node";
 import {
   AlwaysOnSampler,
   type ReadableSpan,
@@ -118,6 +118,26 @@ export function tracePolicy(): {
 
 let running: NodeSDK | undefined;
 
+/** What the web server's OpenTelemetry SDK is started with. */
+export function serverSdkOptions(
+  endpoint: string,
+  env: Readonly<Record<string, string | undefined>>,
+): Partial<NodeSDKConfiguration> {
+  return {
+    resource: resourceFromAttributes({
+      [ATTR_SERVICE_NAME]: env.OTEL_SERVICE_NAME ?? "opspilot-web",
+      [ATTR_SERVICE_VERSION]: env.SENTRY_RELEASE ?? "development",
+      "deployment.environment.name":
+        env.SENTRY_ENVIRONMENT ?? env.NODE_ENV ?? "development",
+    }),
+    traceExporter: new RedactingExporter(
+      new OTLPTraceExporter({ url: `${endpoint}/v1/traces` }),
+    ),
+    ...tracePolicy(),
+    instrumentations: [new UndiciInstrumentation()],
+  };
+}
+
 /**
  * Starts tracing in the web server (ADR-0011) when an endpoint is set.
  * Next.js records its own spans for pages and route handlers once a tracer
@@ -133,20 +153,7 @@ export function startServerTelemetry(
   if (endpoint === undefined || running !== undefined) {
     return running !== undefined;
   }
-  running = new NodeSDK({
-    resource: resourceFromAttributes({
-      [ATTR_SERVICE_NAME]: env.OTEL_SERVICE_NAME ?? "opspilot-web",
-      [ATTR_SERVICE_VERSION]: env.SENTRY_RELEASE ?? "development",
-      "deployment.environment.name":
-        env.SENTRY_ENVIRONMENT ?? env.NODE_ENV ?? "development",
-    }),
-    traceExporter: new RedactingExporter(
-      new OTLPTraceExporter({ url: `${endpoint}/v1/traces` }),
-    ),
-    ...tracePolicy(),
-
-    instrumentations: [new UndiciInstrumentation()],
-  });
+  running = new NodeSDK(serverSdkOptions(endpoint, env));
   running.start();
   // Send what is queued as the container stops.
   process.once("SIGTERM", () => {

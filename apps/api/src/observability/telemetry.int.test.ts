@@ -545,6 +545,8 @@ describe(
       const took = Date.now() - stopping;
 
       expect(api.child.signalCode, api.output).not.toBe("SIGKILL");
+      // And says what it gave up.
+      expect(api.output).toContain("Telemetry not sent in time");
       // TELEMETRY_STOP_MS is 2 seconds; the exporters alone would wait 10.
       expect(took, api.output).toBeLessThan(6_000);
     });

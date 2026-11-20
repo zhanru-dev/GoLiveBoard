@@ -209,7 +209,7 @@ The documented upgrade path when traffic grows: move web, api and worker to **EC
 | Chat delivery latency                         | 95% under 1 second |
 | Stream outage visible in the operations room  | Within 60 seconds  |
 
-**Alerts** (email): 5xx rate above 2% for 5 minutes, readiness check failing for 2 minutes, oldest queued job or outbox message older than 5 minutes, the worker sending no metrics for over 5 minutes (it alone reports the queues, so a worker that is down makes the previous alert see nothing), webhook deliveries failing for one endpoint more than 10 times in an hour. The stack's browser tests check that each rule evaluates, and that each fires past its threshold and not before it (Grafana's rule evaluation, with the query replaced by a constant).
+**Alerts** (email): 5xx rate above 2% for 5 minutes, readiness check failing for 2 minutes, oldest queued job or outbox message older than 5 minutes, the worker sending no metrics for over 5 minutes (it alone reports the queues, so a worker that is down makes the previous alert see nothing; as the stack starts it is pending until the worker's first metrics, and fires only if they take more than about a minute and a half), webhook deliveries failing for one endpoint more than 10 times in an hour. The stack's browser tests check that each rule evaluates, and that each fires past its threshold and not before it (Grafana's rule evaluation, with the query replaced by a constant).
 
 ## 8. Backups and recovery
 

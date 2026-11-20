@@ -1,5 +1,6 @@
 import {
   type DynamicModule,
+  Inject,
   Injectable,
   Module,
   type OnApplicationShutdown,
@@ -16,10 +17,23 @@ import { createHttpLogger, HTTP_LOGGER, ROOT_LOGGER } from "./logger.js";
  */
 @Injectable()
 export class ErrorReportFlusher implements OnApplicationShutdown {
+  constructor(@Inject(ROOT_LOGGER) private readonly logger: Logger) {}
+
   async onApplicationShutdown(): Promise<void> {
     // Side by side, each with its own time limit: a collector that does not
     // answer must not hold back the error report about why we stop.
-    await Promise.all([stopTelemetry(), flushErrorReports()]);
+    const [telemetrySent, reportsSent] = await Promise.all([
+      stopTelemetry(),
+      flushErrorReports(),
+    ]);
+    // Said, not thrown: the process stops either way, and this is the last
+    // trace of what was lost.
+    if (!telemetrySent) {
+      this.logger.warn("Telemetry not sent in time; the rest was dropped");
+    }
+    if (!reportsSent) {
+      this.logger.warn("Error reports not sent in time; the rest was dropped");
+    }
   }
 }
 
