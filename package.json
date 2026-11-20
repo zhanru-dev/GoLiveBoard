@@ -68,6 +68,9 @@
     "ssh2": false
   },
   "overrides": {
-    "basic-ftp": "6.2.6"
+    "basic-ftp": "6.2.6",
+    "@prisma/config": {
+      "effect": "3.22.4"
+    }
   }
 }
