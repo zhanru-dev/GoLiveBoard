@@ -94,6 +94,11 @@ jobs:
       # "Dependency audit").
       - name: Audit production dependencies
         run: node scripts/audit.mjs
+      # Overrides in package.json (effect, for Prisma's config) must leave a
+      # valid tree: the overridden package where its parent finds it, and no
+      # one else's peer range broken by it.
+      - name: Overridden packages resolve as declared
+        run: npm ls effect basic-ftp --all
       - name: Install gitleaks (checksum verified)
         run: |
           archive="gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
