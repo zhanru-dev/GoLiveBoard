@@ -39,3 +39,11 @@ blob-report/
 # Logs
 *.log
 .lighthouseci/
+
+# Terraform: providers, local plans, and the files holding an environment's
+# own values (examples are committed beside them).
+.terraform/
+*.tfplan
+infra/terraform/**/terraform.tfvars
+infra/terraform/**/backend.hcl
+infra/terraform/bootstrap/terraform.tfstate*

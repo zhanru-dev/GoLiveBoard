@@ -1,0 +1,87 @@
+#!/bin/bash
+# Runs on the application host through SSM Run Command (document
+# "${document_name}"), as root; installed by Terraform, run by the deploy
+# pipeline (docs/06, section 4). One release is one commit: its images are
+# tagged with the SHA, and its docker-compose.yml and Caddyfile are in
+# s3://${releases_bucket}/<sha>/.
+#
+#   ACTION=migrate SHA=<sha>   prisma migrate deploy, in a one-off container
+#   ACTION=deploy  SHA=<sha>   start the release, and wait until it is healthy
+#   ACTION=current             print the SHA that is running
+#
+# Prints "previous=<sha>" before a deploy, so the pipeline knows what to roll
+# back to, and "deployed=<sha>" once the release is healthy. Each release's
+# two files stay in /opt/opspilot/releases (a few kilobytes each).
+set -euo pipefail
+
+ACTION="$${ACTION:?ACTION is migrate, deploy or current}"
+ROOT=/opt/opspilot
+REGION="${region}"
+REGISTRY="${registry}"
+export COMPOSE_PROJECT_NAME=opspilot
+
+current_sha() {
+  if [[ -L "$ROOT/current" ]]; then basename "$(readlink "$ROOT/current")"; fi
+}
+
+if [[ "$ACTION" == current ]]; then
+  echo "current=$(current_sha)"
+  exit 0
+fi
+
+SHA="$${SHA:?SHA is the commit to migrate or deploy}"
+[[ "$SHA" =~ ^[0-9a-f]{40}$ ]] || { echo "SHA must be a full commit SHA" >&2; exit 2; }
+RELEASE="$ROOT/releases/$SHA"
+
+# The release's files, exactly as the pipeline uploaded them.
+install -d -m 0750 "$RELEASE"
+aws s3 cp --region "$REGION" --only-show-errors "s3://${releases_bucket}/$SHA/docker-compose.yml" "$RELEASE/docker-compose.yml"
+aws s3 cp --region "$REGION" --only-show-errors "s3://${releases_bucket}/$SHA/Caddyfile" "$RELEASE/Caddyfile"
+
+# The database's CA, so the connection is verified (sslmode=verify-full).
+if [[ ! -s "$ROOT/rds-ca.pem" ]]; then
+  curl -fsSL -o "$ROOT/rds-ca.pem.new" "https://truststore.pki.rds.amazonaws.com/$REGION/$REGION-bundle.pem"
+  mv "$ROOT/rds-ca.pem.new" "$ROOT/rds-ca.pem"
+  chmod 0644 "$ROOT/rds-ca.pem"
+fi
+
+# The configuration: every parameter under ${parameter_path}, as KEY=value,
+# readable by root only. Rendered at each command, so a changed parameter
+# reaches the next deploy (docs/runbooks/rotate-a-secret.md).
+umask 077
+aws ssm get-parameters-by-path --region "$REGION" --path "${parameter_path}" --recursive \
+  --with-decryption --query 'Parameters[].[Name,Value]' --output text \
+  | while IFS=$'\t' read -r name value; do printf '%s=%s\n' "$${name##*/}" "$value"; done \
+  > "$RELEASE/.env.new"
+mv "$RELEASE/.env.new" "$RELEASE/.env"
+printf 'SENTRY_RELEASE=%s\n' "$SHA" >> "$RELEASE/.env"
+umask 022
+
+aws ecr get-login-password --region "$REGION" | docker login --username AWS --password-stdin "$REGISTRY" >/dev/null
+
+export API_IMAGE="$REGISTRY/opspilot-api:$SHA"
+export WEB_IMAGE="$REGISTRY/opspilot-web:$SHA"
+export RDS_CA="$ROOT/rds-ca.pem"
+cd "$RELEASE"
+
+case "$ACTION" in
+  migrate)
+    docker compose pull --quiet migrate
+    docker compose run --rm migrate
+    ;;
+  deploy)
+    echo "previous=$(current_sha)"
+    docker compose pull --quiet
+    # Recreates what changed and waits for every health check; a release
+    # that never becomes healthy fails here, and the pipeline rolls back.
+    docker compose up -d --wait --wait-timeout 180 --remove-orphans
+    ln -sfn "$RELEASE" "$ROOT/current"
+    echo "deployed=$SHA"
+    # Images older than a week that nothing uses; ECR keeps the last 20.
+    docker image prune -af --filter "until=168h" >/dev/null
+    ;;
+  *)
+    echo "Unknown ACTION: $ACTION" >&2
+    exit 2
+    ;;
+esac

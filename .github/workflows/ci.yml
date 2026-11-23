@@ -114,6 +114,19 @@ jobs:
   # may run (it is ARM), scanned, then tested as they will run: the stack in
   # docker-compose.prod.yml over HTTPS, with every browser test and the smoke
   # tests (docs/06, section 1.4).
+  infrastructure:
+    name: Infrastructure (Terraform fmt, validate, tests, tflint, checkov)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # No AWS account is used: providers are mocked in the tests, and
+      # validate and the scanners read the code only (docs/06, section 5).
+      - name: Check the Terraform
+        run: bash scripts/infra-check.sh all
+
   images:
     name: Images (${{ matrix.platform }})
     needs: [quality, unit, integration]
@@ -201,7 +214,7 @@ jobs:
   result:
     name: CI result
     if: always()
-    needs: [quality, unit, integration, security, images]
+    needs: [quality, unit, integration, security, infrastructure, images]
     runs-on: ubuntu-24.04
     timeout-minutes: 2
     steps:

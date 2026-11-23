@@ -176,7 +176,9 @@ infra/terraform/
 | IAM            | Instance role: pull images, read parameters, use its own bucket, send email. Deploy role: push images, send SSM commands. Plan role: read-only. | Least privilege; GitHub OIDC trust limited to this repository and branch            |
 | Budgets        | Alerts at 50%, 80% and 100% of the monthly budget                                                                                               | No surprises                                                                        |
 
-Terraform state lives in an encrypted, versioned S3 bucket with S3-native state locking. Pull requests that touch `infra/` get a `terraform plan` comment; `apply` runs only after merge and approval.
+Terraform state lives in an encrypted, versioned S3 bucket with S3-native state locking.
+
+**What exists today** (milestone 10, before the account): the whole of `infra/terraform` ([its README](../infra/terraform/README.md): the order of the first apply, and what stays manual). It is checked without an AWS account on every CI run by `scripts/infra-check.sh`: `fmt`, `validate`, `terraform test` with mocked providers (who may assume the GitHub roles, IMDSv2, a private encrypted database requiring TLS, buckets that cannot be public, immutable tags, secrets as SecureString, the deploy document's parameter checks; each checked by a mutation), tflint with the AWS ruleset, and checkov, whose skipped checks carry their reasons in the code. **Planned, with the account:** pull requests that touch `infra/` get a `terraform plan` comment from the plan role; `apply` runs only after merge and approval.
 
 The documented upgrade path when traffic grows: move web, api and worker to **ECS Fargate** behind an **Application Load Balancer**, and Valkey to **ElastiCache**. The application needs no code changes for this ([ADR-0010](adr/0010-aws-deployment.md)).
 
