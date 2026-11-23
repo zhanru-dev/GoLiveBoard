@@ -15,7 +15,8 @@
 set -euo pipefail
 
 ACTION="$${ACTION:?ACTION is migrate, deploy or current}"
-ROOT=/opt/opspilot
+# OPSPILOT_ROOT is for the script's tests only; SSM never sets it.
+ROOT="$${OPSPILOT_ROOT:-/opt/opspilot}"
 REGION="${region}"
 REGISTRY="${registry}"
 export COMPOSE_PROJECT_NAME=opspilot

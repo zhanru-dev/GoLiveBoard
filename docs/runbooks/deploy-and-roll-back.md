@@ -56,8 +56,16 @@ STACK_API_IMAGE=opspilot-api:previous STACK_WEB_IMAGE=opspilot-web:previous \
 
 **In AWS** (milestone 10):
 
-- The deploy pipeline runs the smoke test after each deploy and, when it fails, deploys the previous commit's images by itself.
-- By hand, run the deploy workflow for the previous commit: it runs `deploy <previous sha>` on the EC2 host through SSM. The images are immutable, tagged with the commit SHA (docs/06, section 4).
+- The deploy workflow (`.github/workflows/deploy.yml`) runs the smoke tests after each deploy. When they fail, or the release never becomes healthy or ready, it deploys the previous release again by itself and the run goes red (docs/06, section 4).
+- **By hand:** in GitHub, **Actions → Deploy → Run workflow**, with **sha** set to the commit to go back to. Its images are already in ECR (immutable tags, the last 20 kept), so nothing is rebuilt; the host runs `ACTION=deploy SHA=<sha>` through SSM.
+- **Without GitHub:** run the same command on the host directly:
+
+  ```bash
+  aws ssm send-command --instance-ids <host_instance_id> --document-name opspilot-demo-deploy \
+    --parameters Action=deploy,Sha=<full sha>
+  ```
+
+- **Which release is running:** use `Action=current`, or `readlink /opt/opspilot/current` in an SSM session.
 
 ## Verification
 

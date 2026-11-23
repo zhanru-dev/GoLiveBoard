@@ -1,7 +1,5 @@
-import { Inject, Injectable } from "@nestjs/common";
+import { SESv2Client, SendEmailCommand } from "@aws-sdk/client-sesv2";
 import { createTransport, type Transporter } from "nodemailer";
-
-import { APP_CONFIG, type AppConfig } from "../config/app-config.js";
 
 export interface MailMessage {
   readonly to: string;
@@ -18,22 +16,68 @@ export abstract class Mailer {
   abstract send(message: MailMessage): Promise<void>;
 }
 
-/** Sends through SMTP: Mailpit locally, Amazon SES in production. */
-@Injectable()
+/** Sends through SMTP: Mailpit locally, or any SMTP server. */
 export class SmtpMailer extends Mailer {
   private readonly transport: Transporter;
   private readonly from: string;
 
-  constructor(@Inject(APP_CONFIG) config: AppConfig) {
+  constructor(settings: { readonly smtpUrl: string; readonly from: string }) {
     super();
-    this.transport = createTransport(config.mail.smtpUrl);
-    this.from = config.mail.from;
+    this.transport = createTransport(settings.smtpUrl);
+    this.from = settings.from;
   }
 
   async send(message: MailMessage): Promise<void> {
     try {
       await this.transport.sendMail({ from: this.from, ...message });
     } catch (error) {
+      throw mailDeliveryError(error);
+    }
+  }
+}
+
+/**
+ * Sends through Amazon SES's API (AWS, docs/06 section 5), signed with the
+ * host's own role: there are no SMTP credentials to leak or rotate. Each
+ * message names the configuration set, so SES suppresses addresses that
+ * bounce or complain and keeps the sender's reputation metrics.
+ */
+export class SesMailer extends Mailer {
+  private readonly transport: Transporter;
+  private readonly from: string;
+  private readonly configurationSet: string | undefined;
+
+  constructor(
+    settings: {
+      readonly region: string;
+      readonly from: string;
+      readonly configurationSet: string | undefined;
+    },
+    client: Pick<SESv2Client, "send" | "config"> = new SESv2Client({
+      region: settings.region,
+    }),
+  ) {
+    super();
+    this.transport = createTransport({
+      SES: { sesClient: client, SendEmailCommand },
+    });
+    this.from = settings.from;
+    this.configurationSet = settings.configurationSet;
+  }
+
+  async send(message: MailMessage): Promise<void> {
+    try {
+      await this.transport.sendMail({
+        from: this.from,
+        ...message,
+        ses:
+          this.configurationSet === undefined
+            ? {}
+            : { ConfigurationSetName: this.configurationSet },
+      });
+    } catch (error) {
+      // SES names a refused recipient in its message too: as for SMTP,
+      // nothing but short codes is kept.
       throw mailDeliveryError(error);
     }
   }
@@ -47,7 +91,7 @@ export class SmtpMailer extends Mailer {
  * and never earns a bounce against the sending domain (FR-AUTH-5).
  */
 export class UndeliverableAddressGuard extends Mailer {
-  constructor(private readonly inner: Mailer) {
+  constructor(readonly inner: Mailer) {
     super();
   }
 
@@ -57,6 +101,31 @@ export class UndeliverableAddressGuard extends Mailer {
     }
     await this.inner.send(message);
   }
+}
+
+/**
+ * The application's mailer: the configured transport, behind the guard that
+ * never sends to undeliverable demo addresses.
+ */
+export function createMailer(
+  settings:
+    | {
+        readonly transport: "smtp";
+        readonly smtpUrl: string;
+        readonly from: string;
+      }
+    | {
+        readonly transport: "ses";
+        readonly region: string;
+        readonly from: string;
+        readonly configurationSet: string | undefined;
+      },
+): Mailer {
+  return new UndeliverableAddressGuard(
+    settings.transport === "ses"
+      ? new SesMailer(settings)
+      : new SmtpMailer(settings),
+  );
 }
 
 /**

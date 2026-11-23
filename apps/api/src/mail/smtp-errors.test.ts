@@ -3,7 +3,6 @@ import { createServer, type Server } from "node:net";
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-import type { AppConfig } from "../config/app-config.js";
 import { MailDeliveryError, mailDeliveryError, SmtpMailer } from "./mailer.js";
 
 const ADDRESS = "private-attendee@example.com";
@@ -64,11 +63,9 @@ describe("mail delivery errors (NFR-2)", () => {
 
   it("keeps the recipient out of what a refused message throws", async () => {
     const mailer = new SmtpMailer({
-      mail: {
-        smtpUrl: `smtp://127.0.0.1:${String(port)}`,
-        from: "OpsPilot <no-reply@opspilot.example>",
-      },
-    } as AppConfig);
+      smtpUrl: `smtp://127.0.0.1:${String(port)}`,
+      from: "OpsPilot <no-reply@opspilot.example>",
+    });
 
     const error: unknown = await mailer
       .send({ to: ADDRESS, subject: "Hello", text: "Hello" })

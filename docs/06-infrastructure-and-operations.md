@@ -118,7 +118,15 @@ An advisory with no fixed release yet, and reviewed as not reachable by users' i
 
 ## 4. Continuous delivery
 
-Built in milestone 10, once the product is complete ([delivery plan](07-delivery-plan.md)); until then CI proves the production images locally.
+**What exists today** (milestone 10, before the account; nothing has run against AWS yet):
+
+- [`.github/workflows/deploy.yml`](../.github/workflows/deploy.yml) runs after CI passes on a push to `main`, or by hand. It builds the arm64 images on an arm64 runner, pushes them to ECR (immutable tags; a commit already pushed is not built again), and uploads the release's `docker-compose.yml` and `Caddyfile` (`infra/deploy/`) to the releases bucket.
+- [`scripts/deploy/release.sh`](../scripts/deploy/release.sh) then runs the sequence below through the SSM document. It deploys the previous release again when the release does not become healthy, when the public URL is not ready, or when the smoke tests fail, and fails the run. A failed migration deploys nothing.
+- On the host, [`infra/deploy/host-deploy.sh.tftpl`](../infra/deploy/host-deploy.sh.tftpl) renders `.env` from Parameter Store (root only) and starts the release with `docker compose up --wait`. It points `current` at the release only once it is healthy.
+- **Smoke tests:** [`e2e/deployed.spec.ts`](../e2e/deployed.spec.ts) checks readiness, HTTPS with the security headers, the redirect from HTTP, TRACE refused, and the demo sign-in.
+- **Rehearsing a rollback:** run the workflow by hand with **break_smoke_test**; the smoke tests fail on purpose and the previous release comes back.
+- **Tests, without AWS:** both scripts are tested against fakes of `aws`, `docker` and `curl` (`scripts/deploy-release.test.mjs`, `scripts/host-deploy.test.mjs`). Every step's order and every rollback path is checked by a mutation.
+- **Once, by hand:** the GitHub environment `demo` (limited to `main`) holds the variables the workflow reads, from Terraform's outputs ([infra/terraform/README.md](../infra/terraform/README.md)).
 
 ```mermaid
 sequenceDiagram

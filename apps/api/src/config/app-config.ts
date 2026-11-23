@@ -138,7 +138,16 @@ const AppConfigSchema = z
     S3_FORCE_PATH_STYLE: Flag,
     /** Create the bucket and its CORS rule at start-up (local and tests). */
     S3_CREATE_BUCKET: Flag,
-    SMTP_URL: z.url({ protocol: /^smtps?$/ }),
+    /**
+     * How mail leaves: `smtp` (Mailpit locally, any SMTP server), or `ses`,
+     * Amazon SES's API with the host's own role, so no SMTP credentials
+     * exist (AWS, docs/06 section 5).
+     */
+    MAIL_TRANSPORT: z.enum(["smtp", "ses"]).default("smtp"),
+    SMTP_URL: optional(z.url({ protocol: /^smtps?$/ })),
+    SES_REGION: z.string().min(1).default("eu-west-2"),
+    /** Bounce and complaint handling, and reputation metrics, in SES. */
+    SES_CONFIGURATION_SET: optional(z.string().min(1)),
     MAIL_FROM: z.string().min(1),
     /**
      * Demo mode (FR-AUTH-5): one-click sign-in to the shared demo workspace,
@@ -174,6 +183,13 @@ const AppConfigSchema = z
       path: ["LOG_FORMAT"],
       message:
         "Must be json in production, where logs are collected by machines",
+    },
+  )
+  .refine(
+    (env) => env.MAIL_TRANSPORT !== "smtp" || env.SMTP_URL !== undefined,
+    {
+      path: ["SMTP_URL"],
+      message: "Required when MAIL_TRANSPORT is smtp",
     },
   )
   .refine(
@@ -218,7 +234,20 @@ const AppConfigSchema = z
       encryptionKey: env.WEBHOOK_ENCRYPTION_KEY,
       previousEncryptionKey: env.WEBHOOK_ENCRYPTION_KEY_PREVIOUS,
     },
-    mail: { smtpUrl: env.SMTP_URL, from: env.MAIL_FROM },
+    mail:
+      env.MAIL_TRANSPORT === "ses"
+        ? {
+            transport: "ses" as const,
+            from: env.MAIL_FROM,
+            region: env.SES_REGION,
+            configurationSet: env.SES_CONFIGURATION_SET,
+          }
+        : {
+            transport: "smtp" as const,
+            from: env.MAIL_FROM,
+            // The refinement above guarantees it for smtp.
+            smtpUrl: env.SMTP_URL ?? "",
+          },
     demo: { enabled: env.DEMO_MODE },
     triage: {
       provider: env.AI_PROVIDER,

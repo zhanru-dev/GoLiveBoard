@@ -26,6 +26,7 @@ describe("loadConfig", () => {
       app: { origin: "http://localhost:3300" },
       auth: { jwtSecret: "a".repeat(32), jwtPreviousSecret: undefined },
       mail: {
+        transport: "smtp",
         smtpUrl: REQUIRED.SMTP_URL,
         from: "OpsPilot <no-reply@opspilot.test>",
       },
@@ -82,6 +83,23 @@ describe("loadConfig", () => {
       environment: "development",
       release: undefined,
     });
+  });
+
+  it("sends mail through SES without SMTP settings, and needs SMTP_URL only for SMTP", () => {
+    const { SMTP_URL: _unused, ...withoutSmtp } = REQUIRED;
+    const config = loadConfig({
+      ...withoutSmtp,
+      MAIL_TRANSPORT: "ses",
+      SES_CONFIGURATION_SET: "opspilot-demo",
+    });
+
+    expect(config.mail).toEqual({
+      transport: "ses",
+      from: REQUIRED.MAIL_FROM,
+      region: "eu-west-2",
+      configurationSet: "opspilot-demo",
+    });
+    expect(() => loadConfig(withoutSmtp)).toThrow(/SMTP_URL/);
   });
 
   it("treats the previous keys, blanked after a rotation, as not set", () => {

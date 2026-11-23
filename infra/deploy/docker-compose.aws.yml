@@ -1,0 +1,161 @@
+# The application on the AWS host (ADR-0010, docs/06 section 4). The deploy
+# pipeline uploads this file for each release, and the host's deploy script
+# runs it with:
+# - API_IMAGE, WEB_IMAGE: the release's images in ECR, tagged with its SHA;
+# - RDS_CA: the database's CA bundle on the host;
+# - .env beside it: the configuration rendered from Parameter Store (root
+#   only), which also fills ${...} below.
+# PostgreSQL is RDS, objects are in S3, mail goes through SES: none of them
+# runs here. Valkey does, for queues, rate limits and presence.
+
+x-hardened: &hardened
+  read_only: true
+  cap_drop: [ALL]
+  security_opt: ["no-new-privileges:true"]
+  tmpfs: ["/tmp"]
+  restart: unless-stopped
+
+x-api: &api
+  <<: *hardened
+  image: ${API_IMAGE:?the release's api image}
+  env_file: .env
+  environment: &api-environment
+    LOG_LEVEL: info
+    LOG_FORMAT: json
+    # Caddy is the one proxy in front of the API.
+    TRUST_PROXY_HOPS: "1"
+    VALKEY_URL: redis://valkey:6379
+    SENTRY_ENVIRONMENT: ${SENTRY_ENVIRONMENT:-demo}
+  volumes:
+    - ${RDS_CA:?the database CA bundle}:/etc/opspilot/rds-ca.pem:ro
+
+services:
+  proxy:
+    image: caddy:2.11.9-alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      SITE_HOST: ${SITE_HOST:?the site name}
+      API_UPSTREAM: api:4301
+      WEB_UPSTREAM: web:3301
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      # Let's Encrypt account and certificates: kept across releases.
+      - caddy-data:/data
+    depends_on:
+      api:
+        condition: service_healthy
+      web:
+        condition: service_healthy
+    cap_drop: [ALL]
+    cap_add: [NET_BIND_SERVICE]
+    security_opt: ["no-new-privileges:true"]
+    restart: unless-stopped
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "wget",
+          "-q",
+          "-O",
+          "/dev/null",
+          "http://127.0.0.1:2019/config/",
+        ]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # Run by the deploy script before the release starts (ACTION=migrate):
+  # migrations come before code, and are expand-and-contract (docs/06,
+  # section 4), so the running release keeps working meanwhile.
+  migrate:
+    <<: *api
+    command:
+      ["node", "../../node_modules/prisma/build/index.js", "migrate", "deploy"]
+    environment:
+      <<: *api-environment
+      # The CLI would otherwise ask prisma.io for updates.
+      CHECKPOINT_DISABLE: "1"
+    restart: "no"
+    profiles: [migrate]
+
+  api:
+    <<: *api
+    depends_on:
+      valkey:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:4301/api/v1/health/ready').then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))",
+        ]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  worker:
+    <<: *api
+    command:
+      [
+        "node",
+        "--enable-source-maps",
+        "--import",
+        "./dist/telemetry.js",
+        "dist/worker.js",
+      ]
+    depends_on:
+      valkey:
+        condition: service_healthy
+
+  web:
+    <<: *hardened
+    image: ${WEB_IMAGE:?the release's web image}
+    # The web server needs these and nothing else: no secret reaches it.
+    environment:
+      API_INTERNAL_URL: http://api:4301
+      # Presigned URLs point at the bucket itself; the Content Security
+      # Policy allows that origin (and only it) for images and uploads.
+      S3_PUBLIC_ENDPOINT: https://${S3_BUCKET}.s3.${S3_REGION}.amazonaws.com
+      DEMO_MODE: ${DEMO_MODE:-false}
+      SENTRY_DSN: ${SENTRY_DSN:-}
+      SENTRY_ENVIRONMENT: ${SENTRY_ENVIRONMENT:-demo}
+      SENTRY_RELEASE: ${SENTRY_RELEASE:-}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+      OTEL_EXPORTER_OTLP_HEADERS: ${OTEL_EXPORTER_OTLP_HEADERS:-}
+    tmpfs:
+      - /tmp
+      - /app/apps/web/.next/cache:uid=1000,gid=1000
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3301/sign-in').then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))",
+        ]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  # Queues, rate limits, presence. What matters is rebuilt from PostgreSQL
+  # (the outbox, deliveries, reminders); the append-only file keeps queued
+  # jobs across a restart all the same.
+  valkey:
+    image: valkey/valkey:9.1.3-alpine
+    command: ["valkey-server", "--appendonly", "yes"]
+    volumes:
+      - valkey-data:/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "valkey-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  caddy-data:
+  valkey-data:

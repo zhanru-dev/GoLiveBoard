@@ -40,6 +40,8 @@ locals {
 
   settings = merge({
     APP_ORIGIN            = var.site_origin
+    SITE_HOST             = trimprefix(var.site_origin, "https://")
+    SES_REGION            = var.region
     S3_BUCKET             = var.assets_bucket
     S3_REGION             = var.region
     MAIL_TRANSPORT        = "ses"

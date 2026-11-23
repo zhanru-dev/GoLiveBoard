@@ -75,7 +75,14 @@ Each step creates billed resources; the demo's budget is set in step 3.
    - `OTEL_EXPORTER_OTLP_ENDPOINT`, and `OTEL_EXPORTER_OTLP_HEADERS` (SecureString), for Grafana Cloud.
 5. **GitHub:**
    - Create the environment `demo`, limited to the `main` branch.
-   - Set its variable `AWS_DEPLOY_ROLE_ARN` to the `deploy_role_arn` output.
+   - Set its variables from the outputs:
+     - `AWS_DEPLOY_ROLE_ARN` (`deploy_role_arn`);
+     - `AWS_REGION` (`eu-west-2`);
+     - `ECR_REGISTRY` (the host part of `repository_urls`);
+     - `RELEASES_BUCKET` (`releases_bucket`);
+     - `HOST_INSTANCE_ID` (`host_instance_id`);
+     - `DEPLOY_DOCUMENT` (`deploy_document`);
+     - `SITE_URL` (`site_url`).
    - The deploy workflow does the rest on every merge to `main` (docs/06, section 4).
 
 **Later changes:** every later change to this directory goes through review. A merge that touches `infra/terraform/environments` is applied by a person until the plan and apply jobs are added to CI with the plan role.
