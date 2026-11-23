@@ -49,7 +49,8 @@ function render() {
 const FAKE_AWS = `#!/usr/bin/env bash
 echo "aws $*" >> "$FAKE_LOG"
 case "$1 $2" in
-  "s3 cp") printf 'release file from %s\\n' "$4" > "$5" ;;
+  # The last two arguments are the source and the destination.
+  "s3 cp") src="\${@: -2:1}"; dest="\${@: -1}"; printf 'release file from %s\\n' "$src" > "$dest" ;;
   "ssm get-parameters-by-path")
     printf '/opspilot/test/DATABASE_URL\\tpostgres://opspilot:pw@db:5432/opspilot\\n'
     printf '/opspilot/test/JWT_SECRET\\tnot-a-real-secret\\n'
@@ -129,6 +130,18 @@ describe("host-deploy.sh", () => {
       ].join("\n"),
     );
     expect(statSync(envFile).mode & 0o777).toBe(0o600);
+    // The release's files, from the release's own prefix in the bucket.
+    expect(
+      readFileSync(
+        join(run.root, "releases", SHA, "docker-compose.yml"),
+        "utf8",
+      ),
+    ).toBe(
+      `release file from s3://opspilot-test-releases/${SHA}/docker-compose.yml\n`,
+    );
+    expect(
+      readFileSync(join(run.root, "releases", SHA, "Caddyfile"), "utf8"),
+    ).toBe(`release file from s3://opspilot-test-releases/${SHA}/Caddyfile\n`);
     expect(run.calls).toContain(
       "aws ssm get-parameters-by-path --region eu-west-2 --path /opspilot/test --recursive --with-decryption --query Parameters[].[Name,Value] --output text",
     );
