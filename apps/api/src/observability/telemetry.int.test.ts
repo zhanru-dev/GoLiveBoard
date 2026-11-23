@@ -50,6 +50,9 @@ const attributesOf = (list: readonly OtlpAttribute[] = []) =>
 class FakeCollector {
   readonly bodies: string[] = [];
   readonly metricBodies: string[] = [];
+  readonly logBodies: string[] = [];
+  /** Each signal's request headers, as sent. */
+  readonly headers = new Map<string, Record<string, unknown>>();
   private readonly server: Server = createServer((request, response) => {
     let body = "";
     request.on("data", (chunk: Buffer) => {
@@ -62,6 +65,10 @@ class FakeCollector {
       if (request.url === "/v1/metrics") {
         this.metricBodies.push(body);
       }
+      if (request.url === "/v1/logs") {
+        this.logBodies.push(body);
+      }
+      this.headers.set(request.url ?? "", { ...request.headers });
       response.writeHead(200, { "content-type": "application/json" });
       response.end("{}");
     });
@@ -247,6 +254,8 @@ describe("tracing in the running API", { timeout: 60_000 }, () => {
       ...processEnv(database, endpoint),
       // Spans leave only when the process stops: that proves the flush.
       OTEL_BSP_SCHEDULE_DELAY: "600000",
+      // How Grafana Cloud's token is given (docs/06, section 7).
+      OTEL_EXPORTER_OTLP_HEADERS: "x-otlp-test=from-the-environment",
     }));
   }, 60_000);
 
@@ -316,6 +325,20 @@ describe("tracing in the running API", { timeout: 60_000 }, () => {
     expect(exported).not.toContain("not the right password");
     // Request rate, errors and duration per route (docs/06, section 7),
     // without the visitor's address.
+    // The request's log lines leave too, as log records in its trace
+    // (Loki in Grafana Cloud), redacted as pino wrote them.
+    const logs = collector.logBodies.join("\n");
+    expect(logs).toContain("request completed");
+    expect(logs).toContain(BROWSER_TRACE);
+    expect(logs).not.toContain("traced.person");
+    expect(logs).not.toContain("not the right password");
+    expect(logs).not.toContain("supersecret");
+    // Every signal carries the headers from the environment.
+    for (const signal of ["/v1/traces", "/v1/metrics", "/v1/logs"]) {
+      expect(collector.headers.get(signal)?.["x-otlp-test"], signal).toBe(
+        "from-the-environment",
+      );
+    }
     const metrics = collector.metricBodies.join("\n");
     expect(metrics).toContain("http.server.request.duration");
     expect(metrics).toContain("/api/v1/auth/sign-in");

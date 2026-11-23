@@ -4,6 +4,7 @@ import {
   type ExportResult,
   W3CTraceContextPropagator,
 } from "@opentelemetry/core";
+import { OTLPLogExporter } from "@opentelemetry/exporter-logs-otlp-http";
 import { OTLPMetricExporter } from "@opentelemetry/exporter-metrics-otlp-http";
 import { OTLPTraceExporter } from "@opentelemetry/exporter-trace-otlp-http";
 import {
@@ -13,8 +14,10 @@ import {
 import { HttpInstrumentation } from "@opentelemetry/instrumentation-http";
 import { IORedisInstrumentation } from "@opentelemetry/instrumentation-ioredis";
 import { PgInstrumentation } from "@opentelemetry/instrumentation-pg";
+import { PinoInstrumentation } from "@opentelemetry/instrumentation-pino";
 import { UndiciInstrumentation } from "@opentelemetry/instrumentation-undici";
 import { resourceFromAttributes } from "@opentelemetry/resources";
+import { BatchLogRecordProcessor } from "@opentelemetry/sdk-logs";
 import { PeriodicExportingMetricReader } from "@opentelemetry/sdk-metrics";
 import { NodeSDK } from "@opentelemetry/sdk-node";
 import {
@@ -174,6 +177,11 @@ export function instrumentations() {
       requireParentSpan: true,
       dbStatementSerializer: (command) => command,
     }),
+    // Every log line also leaves as an OpenTelemetry log record (Grafana
+    // Cloud's Loki in AWS), as pino wrote it: after its redaction. The line
+    // already carries trace_id and span_id (traceFields), so the
+    // instrumentation adds no fields of its own.
+    new PinoInstrumentation({ disableLogCorrelation: true }),
   ];
 }
 
@@ -227,6 +235,11 @@ export function startTelemetry(settings: TelemetrySettings): boolean {
       new PeriodicExportingMetricReader({
         exporter: new OTLPMetricExporter({ url: `${base}/v1/metrics` }),
         exportIntervalMillis: settings.metricIntervalMs,
+      }),
+    ],
+    logRecordProcessors: [
+      new BatchLogRecordProcessor({
+        exporter: new OTLPLogExporter({ url: `${base}/v1/logs` }),
       }),
     ],
     instrumentations: instrumentations(),

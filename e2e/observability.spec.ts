@@ -1,5 +1,5 @@
 import { expect, SIGNED_IN_MS, test } from "./fixtures.js";
-import { E2E_TARGET } from "./target.js";
+import { E2E_TARGET, target } from "./target.js";
 
 /** The stack's Grafana (docs/06, section 7); no sign-in, local only. */
 const GRAFANA = `http://127.0.0.1:${process.env.STACK_GRAFANA_PORT ?? "3037"}`;
@@ -222,6 +222,52 @@ test.describe("observability (NFR-7, docs/06 section 7)", () => {
         { timeout: 60_000 },
       )
       .toEqual(["opspilot-worker"]);
+  });
+
+  test("the API's log lines reach Loki, in their trace and without personal data", async ({
+    request,
+  }) => {
+    test.setTimeout(90_000);
+    const traceId = Array.from({ length: 32 }, () =>
+      Math.floor(Math.random() * 16).toString(16),
+    ).join("");
+    const email = `logged-${unique()}@example.com`;
+    const response = await request.post("/api/v1/auth/sign-in", {
+      headers: {
+        origin: new URL(target.baseURL).origin,
+        traceparent: `00-${traceId}-b7ad6b7169203331-01`,
+      },
+      data: { email, password: "not the right password at all" },
+    });
+    expect(response.status()).toBe(401);
+
+    // The line is the message; the rest of the record (trace_id, request
+    // fields) is structured metadata, filtered with "|".
+    const query = `{service_name="opspilot-api"} | trace_id="${traceId}"`;
+    const lines = async () => {
+      const url = new URL(
+        `${GRAFANA}/api/datasources/proxy/uid/loki/loki/api/v1/query_range`,
+      );
+      url.searchParams.set("query", query);
+      url.searchParams.set("since", "10m");
+      const body = (await (await fetch(url)).json()) as {
+        data?: {
+          result?: {
+            stream: Record<string, string>;
+            values: [string, string][];
+          }[];
+        };
+      };
+      // Each entry with everything Loki holds about it.
+      return (body.data?.result ?? []).flatMap(({ stream, values }) =>
+        values.map(([, line]) => `${line} ${JSON.stringify(stream)}`),
+      );
+    };
+    await expect.poll(lines, { timeout: 60_000 }).not.toEqual([]);
+    const found = (await lines()).join("\n");
+    expect(found).toContain("request completed");
+    expect(found).not.toContain(email);
+    expect(found).not.toContain("not the right password");
   });
 
   test("one trace follows a click from the browser through the API to the worker", async ({
