@@ -12,7 +12,7 @@ Audited on 19 November 2026 against **WCAG 2.2 level AA** (NFR-6), over every pa
 | **Token contrast**                                     | Text 4.5:1; field edges and the focus ring 3:1, against the background                                                                                                                                                                                                                              | `apps/web/src/app/tokens.test.ts`, every CI run   |
 | **Reading the code and the pages**                     | What tools cannot judge: names, structure, wording, timing, media                                                                                                                                                                                                                                   | This document                                     |
 
-**Not done: testing with a screen reader** (VoiceOver, NVDA). The structure that screen readers rely on is checked: landmarks, headings, names and live regions. How the pages actually sound has not been heard, and that remains to be done by a person before the public demo.
+**Not done: testing with a screen reader** (VoiceOver, NVDA). The structure that screen readers rely on is checked: landmarks, headings, names and live regions. How the pages actually sound has not been heard, and that remains to be done by a person before the public demo, following [screen-reader-pass.md](screen-reader-pass.md) (the script, what each step should announce, and where the result is recorded).
 
 ## Findings and fixes
 
@@ -98,11 +98,11 @@ Before the fixes, axe reported no violations on any of these pages. Every findin
 
 ### Robust
 
-| Criterion               | Level | Status | Evidence                                                                                                               |
-| ----------------------- | ----- | ------ | ---------------------------------------------------------------------------------------------------------------------- |
-| 4.1.2 Name, Role, Value | A     | Pass   | axe; keyboard (each control found by its role and name)                                                                |
-| 4.1.3 Status Messages   | AA    | Pass   | review: `role="status"` and polite live regions for saves, chat and questions, `role="alert"` for errors and incidents |
+| Criterion               | Level | Status | Evidence                                                                                                                                                                                                                                                                                                                                                                                                               |
+| ----------------------- | ----- | ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 4.1.2 Name, Role, Value | A     | Pass   | axe; keyboard (each control found by its role and name)                                                                                                                                                                                                                                                                                                                                                                |
+| 4.1.3 Status Messages   | AA    | Pass   | review: `role="status"` for saves and progress; `role="alert"` for errors; the chat is a `role="log"` region, so new messages are announced; open incidents are an assertive live region. New questions from others are **not** announced (the list reorders by votes, so a live list would be noise); the screen-reader pass judges whether they need to be ([screen-reader-pass.md](screen-reader-pass.md), step 17) |
 
 ## Before each release
 
-`npm run test:e2e:stack` runs the keyboard walkthrough, the layout checks and axe, and CI runs them on every change. A person still listens with a screen reader before the public demo (milestone 10) and records what they heard here.
+`npm run test:e2e:stack` runs the keyboard walkthrough, the layout checks and axe, and CI runs them on every change. A person still listens with a screen reader before the public demo (milestone 10), following [screen-reader-pass.md](screen-reader-pass.md), and records what they heard there.

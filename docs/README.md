@@ -19,7 +19,7 @@ What milestone 9 measured and checked, kept next to the documents it holds to ac
 
 - **[Load test](load-tests/2026-11-18-nfr4-local.md)** — NFR-4 (chat delivery under load), with the k6 script in `load/`.
 - **[Lighthouse scores](lighthouse.md)** — the public event page against its budgets (NFR-3).
-- **[Accessibility audit](accessibility-audit.md)** — WCAG 2.2 AA, criterion by criterion, with the keyboard walkthrough.
+- **[Accessibility audit](accessibility-audit.md)** — WCAG 2.2 AA, criterion by criterion, with the keyboard walkthrough; the [screen-reader pass](screen-reader-pass.md) is the script for listening to it.
 - **[Security review](security-review.md)** — OWASP ASVS 5.0 level 2, with a ZAP scan.
 - **[Runbooks](runbooks/README.md)** — what to do when something goes wrong, each rehearsed once.
 

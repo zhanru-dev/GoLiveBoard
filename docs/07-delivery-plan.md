@@ -85,6 +85,17 @@ flowchart LR
 - **Scope**: Terraform for the AWS demo environment; GitHub OIDC; deploy pipeline with migrations, smoke test and automatic rollback; SES production access and DNS; README with architecture diagram, live link, demo instructions and trade-offs; final ADR review; a two-minute demo video; a real small online event run on OpsPilot, with its report.
 - **Exit criteria**: a merge to `main` reaches the demo environment with no manual step; a deliberately failing smoke test rolls back automatically; a reviewer who has never seen the project can understand, run and try it from the README alone.
 - **Carried over from M9**: Grafana Cloud in place of the local `grafana/otel-lgtm`, with logs shipped to it; the k6 load test against the AWS environment; each runbook's AWS steps rehearsed there; a screen-reader pass of the golden flow before the public demo.
+- **Done before the AWS account** (2026-11-23):
+  - the README, for a first-time reader;
+  - the final ADR review (0004, 0006, 0008 and 0010 amended);
+  - all of `infra/terraform`, checked offline in CI;
+  - the deploy pipeline with its automatic rollback, its scripts tested against fakes;
+  - mail through SES's API;
+  - logs over OTLP, ready for Grafana Cloud;
+  - the screen-reader script ([screen-reader-pass.md](screen-reader-pass.md)).
+- **Still to do:**
+  - **with the account:** apply the Terraform, SES production access and DNS, the first deploy and the rollback drill, Grafana Cloud's endpoint and token, the k6 test and the runbooks' AWS steps there;
+  - **by a person:** the screen-reader pass, the demo video, a real event and its report.
 - **Career milestone**: the full-stack CV goes out with a live link from here.
 - **Start early**: open the AWS account, request SES production access and register the domain about a week before this milestone; approvals take days, deployment does not.
 
