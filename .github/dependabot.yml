@@ -1,4 +1,7 @@
 # Weekly dependency updates as pull requests, which CI then verifies.
+# Each waits 14 days after its release (cooldown), the project's rule for
+# any version it adopts: long enough for a broken or malicious release to
+# be found and pulled. Security updates do not wait.
 version: 2
 updates:
   - package-ecosystem: npm
@@ -6,18 +9,27 @@ updates:
     schedule:
       interval: weekly
       day: monday
+    cooldown:
+      default-days: 14
     groups:
       # One pull request for all minor and patch updates; majors arrive one by
       # one, because each may need code changes.
       minor-and-patch:
         update-types: [minor, patch]
     open-pull-requests-limit: 10
+    ignore:
+      # typescript-eslint supports TypeScript below 6.1 (8.74); a major
+      # waits until it supports the new one.
+      - dependency-name: typescript
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: github-actions
     directory: /
     schedule:
       interval: weekly
       day: monday
+    cooldown:
+      default-days: 14
     groups:
       actions:
         patterns: ["*"]
@@ -28,6 +40,8 @@ updates:
     schedule:
       interval: weekly
       day: monday
+    cooldown:
+      default-days: 14
     groups:
       base-images:
         patterns: ["*"]
@@ -38,6 +52,8 @@ updates:
     schedule:
       interval: weekly
       day: monday
+    cooldown:
+      default-days: 14
     groups:
       service-images:
         update-types: [minor, patch]
