@@ -206,7 +206,7 @@ services:
       retries: 20
 
   postgres:
-    image: postgres:18.6-alpine
+    image: postgres:18.7-alpine
     environment:
       POSTGRES_USER: opspilot
       POSTGRES_PASSWORD: ${STACK_POSTGRES_PASSWORD:-stack-local-only}
@@ -220,7 +220,7 @@ services:
       retries: 10
 
   valkey:
-    image: valkey/valkey:9.1.3-alpine
+    image: valkey/valkey:9.2.0-alpine
     healthcheck:
       test: ["CMD", "valkey-cli", "ping"]
       interval: 5s
@@ -232,7 +232,7 @@ services:
   # for Grafana Cloud. Grafana is at http://127.0.0.1:3037 (local only, no
   # sign-in). Alert emails go to Mailpit.
   lgtm:
-    image: grafana/otel-lgtm:0.39.0@sha256:4c8056c9c05fcb3c8fd93800e85334bfd79b4d0271b47a54a121a64af41fe1fe
+    image: grafana/otel-lgtm:0.41.1@sha256:1b852b77d7bcadb7699bfe7c78a51d059dff85168de674728cf7abf4474645e5
     environment:
       OTELCOL_EXTRA_ARGS: --config=file:/opspilot/otelcol-readiness.yaml
       OPSPILOT_READINESS_URL: http://api:4301/api/v1/health/ready
@@ -257,7 +257,7 @@ services:
   # Catches email. Its inbox (http://127.0.0.1:8037) is published so the
   # end-to-end tests can read invitation links.
   mailpit:
-    image: axllent/mailpit:v1.33.1
+    image: axllent/mailpit:v1.34.0
     ports:
       - "127.0.0.1:${STACK_MAILPIT_UI_PORT:-8037}:8025"
     healthcheck:
@@ -267,7 +267,7 @@ services:
       retries: 10
 
   s3:
-    image: chrislusf/seaweedfs:4.53
+    image: chrislusf/seaweedfs:4.54
     command:
       - server
       - -s3
