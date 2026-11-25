@@ -93,6 +93,9 @@ flowchart LR
   - mail through SES's API;
   - logs over OTLP, ready for Grafana Cloud;
   - the screen-reader script ([screen-reader-pass.md](screen-reader-pass.md)).
+  - error boundaries in the web app, so a rendering error breaks one part, not the page (2026-11-25);
+  - Web Vitals and real-time failures from real visits, with a p75 dashboard and two browser-side alerts (2026-11-25).
+- **Backlog (not in M10):** a runtime feature flag per workspace (AI triage can already be switched off with `AI_PROVIDER=none`, but only by a deploy), and visual regression tests (screenshots differ across platforms and fonts; costly to keep green for the risk they cover).
 - **Still to do:**
   - **with the account:** apply the Terraform, SES production access and DNS, the first deploy and the rollback drill, Grafana Cloud's endpoint and token, the k6 test and the runbooks' AWS steps there;
   - **by a person:** the screen-reader pass, the demo video, a real event and its report.
