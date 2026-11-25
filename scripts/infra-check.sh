@@ -70,8 +70,11 @@ if wanted test; then
 fi
 
 if wanted lint; then
+  # tflint --init downloads the AWS ruleset from GitHub's API; without a
+  # token, a shared CI runner's address soon hits the anonymous rate limit.
   check "tflint" docker run --rm -v "$ROOT/infra/terraform:/data" -w /data \
-    -e TFLINT_PLUGIN_DIR=/data/.terraform/tflint-plugins --entrypoint sh "$TFLINT" -c \
+    -e TFLINT_PLUGIN_DIR=/data/.terraform/tflint-plugins -e GITHUB_TOKEN \
+    --entrypoint sh "$TFLINT" -c \
     'tflint --init --config /data/.tflint.hcl >/dev/null &&
      tflint --recursive --config /data/.tflint.hcl --format compact'
 fi

@@ -125,6 +125,10 @@ jobs:
       # No AWS account is used: providers are mocked in the tests, and
       # validate and the scanners read the code only (docs/06, section 5).
       - name: Check the Terraform
+        env:
+          # Read-only, for tflint's download of the AWS ruleset (GitHub's
+          # anonymous API limit is shared by everyone on the runner's address).
+          GITHUB_TOKEN: ${{ github.token }}
         run: bash scripts/infra-check.sh all
 
   images:
