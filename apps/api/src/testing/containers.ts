@@ -27,6 +27,13 @@ export const POSTGRES_IMAGE = "postgres:18.6-alpine";
 export const VALKEY_IMAGE = "valkey/valkey:9.1.3-alpine";
 export const SEAWEEDFS_IMAGE = "chrislusf/seaweedfs:4.53";
 
+/**
+ * How long a container may take to start. Testcontainers waits 60 s by
+ * default for some and 30 s for others; on a loaded machine (a review
+ * running its own stack beside these tests) Valkey once took longer.
+ */
+const STARTUP_TIMEOUT_MS = 120_000;
+
 /** S3 credentials of the test object store; only ever used in tests. */
 export const TEST_S3_CREDENTIALS = {
   accessKeyId: "opspilot-test",
@@ -46,12 +53,16 @@ export const SEAWEEDFS_STORAGE_FLAGS = ["-master.volumeSizeLimitMB=64"];
 
 /** Starts a throwaway PostgreSQL server for one test file. */
 export function startPostgres(): Promise<StartedPostgreSqlContainer> {
-  return new PostgreSqlContainer(POSTGRES_IMAGE).start();
+  return new PostgreSqlContainer(POSTGRES_IMAGE)
+    .withStartupTimeout(STARTUP_TIMEOUT_MS)
+    .start();
 }
 
 /** Starts a throwaway Valkey server for one test file. */
 export function startValkey(): Promise<StartedValkeyContainer> {
-  return new ValkeyContainer(VALKEY_IMAGE).start();
+  return new ValkeyContainer(VALKEY_IMAGE)
+    .withStartupTimeout(STARTUP_TIMEOUT_MS)
+    .start();
 }
 
 /**
@@ -89,7 +100,8 @@ export function startSeaweedFs(
       { content: JSON.stringify(identities), target: "/etc/seaweedfs/s3.json" },
     ])
     .withExposedPorts(S3_PORT)
-    .withWaitStrategy(Wait.forHttp("/healthz", S3_PORT));
+    .withWaitStrategy(Wait.forHttp("/healthz", S3_PORT))
+    .withStartupTimeout(STARTUP_TIMEOUT_MS);
   return (
     dataSize === undefined
       ? container

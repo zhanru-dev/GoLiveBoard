@@ -154,7 +154,10 @@ groups:
 
       # Field data for NFR-3: the public event page's LCP at the 75th
       # percentile of real visits. Only judged with at least 20 visits in
-      # the window, so a quiet demo with one slow phone stays silent.
+      # the window, so a quiet demo with one slow phone stays silent. The
+      # endpoint is public, but a sender adds at most two paints to a
+      # 30-minute window (browserVitalPerVisitor), so it takes many to
+      # hold the 75th percentile.
       - uid: opspilot-public-page-slow
         title: Public page slow for real visitors
         condition: C
@@ -189,7 +192,9 @@ groups:
 
       # A signal from browsers: real-time connections they could not make,
       # or lost. The API sees nothing of a connection that never reached it
-      # (a proxy, a WebSocket blocked, an instance gone).
+      # (a proxy, a WebSocket blocked, an instance gone). A sender counts
+      # at most twice per reason in 10 minutes (browserFailurePerVisitor),
+      # so more than 10 means at least six senders.
       - uid: opspilot-browser-realtime-failing
         title: Chat connections failing in browsers
         condition: C
@@ -199,7 +204,7 @@ groups:
         labels:
           severity: page
         annotations:
-          summary: Browsers reported more than 10 real-time connections failed or lost in 10 minutes; chat and questions are not reaching people.
+          summary: Browsers reported more than 10 real-time connections failed or lost in 10 minutes, from at least six senders; chat and questions are not reaching people.
           runbook: docs/runbooks/deploy-and-roll-back.md
         data:
           - refId: A

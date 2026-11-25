@@ -5,7 +5,7 @@ import type { StartedValkeyContainer } from "@testcontainers/valkey";
 import { Redis } from "ioredis";
 import { Client } from "pg";
 import request from "supertest";
-import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { beforeAll, describe, expect, it, vi } from "vitest";
 
 import {
   pauseContainer,
@@ -33,13 +33,14 @@ describe("readiness with real dependencies", () => {
       },
       logs,
     });
-  });
-
-  afterAll(async () => {
-    await app.close();
-    // The tests stop the containers themselves; this covers a test that
-    // failed before doing so. Stopping twice is harmless, so errors are ignored.
-    await Promise.allSettled([postgres.stop(), valkey.stop()]);
+    // Returned, not in afterAll: only what started is stopped.
+    return async () => {
+      await app.close();
+      // The tests stop the containers themselves; this covers a test that
+      // failed before doing so. Stopping twice is harmless, so errors are
+      // ignored.
+      await Promise.allSettled([postgres.stop(), valkey.stop()]);
+    };
   });
 
   const ready = () => request(app.getHttpServer()).get("/api/v1/health/ready");

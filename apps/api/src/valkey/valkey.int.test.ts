@@ -1,7 +1,7 @@
 import type { StartedValkeyContainer } from "@testcontainers/valkey";
 import type { Redis } from "ioredis";
 import type { PinoLogger } from "nestjs-pino";
-import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { beforeAll, describe, expect, it, vi } from "vitest";
 
 import { RateLimiter } from "../rate-limit/rate-limiter.js";
 import { loadTestConfig } from "../testing/config.js";
@@ -35,11 +35,12 @@ describe("the shared Valkey client while Valkey is frozen", () => {
       expect(client.status).toBe("ready");
     });
     limiter = new RateLimiter(client, logger);
-  });
-
-  afterAll(async () => {
-    await closeValkeyClient(client);
-    await valkey.stop();
+    // Returned, not in afterAll: when the start fails, there is nothing to
+    // close, and the failure stays the only error reported.
+    return async () => {
+      await closeValkeyClient(client);
+      await valkey.stop();
+    };
   });
 
   /** Three rate-limit checks at once; resolves with how long they took. */

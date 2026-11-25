@@ -115,7 +115,9 @@ function host(action, env = {}, { running } = {}) {
   };
 }
 
-describe("host-deploy.sh", () => {
+// Each test runs the script in bash with a dozen fake commands: a second
+// or two, more on a busy machine, past Vitest's 5 s default once.
+describe("host-deploy.sh", { timeout: 30_000 }, () => {
   it("renders the release's configuration from Parameter Store, readable by root only", () => {
     const run = host("deploy");
 

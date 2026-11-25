@@ -2,7 +2,7 @@ import { randomBytes } from "node:crypto";
 
 import type { StartedValkeyContainer } from "@testcontainers/valkey";
 import { Queue } from "bullmq";
-import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { beforeAll, describe, expect, it, vi } from "vitest";
 
 import type { AppConfig } from "../config/app-config.js";
 import { pauseContainer, startValkey } from "../testing/containers.js";
@@ -32,10 +32,8 @@ describe("producer connection while Valkey is frozen", () => {
 
   beforeAll(async () => {
     valkey = await startValkey();
-  });
-
-  afterAll(async () => {
-    await valkey.stop();
+    // Returned, not in afterAll: when the start fails, nothing to stop.
+    return () => valkey.stop();
   });
 
   it(

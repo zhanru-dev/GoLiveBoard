@@ -17,7 +17,7 @@ import {
   type ConnectionState,
   RealtimeConnection,
 } from "./realtime-connection";
-import { reportRealtimeFailure } from "@/lib/browser-telemetry";
+import { realtimeFailureReporter } from "@/lib/browser-telemetry";
 
 /**
  * The page's connection to one event. It lives as long as the component
@@ -40,7 +40,8 @@ export function useLiveConnection(
     const created = new RealtimeConnection({
       slug,
       onState: setState,
-      onFailure: reportRealtimeFailure,
+      // One page view: this connection lives as long as the watch page.
+      onFailure: realtimeFailureReporter(),
       onStatus: (event: EventStatusChanged) => {
         setStatus(event.status);
       },

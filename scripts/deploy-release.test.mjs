@@ -98,7 +98,8 @@ function release(env = {}) {
   return { status: result.status, calls, log: result.stderr };
 }
 
-describe("release.sh", () => {
+// Each test runs the script in bash with fake commands; see host-deploy.test.mjs.
+describe("release.sh", { timeout: 30_000 }, () => {
   it("migrates, then deploys, and stops there when the release is healthy", () => {
     const run = release();
 

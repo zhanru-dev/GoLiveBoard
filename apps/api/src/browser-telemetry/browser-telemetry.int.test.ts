@@ -150,22 +150,83 @@ describe("browser telemetry", { timeout: 60_000 }, () => {
     expect(await total(METRICS.webVitalDuration, {})).toBe(0);
   });
 
-  it("drops what one address sends beyond 120 requests in ten minutes, still answering 204", async () => {
+  it("counts one sender once per metric, however much it sends, so it cannot move the alerts", async () => {
+    // The review's forgery: no session, the right Origin, ten slow paints
+    // and ten lost connections a request.
     const ip = newAddress();
-    const one = {
-      measurements: [{ kind: "realtime-failure", reason: "lost", route: "/" }],
+    const forged = {
+      measurements: [
+        ...Array.from({ length: 5 }, () => ({
+          kind: "web-vital",
+          name: "LCP",
+          value: 10_000,
+          route: "/e/:slug",
+        })),
+        ...Array.from({ length: 5 }, () => ({
+          kind: "realtime-failure",
+          reason: "lost",
+          route: "/e/:slug/watch",
+        })),
+      ],
     };
-    for (let sent = 0; sent < 120; sent++) {
-      expect((await send(one, ip)).status).toBe(204);
+    for (let sent = 0; sent < 4; sent++) {
+      expect((await send(forged, ip)).status).toBe(204);
     }
 
-    const beyond = await send(one, ip);
-
-    expect(beyond.status).toBe(204);
+    expect(
+      await total(METRICS.webVitalDuration, {
+        "opspilot.web.vital": "LCP",
+        "opspilot.web.route": "/e/:slug",
+      }),
+    ).toBe(1);
     expect(
       await total(METRICS.webRealtimeFailures, {
         "opspilot.web.realtime_failure": "lost",
       }),
-    ).toBe(120);
+    ).toBe(1);
+  });
+
+  it("takes an IPv6 /64 as one sender", async () => {
+    const lost = (route: string) => ({
+      measurements: [{ kind: "realtime-failure", reason: "lost", route }],
+    });
+
+    await send(lost("/"), "2001:db8:41:7::1").expect(204);
+    await send(lost("/e/:slug"), "2001:db8:41:7:ffff:1:2:3").expect(204);
+    await send(lost("/"), "2001:db8:41:8::1").expect(204);
+
+    expect(
+      await total(METRICS.webRealtimeFailures, {
+        "opspilot.web.realtime_failure": "lost",
+      }),
+    ).toBe(2);
+  });
+
+  it("drops everything one address sends beyond 120 requests in ten minutes, still answering 204", async () => {
+    const ip = newAddress();
+    const lost = {
+      measurements: [{ kind: "realtime-failure", reason: "lost", route: "/" }],
+    };
+    for (let sent = 0; sent < 120; sent++) {
+      expect((await send(lost, ip)).status).toBe(204);
+    }
+
+    // A measurement this sender has not sent yet, so only the request
+    // limit can drop it.
+    const beyond = await send(
+      {
+        measurements: [
+          { kind: "realtime-failure", reason: "connect-failed", route: "/" },
+        ],
+      },
+      ip,
+    );
+
+    expect(beyond.status).toBe(204);
+    expect(
+      await total(METRICS.webRealtimeFailures, {
+        "opspilot.web.realtime_failure": "connect-failed",
+      }),
+    ).toBe(0);
   });
 });

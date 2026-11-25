@@ -34,6 +34,14 @@ describe("BrowserTelemetryRequest", () => {
       { kind: "web-vital", name: "INP", value: -1, route: "/" },
     ],
     [
+      "a paint slower than two minutes",
+      { kind: "web-vital", name: "LCP", value: 120_001, route: "/" },
+    ],
+    [
+      "an interaction slower than two minutes",
+      { kind: "web-vital", name: "INP", value: 120_001, route: "/" },
+    ],
+    [
       "a layout shift beyond reason",
       { kind: "web-vital", name: "CLS", value: 1_000, route: "/" },
     ],

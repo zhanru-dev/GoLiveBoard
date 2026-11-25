@@ -21,6 +21,8 @@ describe("RouteError", () => {
       name: "Something went wrong",
     });
     expect(heading).toHaveFocus();
+    // Announced as well as focused: the fallback is an alert.
+    expect(screen.getByRole("alert")).toContainElement(heading);
     expect(reportError).toHaveBeenCalledWith(error);
 
     await userEvent.click(screen.getByRole("button", { name: "Try again" }));

@@ -47,6 +47,26 @@ export const RATE_LIMITS = {
     windowMs: 10 * MINUTE_MS,
     failClosed: true,
   },
+  /**
+   * What one address may add to what the alerts judge: one Web Vital per
+   * metric and route, and one real-time failure per reason, per half hour.
+   * Within any alert window an address so counts at most twice (the end of
+   * one fixed window and the start of the next), so a single address can
+   * neither page "connections failing" nor hold the public page's p75.
+   * A real visitor loads a page or two; their later loads go unmeasured.
+   */
+  browserVitalPerVisitor: {
+    name: "browser-vital:visitor",
+    limit: 1,
+    windowMs: 30 * MINUTE_MS,
+    failClosed: true,
+  },
+  browserFailurePerVisitor: {
+    name: "browser-failure:visitor",
+    limit: 1,
+    windowMs: 30 * MINUTE_MS,
+    failClosed: true,
+  },
   /** Each demo sign-in starts a session; a person needs a handful at most. */
   demoSignInPerIp: { name: "demo-sign-in:ip", limit: 20, windowMs: HOUR_MS },
   /** Registrations for events, from one address (FR-AD-3). */

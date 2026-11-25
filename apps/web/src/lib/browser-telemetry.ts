@@ -73,9 +73,16 @@ let collector: Collector | undefined;
 /** Gathers measurements and sends them in batches. */
 export class Collector {
   private queue: Measurement[] = [];
-  private readonly failuresSent = new Set<BrowserRealtimeFailure["reason"]>();
+  /**
+   * The route the document was loaded on. Web Vitals describe that load
+   * (its largest paint, its shifts, its slowest interaction), and report
+   * when the page is hidden, possibly after the visitor moved on within the
+   * app: they belong to where it started, not to where it ended.
+   */
+  private readonly documentRoute: BrowserRoute;
 
   constructor(private readonly page: Page) {
+    this.documentRoute = routeTemplate(page.location.pathname);
     const flush = () => {
       this.flush();
     };
@@ -88,15 +95,11 @@ export class Collector {
   }
 
   vital(name: "LCP" | "INP" | "CLS", value: number): void {
-    this.add({ kind: "web-vital", name, value, route: this.route() });
+    this.add({ kind: "web-vital", name, value, route: this.documentRoute });
   }
 
-  /** Once per reason per page view: a reconnect loop is one problem. */
+  /** A real-time failure, on the page where it happened. */
   realtimeFailure(reason: BrowserRealtimeFailure["reason"]): void {
-    if (this.failuresSent.has(reason)) {
-      return;
-    }
-    this.failuresSent.add(reason);
     this.add({ kind: "realtime-failure", reason, route: this.route() });
   }
 
@@ -153,9 +156,21 @@ export async function startBrowserTelemetry(
   });
 }
 
-/** Reports a real-time connection that failed or was lost (use-live.ts). */
-export function reportRealtimeFailure(
-  reason: BrowserRealtimeFailure["reason"],
-): void {
-  collector?.realtimeFailure(reason);
+/**
+ * Reports one page view's real-time failures (use-live.ts makes one per
+ * connection, so per watch page shown): each reason once, as a reconnect
+ * loop is one problem, and again in the next page view.
+ */
+export function realtimeFailureReporter(
+  report: (reason: BrowserRealtimeFailure["reason"]) => void = (reason) => {
+    collector?.realtimeFailure(reason);
+  },
+): (reason: BrowserRealtimeFailure["reason"]) => void {
+  const sent = new Set<BrowserRealtimeFailure["reason"]>();
+  return (reason) => {
+    if (!sent.has(reason)) {
+      sent.add(reason);
+      report(reason);
+    }
+  };
 }

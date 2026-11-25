@@ -11,6 +11,8 @@ import { router } from "@/testing/setup";
 
 import { HEARTBEAT_MS, WatchRoom } from "./watch-room";
 import type * as ChatPanelModule from "./chat-panel";
+import type * as PlayerModule from "./player";
+import type * as QuestionsPanelModule from "./questions-panel";
 
 vi.mock("@/features/live/realtime-connection", () => fakeRealtimeModule());
 
@@ -25,6 +27,31 @@ vi.mock("./chat-panel", async (importOriginal) => {
         throw new Error("The chat could not render");
       }
       return actual.ChatPanel(props);
+    },
+  };
+});
+
+vi.mock("./player", async (importOriginal) => {
+  const actual = await importOriginal<typeof PlayerModule>();
+  return {
+    ...actual,
+    Player: (props: Parameters<typeof actual.Player>[0]) => {
+      if (failing.has("video")) {
+        throw new Error("The video could not render");
+      }
+      return actual.Player(props);
+    },
+  };
+});
+vi.mock("./questions-panel", async (importOriginal) => {
+  const actual = await importOriginal<typeof QuestionsPanelModule>();
+  return {
+    ...actual,
+    QuestionsPanel: (props: Parameters<typeof actual.QuestionsPanel>[0]) => {
+      if (failing.has("questions")) {
+        throw new Error("The questions could not render");
+      }
+      return actual.QuestionsPanel(props);
     },
   };
 });
@@ -258,6 +285,50 @@ describe("WatchRoom (FR-RN-1)", () => {
       expect(await screen.findByText("Will it ship?")).toBeInTheDocument();
       expect(
         screen.getByText("Something went wrong showing the chat."),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole("img", { name: /Product launch/ }),
+      ).toBeInTheDocument();
+    } finally {
+      failing.clear();
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("keeps a broken video to the video: the chat and the questions stay", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    vi.stubGlobal("reportError", vi.fn());
+    failing.add("video");
+    try {
+      serveRoom();
+      renderScreen(<WatchRoom info={info()} />);
+
+      expect(await screen.findByText("Will it ship?")).toBeInTheDocument();
+      expect(
+        screen.getByText("Something went wrong showing the video."),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole("heading", { name: /chat/i }),
+      ).toBeInTheDocument();
+    } finally {
+      failing.clear();
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("keeps broken questions to the questions: the video and the chat stay", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    vi.stubGlobal("reportError", vi.fn());
+    failing.add("questions");
+    try {
+      serveRoom();
+      renderScreen(<WatchRoom info={info()} />);
+
+      expect(
+        await screen.findByText("Something went wrong showing the questions."),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole("heading", { name: /chat/i }),
       ).toBeInTheDocument();
       expect(
         screen.getByRole("img", { name: /Product launch/ }),

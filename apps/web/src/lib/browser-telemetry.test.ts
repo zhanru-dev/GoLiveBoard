@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import {
   Collector,
+  realtimeFailureReporter,
   routeTemplate,
   startBrowserTelemetry,
 } from "./browser-telemetry";
@@ -120,35 +121,31 @@ describe("Collector", () => {
     expect(JSON.stringify(requests)).not.toContain("product-launch");
   });
 
-  it("reports each kind of real-time failure once per page view", async () => {
-    const { page, hide, sent } = fakePage("/e/product-launch-k3x9q2mz7a/watch");
+  it("gives Web Vitals to the page the document was loaded on, after a move within the app", async () => {
+    const { page, hide, sent } = fakePage("/e/product-launch-k3x9q2mz7a");
     const collector = new Collector(page);
 
-    for (let attempt = 0; attempt < 5; attempt++) {
-      collector.realtimeFailure("connect-failed");
-    }
+    // The visitor goes on to the watch page without a reload; the first
+    // page's largest paint is reported only when the tab is hidden.
+    page.location.pathname = "/e/product-launch-k3x9q2mz7a/watch";
+    collector.vital("LCP", 812);
+    hide();
+
+    expect((await sent())[0]?.measurements).toEqual([
+      { kind: "web-vital", name: "LCP", value: 812, route: "/e/:slug" },
+    ]);
+  });
+
+  it("gives a real-time failure to the page it happened on", async () => {
+    const { page, hide, sent } = fakePage("/e/product-launch-k3x9q2mz7a");
+    const collector = new Collector(page);
+
+    page.location.pathname = "/e/product-launch-k3x9q2mz7a/watch";
     collector.realtimeFailure("lost");
     hide();
 
     expect((await sent())[0]?.measurements).toEqual([
-      {
-        kind: "realtime-failure",
-        reason: "connect-failed",
-        route: "/e/:slug/watch",
-      },
       { kind: "realtime-failure", reason: "lost", route: "/e/:slug/watch" },
-    ]);
-  });
-
-  it("sends at once what arrives after the page was hidden (Web Vitals' final values)", async () => {
-    const { page, hide, sent } = fakePage();
-    const collector = new Collector(page);
-
-    hide();
-    collector.vital("LCP", 950);
-
-    expect((await sent())[0]?.measurements).toEqual([
-      { kind: "web-vital", name: "LCP", value: 950, route: "/e/:slug" },
     ]);
   });
 
@@ -188,5 +185,25 @@ describe("startBrowserTelemetry", () => {
       { kind: "web-vital", name: "INP", value: 64, route: "/e/:slug" },
       { kind: "web-vital", name: "CLS", value: 0.01, route: "/e/:slug" },
     ]);
+  });
+});
+
+describe("realtimeFailureReporter", () => {
+  it("reports each reason once per page view, and again in the next one", () => {
+    const reported: string[] = [];
+    const firstView = realtimeFailureReporter((reason) =>
+      reported.push(reason),
+    );
+    for (let attempt = 0; attempt < 5; attempt++) {
+      firstView("connect-failed");
+    }
+    firstView("lost");
+    firstView("lost");
+
+    // The visitor comes back to the watch page: a new connection, a new view.
+    const nextView = realtimeFailureReporter((reason) => reported.push(reason));
+    nextView("lost");
+
+    expect(reported).toEqual(["connect-failed", "lost", "lost"]);
   });
 });

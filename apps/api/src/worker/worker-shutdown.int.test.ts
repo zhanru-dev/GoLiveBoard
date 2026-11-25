@@ -1,7 +1,7 @@
 import { randomBytes } from "node:crypto";
 
 import type { StartedValkeyContainer } from "@testcontainers/valkey";
-import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { beforeAll, describe, expect, it, vi } from "vitest";
 
 import { pauseContainer, startValkey } from "../testing/containers.js";
 import { createTestDatabase, type TestDatabase } from "../testing/database.js";
@@ -22,11 +22,11 @@ describe("worker shutdown while Valkey is frozen", () => {
       createTestDatabase(),
       startValkey(),
     ]);
-  });
-
-  afterAll(async () => {
-    await valkey.stop();
-    await database.drop();
+    // Returned, not in afterAll: when the start fails, nothing to stop.
+    return async () => {
+      await valkey.stop();
+      await database.drop();
+    };
   });
 
   it(
