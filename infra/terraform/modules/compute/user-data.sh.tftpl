@@ -18,3 +18,34 @@ chmod 0755 /usr/local/lib/docker/cli-plugins/docker-compose
 
 # Where releases live: one directory per commit, and "current".
 install -d -m 0750 /opt/opspilot /opt/opspilot/releases
+
+# The watchdog (watchdog.sh, beside this file): restarts a container that hangs,
+# every 30 seconds. Docker itself restarts only one that exits.
+cat > /usr/local/sbin/opspilot-watchdog <<'WATCHDOG'
+${watchdog_script}
+WATCHDOG
+chmod 0750 /usr/local/sbin/opspilot-watchdog
+cat > /etc/systemd/system/opspilot-watchdog.service <<'UNIT'
+[Unit]
+Description=Restart OpsPilot containers that hang
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/opspilot-watchdog
+UNIT
+cat > /etc/systemd/system/opspilot-watchdog.timer <<'UNIT'
+[Unit]
+Description=Run the OpsPilot watchdog every 30 seconds
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=30s
+AccuracySec=5s
+
+[Install]
+WantedBy=timers.target
+UNIT
+systemctl daemon-reload
+systemctl enable --now opspilot-watchdog.timer

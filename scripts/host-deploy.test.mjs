@@ -68,6 +68,11 @@ fi
 exit 0
 `;
 
+// Logs when the lock is taken, so a test sees it comes before the work.
+const FAKE_FLOCK = `#!/usr/bin/env bash
+echo "flock $*" >> "$FAKE_LOG"
+`;
+
 const FAKE_CURL = `#!/usr/bin/env bash
 while (($#)); do [[ $1 == -o ]] && { echo "CA bundle" > "$2"; }; shift; done
 `;
@@ -82,6 +87,7 @@ function host(action, env = {}, { running } = {}) {
     ["aws", FAKE_AWS],
     ["docker", FAKE_DOCKER],
     ["curl", FAKE_CURL],
+    ["flock", FAKE_FLOCK],
   ]) {
     writeFileSync(join(bin, name), script);
     chmodSync(join(bin, name), 0o755);
@@ -194,6 +200,16 @@ describe("host-deploy.sh", { timeout: 30_000 }, () => {
     );
     expect(existsSync(join(run.root, "current"))).toBe(false);
   });
+
+  it.each(["deploy", "migrate"])(
+    "takes the deploy lock before anything else in a %s, so the watchdog stands aside",
+    (action) => {
+      const run = host(action);
+
+      expect(run.status, run.stderr).toBe(0);
+      expect(run.calls[0]).toBe("flock 9");
+    },
+  );
 
   it("refuses anything but a full commit SHA before it fetches anything", () => {
     const run = host("deploy", { SHA: "latest" });

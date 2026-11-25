@@ -34,6 +34,12 @@ SHA="$${SHA:?SHA is the commit to migrate or deploy}"
 [[ "$SHA" =~ ^[0-9a-f]{40}$ ]] || { echo "SHA must be a full commit SHA" >&2; exit 2; }
 RELEASE="$ROOT/releases/$SHA"
 
+# One deploy or migration at a time, and the watchdog leaves
+# the containers alone meanwhile: a release coming up is not a hang
+# (infra/terraform/modules/compute/watchdog.sh).
+exec 9>"$ROOT/deploy.lock"
+flock 9
+
 # The release's files, exactly as the pipeline uploaded them.
 install -d -m 0750 "$RELEASE"
 aws s3 cp --region "$REGION" --only-show-errors "s3://${releases_bucket}/$SHA/docker-compose.yml" "$RELEASE/docker-compose.yml"

@@ -70,3 +70,16 @@ run "the_host_reads_only_its_own_configuration" {
     error_message = "KMS decryption only through Parameter Store."
   }
 }
+
+run "the_host_installs_the_watchdog_and_runs_it_every_30_seconds" {
+  command = plan
+
+  assert {
+    condition     = strcontains(aws_instance.host.user_data, trimspace(file("watchdog.sh")))
+    error_message = "The first boot must install watchdog.sh as it is."
+  }
+  assert {
+    condition     = strcontains(aws_instance.host.user_data, "OnUnitActiveSec=30s") && strcontains(aws_instance.host.user_data, "systemctl enable --now opspilot-watchdog.timer")
+    error_message = "The watchdog's timer must be enabled, every 30 seconds."
+  }
+}

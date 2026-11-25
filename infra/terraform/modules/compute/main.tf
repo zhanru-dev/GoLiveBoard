@@ -164,6 +164,7 @@ resource "aws_instance" "host" {
     compose_version = var.compose_version
     compose_sha256  = var.compose_sha256
     deploy_document = var.deploy_document_name
+    watchdog_script = trimspace(file("${path.module}/watchdog.sh"))
   })
   user_data_replace_on_change = true
 
