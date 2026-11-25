@@ -1,0 +1,79 @@
+{
+	# The production-like stack (docker-compose.prod.yml) serves HTTPS, so
+	# secure cookies, HSTS and mixed-content rules behave as in production.
+	# Caddy listens on the same ports inside the container as on the host.
+	http_port {$HTTP_PORT}
+	https_port {$HTTPS_PORT}
+	# Caddy's own redirect leaves out the port when it is Caddy's HTTPS port
+	# (it assumes 443 outside), so the HTTP site below redirects instead.
+	auto_https disable_redirects
+	# The container cannot add the local authority to anyone's trust store.
+	skip_install_trust
+	# The admin API stays inside the container; the health check uses it.
+	admin localhost:2019
+}
+
+(upstream_transport) {
+	transport http {
+		# Close idle connections to an upstream before Node.js does (its
+		# keep-alive timeout is 5 seconds). Otherwise Caddy can reuse a connection
+		# at the moment Node closes it, and the request fails with a 502.
+		keepalive 4s
+	}
+}
+
+(https_only) {
+	# Locally a certificate from Caddy's own authority, which browsers do not
+	# trust until you add it (docs/06, section 1.4). In AWS (milestone 10) the
+	# site uses a public certificate instead.
+	tls internal
+	header {
+		# Browsers refuse plain HTTP to this host and its subdomains for a year.
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		-Server
+	}
+	# Methods no page or API uses are refused here: Next.js answered TRACE
+	# with a 500, an error report and a 5xx for the alert to count
+	# (docs/security-review.md, F4).
+	# (Its own handle, first: handle blocks run before respond.)
+	@unused_method method TRACE TRACK CONNECT
+	handle @unused_method {
+		respond 405
+	}
+}
+
+{$SITE_HOST} {
+	import https_only
+	encode zstd gzip
+
+	# A new ID for every request, set here at the edge and never taken from the
+	# client, so one trustworthy ID follows the request through the logs.
+	request_header X-Request-Id {http.request.uuid}
+
+	@api path /api/* /realtime /realtime/*
+	handle @api {
+		reverse_proxy {$API_UPSTREAM} {
+			import upstream_transport
+		}
+	}
+
+	handle {
+		reverse_proxy {$WEB_UPSTREAM} {
+			import upstream_transport
+		}
+	}
+}
+
+# Plain HTTP only redirects, keeping the path and query.
+http://{$SITE_HOST}, http://{$STORAGE_HOST} {
+	redir https://{host}:{$HTTPS_PORT}{uri} permanent
+}
+
+# Object storage, as Amazon S3 is in production: its own origin over HTTPS.
+# Presigned URLs sign the host, which Caddy passes through unchanged.
+{$STORAGE_HOST} {
+	import https_only
+	reverse_proxy {$STORAGE_UPSTREAM} {
+		import upstream_transport
+	}
+}

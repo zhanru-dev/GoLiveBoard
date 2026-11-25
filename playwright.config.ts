@@ -1,72 +1,57 @@
 import { defineConfig, devices } from "@playwright/test";
 
-// Browser suites create and delete fixtures directly in PostgreSQL. Refuse to run
-// against anything that is not an explicitly disposable *_test database, instead of
-// silently defaulting to the developer database.
-const database = process.env.DATABASE_URL;
-if (!database)
-  throw new Error(
-    "DATABASE_URL is required. Run through scripts/with-chat-test-env.mjs (or the media/broadcast wrappers).",
-  );
-if (
-  !new URL(database).pathname.endsWith("_test") &&
-  process.env.E2E_ALLOW_NON_TEST_DATABASE !== "1"
-)
-  throw new Error(
-    "Browser tests require a disposable *_test database (set E2E_ALLOW_NON_TEST_DATABASE=1 to override).",
-  );
-const webUrl = (
-  process.env.E2E_WEB_URL ??
-  `http://localhost:${process.env.OPSPILOT_TEST_WEB_PORT ?? "3000"}`
-).replace(/\/+$/, "");
-const apiUrl = (
-  process.env.NEXT_PUBLIC_API_URL ??
-  `http://localhost:${process.env.OPSPILOT_TEST_API_PORT ?? "4100"}/api/v1`
-).replace(/\/+$/, "");
-// Reusing a running server can attach tests to a developer API/database. Opt in only.
-const reuse = !process.env.CI && process.env.E2E_REUSE_SERVER === "1";
+import { E2E_TARGET, target } from "./e2e/target.js";
+
+/**
+ * Browser tests, through the proxy exactly as a browser uses OpsPilot.
+ *
+ * - `npm run test:e2e`: against production builds on this machine. Before
+ *   running: `npm run services:up`, `npm run db:deploy` and `npm run build`.
+ * - `npm run test:e2e:stack`: against the production images over HTTPS.
+ *   Before running: `npm run stack:up`.
+ * - `E2E_TARGET=deployed DEPLOYED_URL=https://… npx playwright test`: the
+ *   smoke tests only, against a deployed environment (the deploy pipeline).
+ */
+const deployed = E2E_TARGET === "deployed";
 
 export default defineConfig({
   testDir: "./e2e",
-  testIgnore: [
-    "deployment.smoke.spec.ts",
-    "broadcast.spec.ts",
-    "chat-recovery.spec.ts",
-    "**/*.ui.spec.ts",
-  ],
-  fullyParallel: false,
-  forbidOnly: Boolean(process.env.CI),
-  retries: process.env.CI ? 2 : 0,
-  workers: 1,
-  reporter: process.env.CI ? [["html", { open: "never" }], ["github"]] : "list",
+  // A deployed environment runs its smoke tests and nothing else: the other
+  // tests create data, and reset rate limits through the stack's Valkey.
+  testMatch: deployed ? ["deployed.spec.ts"] : undefined,
+  globalSetup: deployed ? undefined : "./e2e/global-setup.ts",
+  fullyParallel: true,
+  forbidOnly: !!process.env.CI,
+  retries: 0,
+  reporter: process.env.CI ? [["github"], ["html", { open: "never" }]] : "list",
   use: {
-    baseURL: webUrl,
+    baseURL: target.baseURL,
+    // The stack's certificate comes from Caddy's local authority, which the
+    // test browser does not trust; the smoke tests check the certificate
+    // against that authority themselves.
+    // DEPLOYED_INSECURE=1 lets the deployed smoke tests be tried against the
+    // local stack, whose authority is not trusted; never set in the pipeline.
+    ignoreHTTPSErrors:
+      E2E_TARGET === "stack" || process.env.DEPLOYED_INSECURE === "1",
     trace: "retain-on-failure",
-    screenshot: "only-on-failure",
-    ...devices["Desktop Chrome"],
-    ...(process.env.CI ? {} : { channel: "chrome" }),
   },
-  webServer: [
-    {
-      command: "npm run dev:worker",
-      wait: { stdout: /OpsPilot background worker is ready/ },
-      timeout: 120_000,
-    },
-    {
-      command: "npm run dev:api",
-      url: `${apiUrl}/health/ready`,
-      reuseExistingServer: reuse && process.env.E2E_PRODUCTION_WEB !== "1",
-      timeout: 120_000,
-    },
-    {
-      command:
-        process.env.E2E_PRODUCTION_WEB === "1"
-          ? "node scripts/start-chat-recovery-web.mjs"
-          : "npm run dev:web",
-      env: { PORT: new URL(webUrl).port || "3000" },
-      url: `${webUrl}/login`,
-      reuseExistingServer: reuse && process.env.E2E_PRODUCTION_WEB !== "1",
-      timeout: 120_000,
-    },
-  ],
+  projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
+  // The stack runs its own servers.
+  webServer:
+    E2E_TARGET === "stack" || deployed
+      ? []
+      : [
+          {
+            command: "npm run start -w @opspilot/api",
+            url: "http://127.0.0.1:4301/api/v1/health/ready",
+            reuseExistingServer: !process.env.CI,
+            stdout: "ignore",
+          },
+          {
+            command: "npm run start -w @opspilot/web",
+            url: "http://127.0.0.1:3301",
+            reuseExistingServer: !process.env.CI,
+            stdout: "ignore",
+          },
+        ],
 });

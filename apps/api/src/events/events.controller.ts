@@ -3,79 +3,82 @@ import {
   Controller,
   Get,
   Param,
-  ParseIntPipe,
   ParseUUIDPipe,
   Patch,
   Post,
   Query,
-} from '@nestjs/common';
-import { EventStatus } from '@prisma/client';
-import { CurrentUser } from '../common/decorators/current-user.decorator';
-import { Roles } from '../common/decorators/roles.decorator';
-import type { AuthenticatedUser } from '../common/request-context';
-import { ReadinessService } from '../readiness/readiness.service';
-import { CreateEventDto } from './dto/create-event.dto';
-import { TransitionEventDto } from './dto/transition-event.dto';
-import { UpdateEventDto } from './dto/update-event.dto';
-import { EventsService, mutableRoles } from './events.service';
+  Res,
+} from "@nestjs/common";
+import {
+  CreateEventRequest,
+  type EventDetail,
+  type EventPage,
+  ListEventsQuery,
+  UpdateEventRequest,
+} from "@opspilot/contracts";
+import type { Response } from "express";
 
-@Controller('stream-events')
+import { type Actor, CurrentActor, RequireRole } from "../auth/actor.js";
+import { API_PREFIX } from "../http/api-prefix.js";
+import { etagFor, IfMatchVersion } from "../http/concurrency.js";
+import { IdempotencyKey } from "../idempotency/idempotency.js";
+import { EventsService } from "./events.service.js";
+
+@Controller("events")
 export class EventsController {
-  constructor(
-    private readonly events: EventsService,
-    private readonly readiness: ReadinessService,
-  ) {}
+  constructor(private readonly events: EventsService) {}
 
   @Get()
   list(
-    @CurrentUser() user: AuthenticatedUser,
-    @Query('search') search?: string,
-    @Query('status') status?: EventStatus,
-    @Query('page', new ParseIntPipe({ optional: true })) page?: number,
-    @Query('pageSize', new ParseIntPipe({ optional: true })) pageSize?: number,
-  ) {
-    return this.events.list(user, { search, status, page, pageSize });
-  }
-
-  @Get(':id')
-  get(
-    @Param('id', ParseUUIDPipe) id: string,
-    @CurrentUser() user: AuthenticatedUser,
-  ) {
-    return this.events.get(id, user);
-  }
-
-  @Get(':id/readiness')
-  readinessFor(
-    @Param('id', ParseUUIDPipe) id: string,
-    @CurrentUser() user: AuthenticatedUser,
-  ) {
-    return this.readiness.calculate(id, user.workspaceId);
+    @CurrentActor() actor: Actor,
+    @Query({ schema: ListEventsQuery }) query: ListEventsQuery,
+  ): Promise<EventPage> {
+    return this.events.list(actor, query);
   }
 
   @Post()
-  @Roles(...mutableRoles)
-  create(@Body() dto: CreateEventDto, @CurrentUser() user: AuthenticatedUser) {
-    return this.events.create(dto, user);
+  @RequireRole("MANAGER")
+  async create(
+    @CurrentActor() actor: Actor,
+    @Body({ schema: CreateEventRequest }) body: CreateEventRequest,
+    @IdempotencyKey() idempotencyKey: string | undefined,
+    @Res({ passthrough: true }) response: Response,
+  ): Promise<EventDetail> {
+    const { event } = await this.events.create(actor, body, idempotencyKey);
+    response
+      .status(201)
+      .location(`/${API_PREFIX}/events/${event.id}`)
+      .setHeader("ETag", etagFor(event.version));
+    return event;
   }
 
-  @Patch(':id')
-  @Roles(...mutableRoles)
-  update(
-    @Param('id', ParseUUIDPipe) id: string,
-    @Body() dto: UpdateEventDto,
-    @CurrentUser() user: AuthenticatedUser,
-  ) {
-    return this.events.update(id, dto, user);
+  @Get(":eventId")
+  async get(
+    @CurrentActor() actor: Actor,
+    @Param("eventId", ParseUUIDPipe) eventId: string,
+    @Res({ passthrough: true }) response: Response,
+  ): Promise<EventDetail> {
+    const event = await this.events.get(actor, eventId);
+    response.setHeader("ETag", etagFor(event.version));
+    return event;
   }
 
-  @Post(':id/transitions')
-  @Roles(...mutableRoles)
-  transition(
-    @Param('id', ParseUUIDPipe) id: string,
-    @Body() dto: TransitionEventDto,
-    @CurrentUser() user: AuthenticatedUser,
-  ) {
-    return this.events.transition(id, dto.status, user);
+  @Patch(":eventId")
+  @RequireRole("MANAGER")
+  async update(
+    @CurrentActor() actor: Actor,
+    @Param("eventId", ParseUUIDPipe) eventId: string,
+    @IfMatchVersion() expectedVersion: number,
+    @Body({ schema: UpdateEventRequest }) body: UpdateEventRequest,
+    @Res({ passthrough: true }) response: Response,
+  ): Promise<EventDetail> {
+    const event = await this.events.update(
+      actor,
+      eventId,
+      expectedVersion,
+      body,
+    );
+    response.setHeader("ETag", etagFor(event.version));
+    return event;
   }
 }

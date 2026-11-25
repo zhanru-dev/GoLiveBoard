@@ -1,0 +1,287 @@
+# 04 · API and contracts
+
+## 1. Principles
+
+- **One source of truth.** Every request, response, real-time message and webhook payload is a Zod schema in `packages/contracts`. The API validates with it, the web app types and validates forms with it, and the OpenAPI document is generated from it.
+- **Resource-oriented REST** for reads and writes; **Socket.IO** for two-way live interaction; **server-sent events** for one-way live dashboards; **webhooks** for other systems.
+- **Safe by default.** Retries never duplicate, stale writes never overwrite, and errors never leak internals.
+
+## 2. HTTP conventions
+
+| Topic          | Convention                                                                                                                                                                                                                                                                                                                 |
+| -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Base path      | `/api/v1`. Additive changes stay in `v1`; breaking changes need `v2`.                                                                                                                                                                                                                                                      |
+| Format         | JSON in and out (`application/json`), field names in `camelCase`, enum values in `UPPER_SNAKE_CASE`.                                                                                                                                                                                                                       |
+| Time           | ISO 8601 in UTC with `Z`, e.g. `2026-11-20T18:30:00Z`.                                                                                                                                                                                                                                                                     |
+| IDs            | UUID strings. Public pages use the event `slug` instead.                                                                                                                                                                                                                                                                   |
+| Authentication | Cookies only (`HttpOnly`). No tokens in URLs or local storage.                                                                                                                                                                                                                                                             |
+| CSRF           | State-changing requests must send an `Origin` header equal to the application origin.                                                                                                                                                                                                                                      |
+| Workspace      | Workspace routes act on the session's active workspace. Clients send `X-Workspace-Id` with the workspace they are showing; if the session has switched since, the API answers `409 WORKSPACE_CHANGED`.                                                                                                                     |
+| Pagination     | Cursor-based: `?limit=25&cursor=…` → `{ "items": [...], "nextCursor": "…"                                                                                                                                                                                                                                                  | null }`. `limit` defaults to 25, maximum 100. Cursors are opaque. |
+| Concurrency    | Reads of editable resources return `ETag: "<version>"`. Updates require `If-Match`; a missing header (or `*`, which would match any version) returns `428`, a stale one `412`. A weak tag or a list never matches, so it is also `412`.                                                                                    |
+| Idempotency    | Creates that clients may retry accept an `Idempotency-Key` header (UUID). The same key with the same body returns the original response; with a different body, `422`. Keys expire after 24 hours and belong to one user.                                                                                                  |
+| Rate limits    | `429` with `Retry-After`. Limits per route are listed in the endpoint catalogue. In the demo workspace every state-changing request also counts against 300 an hour per address and 3,000 an hour for the whole workspace; while Valkey cannot count them, such requests get `503` (the other limits are skipped instead). |
+| Caching        | Authenticated responses send `Cache-Control: no-store`.                                                                                                                                                                                                                                                                    |
+
+### 2.1 Status codes
+
+| Code                  | Meaning in OpsPilot                                                                                  |
+| --------------------- | ---------------------------------------------------------------------------------------------------- |
+| `200` / `201` / `204` | Success; `201` for creates with a `Location` header                                                  |
+| `400`                 | The request does not match its schema (field errors in `errors[]`)                                   |
+| `401`                 | No valid session                                                                                     |
+| `403`                 | Signed in, but the role does not allow this action                                                   |
+| `404`                 | Not found — **also returned for resources in another workspace**, so their existence is not revealed |
+| `409`                 | The action conflicts with the resource's state (illegal transition, hard blockers, archived event)   |
+| `412`                 | `If-Match` does not match the current version                                                        |
+| `413`                 | The request body is larger than 100 KB                                                               |
+| `415`                 | The request body uses a non-UTF character set or an unsupported `Content-Encoding`                   |
+| `422`                 | Idempotency key reused with a different request body                                                 |
+| `428`                 | `If-Match` required but missing                                                                      |
+| `429`                 | Rate limit exceeded                                                                                  |
+| `500`                 | Unexpected error; the response contains only the request ID                                          |
+
+### 2.2 Error format
+
+All errors use `application/problem+json` ([RFC 9457](https://www.rfc-editor.org/rfc/rfc9457)) with a stable `code`:
+
+```json
+{
+  "type": "/problems/event-has-blockers",
+  "title": "The event has unresolved hard blockers",
+  "status": 409,
+  "code": "EVENT_HAS_BLOCKERS",
+  "detail": "Resolve the blockers before moving the event to LIVE.",
+  "blockers": [
+    {
+      "criterion": "STREAM_REACHABLE",
+      "evidence": "Last check failed 2 minutes ago (HTTP 404)."
+    }
+  ],
+  "requestId": "3c6d90b0-27df-40a7-bdac-23533c61a1f5"
+}
+```
+
+Validation errors add `errors: [{ "path": "endsAt", "code": "too_small", "message": "End must be after start." }]`.
+
+Error codes are defined once in `packages/contracts/src/errors.ts`; clients switch on `code`, never on `title` or `detail`.
+
+## 3. Endpoint catalogue
+
+`Role` column: **O** Owner, **M** Manager, **A** Analyst, **Att** attendee session, **Pub** no session. Owners can do everything Managers can.
+
+### 3.1 Health and session
+
+| Method and path                     | Role                 | Notes                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| ----------------------------------- | -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /health/live`                  | Pub                  | Process is running                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| `GET /health/ready`                 | Pub                  | Database and Valkey reachable; `503` otherwise. Health responses use their own body (`HealthReport`), not problem details, because load balancers and uptime checks read them                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| `POST /browser-telemetry`           | Pub                  | Measurements from visitors' browsers, sent with `sendBeacon` (docs/06, section 7): `{ measurements: [...] }`, up to 10, each a Core Web Vital (`LCP`, `INP`, `CLS`) or a real-time failure (`connect-failed`, `lost`), with a route template from a fixed list (never a real path). Always `204`. Dropped quietly: everything beyond 120 requests per address in 10 minutes; beyond one Web Vital per metric and route, and one failure per reason, per sender (an address, an IPv6 /64) in 30 minutes; and everything while Valkey cannot count. Anyone can send to it, so these limits are what keep one sender from moving the alerts |
+| `POST /auth/sign-up`                | Pub                  | Creates user, workspace, Owner membership. Always `202` with the same body; an already registered email only gets an email. Rate-limited.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| `POST /auth/sign-in`                | Pub                  | `204`; sets the session cookies. Wrong password, unknown email and disabled account fail identically (`CREDENTIALS_INVALID`). 10 failures / 15 min per account and per IP; every attempt reserves a slot before the password is checked and a success returns it.                                                                                                                                                                                                                                                                                                                                                                        |
+| `POST /auth/refresh`                | Pub (refresh cookie) | `204`; rotates the refresh token. The previous token within 10 s of its rotation: `204` with no `Set-Cookie`, leaving the cookies the concurrent request set. Later reuse revokes the session.                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| `POST /auth/sign-out`               | Pub (refresh cookie) | `204`; revokes the session named by the refresh cookie (works with an expired access token) and clears the cookies                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| `POST /auth/password-reset/request` | Pub                  | Always `202` with the same body; at most 3 emails per account and 10 requests per address an hour                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| `POST /auth/password-reset/confirm` | Pub                  | Token + new password; the link works once within 30 minutes; signs the user out everywhere                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| `POST /auth/demo`                   | Pub                  | Demo mode only (`DEMO_MODE=true`), otherwise `404`. `204`; sets the session cookies for the shared demo workspace's Manager, creating the workspace on first use. 20 per hour per address. The newest 1,000 demo sessions are kept; each sign-in ends the oldest beyond that, and any that have expired.                                                                                                                                                                                                                                                                                                                                 |
+| `GET /me`                           | O M A                | User, memberships, active workspace and role                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| `PUT /me/active-workspace`          | O M A                | Switches the session's workspace; one the user does not belong to is `404`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+
+### 3.2 Workspace and team
+
+A membership, invitation or workspace outside the session's active workspace is always `404`, never `403`, so other workspaces' data cannot even be confirmed to exist. Links in emails carry their token in the URL fragment (`#token=…`), which browsers never send to a server, and the web app posts it in a request body.
+
+| Method and path                                              | Role            | Notes                                                                                                          |
+| ------------------------------------------------------------ | --------------- | -------------------------------------------------------------------------------------------------------------- |
+| `GET /workspace` · `PATCH /workspace`                        | O (read: O M A) | Name, retention period                                                                                         |
+| `GET /workspace/members`                                     | O M A           |                                                                                                                |
+| `PATCH /workspace/members/:membershipId`                     | O               | Role change; last Owner protected                                                                              |
+| `DELETE /workspace/members/:membershipId`                    | O               | Revokes the member's sessions in this workspace; last Owner protected                                          |
+| `POST /workspace/members/:membershipId/sign-out`             | O               | Signs the member out everywhere (FR-AUTH-3)                                                                    |
+| `GET /workspace/invitations` · `POST /workspace/invitations` | O               | Invite by email and role; revokes the address's previous unanswered invitation, so only the newest link works  |
+| `DELETE /workspace/invitations/:id`                          | O               | Revoke                                                                                                         |
+| `POST /team-invitations/preview`                             | Pub             | Token in the body; workspace, email, role and whether an account exists                                        |
+| `POST /team-invitations/accept`                              | Pub             | Token in the body; creates the user (name and password required) or links an existing one, then the membership |
+
+### 3.3 Events and Launch Control
+
+| Method and path                                   | Role      | Notes                                                                                                                                                                                                                                                                                                                                                                      |
+| ------------------------------------------------- | --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /events`                                     | O M A     | `q` (title, case-insensitive), `status` (repeatable), `from` ≤ start < `to`, cursor; latest start first                                                                                                                                                                                                                                                                    |
+| `POST /events`                                    | M         | `Idempotency-Key`; in the demo workspace `403 DEMO_RESTRICTED` once it holds 40 events                                                                                                                                                                                                                                                                                     |
+| `GET /events/:id`                                 | O M A     | `ETag`; includes `allowedTransitions`, the statuses the lifecycle allows next, so clients need not copy the table                                                                                                                                                                                                                                                          |
+| `PATCH /events/:id`                               | M         | `If-Match`; `409 EVENT_ARCHIVED` once archived                                                                                                                                                                                                                                                                                                                             |
+| `POST /events/:id/transitions`                    | M         | Body `{ "to": "READY" }`; `200` with the event; `409 EVENT_HAS_BLOCKERS` (with `blockers`) or `409 ILLEGAL_TRANSITION` (with `from`, `to`, `allowed`)                                                                                                                                                                                                                      |
+| `GET /events/:id/readiness`                       | O M A     | Score, criteria with evidence, blockers, next actions, rule version                                                                                                                                                                                                                                                                                                        |
+| `GET /events/:id/runbook-tasks` · `POST …`        | O M A · M |                                                                                                                                                                                                                                                                                                                                                                            |
+| `PATCH /runbook-tasks/:id` · `DELETE …`           | M         | `If-Match`; `status: "DONE"` completes (records who and when), `"TODO"` reopens                                                                                                                                                                                                                                                                                            |
+| `POST /runbook-tasks/:id/move`                    | M         | `{ "after": "<taskId>" or null }`; returns the whole runbook in its new order                                                                                                                                                                                                                                                                                              |
+| `GET /events/:id/access-policy` · `PUT …`         | O M A · M | `404` until set. The first `PUT` creates it and must not send `If-Match`; later ones must                                                                                                                                                                                                                                                                                  |
+| `PUT /events/:id/stream`                          | M         | `{ "url": "https://…/index.m3u8" }`; the host must resolve only to public addresses (SSRF); returns the event and queues a check at once; `403 DEMO_RESTRICTED` in the demo workspace                                                                                                                                                                                      |
+| `GET /events/:id/stream/checks` · `POST …`        | O M A · M | Most recent first, cursor; `POST` asks for a check now: `202`, at most 6 a minute per event (counted only after the event is found in the actor's workspace), `409 STREAM_NOT_SET` without a URL                                                                                                                                                                           |
+| `GET /events/:id/incidents`                       | O M A     | Every incident, most recently opened first (not paginated: at most a handful per event)                                                                                                                                                                                                                                                                                    |
+| `POST /events/:id/assets/holding-slate` · `GET …` | M · O M A | `{ contentType, sizeBytes }` → `201` with a presigned `PUT` URL valid 5 minutes and the asset ID; type and size are signed, so storage refuses any other file; in the demo workspace `403 DEMO_RESTRICTED` once it holds 50 slates. `GET` returns the current slate with a 5-minute download link                                                                          |
+| `POST /assets/:id/complete`                       | M         | Copies the upload to the asset's final key and checks that copy's size and first bytes against the declared JPEG, PNG or WebP, then marks it `READY`; `409 UPLOAD_NOT_FOUND` before the upload, `409 EVENT_ARCHIVED` once archived, `422 ASSET_REJECTED` (files deleted) otherwise, `503 SERVICE_UNAVAILABLE` if storage does not answer in time (the asset stays pending) |
+
+### 3.4 Audience (staff side)
+
+Every write locks the event row and then the attendee's, the order every path that touches both takes (registration, verification and reminders too, then links and sessions). Attendee addresses never appear in audit entries or logs; a mail server's refusal, which names the recipient, is logged and reported only as its SMTP codes (`MailDeliveryError`).
+
+| Method and path                                 | Role  | Notes                                                                                                                                                                                                        |
+| ----------------------------------------------- | ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `GET /events/:id/attendees`                     | O M A | `?status=`, cursor; newest registration first. Analysts see addresses masked (`a***@example.com`); an erased attendee has none                                                                               |
+| `POST /events/:id/attendees/:attendeeId/revoke` | M     | Their sessions and unused links stop working at once (the 5-second end of live sessions arrives with the real-time gateway in milestone 6). Repeating it changes nothing. `409 EVENT_ARCHIVED` once archived |
+| `POST /events/:id/attendees/:attendeeId/erase`  | M     | UK GDPR erasure, also after the event is archived: anonymised at once (docs/03, section 8), with their sessions, links, demo inbox mail and the event's invitations for their address. Audited once          |
+| `GET /events/:id/invitations` · `POST …`        | M     | `POST { email }` emails a link to the event page (not in the demo workspace); inviting a live address again returns its invitation and sends nothing                                                         |
+| `DELETE /event-invitations/:id`                 | M     | `204`; also revokes the attendee who registered with that address. Repeating it changes nothing                                                                                                              |
+
+### 3.5 Public and attendee
+
+`Att` routes need the attendee session cookie (`__Host-opspilot_attendee`, an opaque token stored only as a hash). An attendee keeps at most 5 sessions (signing in on another browser ends the oldest) and one unused link: registering again replaces it. Every such request reloads the session, the attendee, the event and its access policy and decides again (FR-AD-2): no session `401`; a session for another event `404`, as if the event did not exist; no longer admitted (revoked, erased, a stricter policy, a revoked invitation, the event archived or cancelled) `403`. A browser holds one attendee session at a time.
+
+| Method and path                           | Role | Notes                                                                                                                                                                                                                                             |
+| ----------------------------------------- | ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /public/events/:slug`                | Pub  | Data for the public page; no internal IDs. `404` for a draft, an archived event and an unknown slug alike                                                                                                                                         |
+| `POST /public/events/:slug/registrations` | Pub  | `{ name, email, privacyNoticeVersion, consent: true, remindersOptIn }`. Always `202` with the same body (no enumeration); only the mailbox learns anything. `400` if the privacy notice changed since the form was shown. 10 per hour per address |
+| `POST /public/attendee-verifications`     | Pub  | `{ "token": "…" }`, from the link: single-use, 15 minutes. `200 { slug }` and sets the attendee session cookie; `400 TOKEN_INVALID`; `403` if the event no longer admits them. 30 per hour per address                                            |
+| `GET /public/events/:slug/me`             | Att  | The attendee's own registration                                                                                                                                                                                                                   |
+| `POST /public/events/:slug/sign-out`      | Att  | `204`; ends this browser's attendee session                                                                                                                                                                                                       |
+| `GET /public/events/:slug/watch`          | Att  | The watch page's data: public status, the stream's address while `LIVE` only, and a short-lived link to the holding slate (verified slates only)                                                                                                  |
+| `POST /public/reminders/unsubscribe`      | Pub  | `{ "token": "…" }` from the reminder email (an HMAC of the attendee ID; nothing stored). `204`, also when repeated; `400 TOKEN_INVALID`                                                                                                           |
+| `GET /public/demo-inbox`                  | Pub  | Demo mode only, otherwise `404`. The mail for the attendees this browser registered in the demo workspace (by its `__Host-opspilot_demo_inbox` cookie), newest first                                                                              |
+
+### 3.6 Live interaction
+
+Staff reach an event by its ID, attendees by its slug (their pages carry no internal IDs). Chat is written over the real-time connection (section 4); everything else here is HTTP. Writes are decided again under the event's row lock, which every change to who may take part also takes. Whether questions wait for approval is the event's `questionsPreModerated`, changed with `PATCH /events/:id`.
+
+| Method and path                                                            | Role        | Notes                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| -------------------------------------------------------------------------- | ----------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /events/:id/chat/messages` · `GET /public/events/:slug/chat/messages` | O M A · Att | History, oldest first, with `latestSequence` to join after; `before=<sequence>` for older pages, `limit` up to 100                                                                                                                                                                                                                                                                                                      |
+| `DELETE /events/:id/chat/messages/:messageId`                              | M           | FR-RN-3: the text goes for everyone, a tombstone stays (`MESSAGE_DELETED` on the journal), audited. `200` with the tombstone; again, nothing changes                                                                                                                                                                                                                                                                    |
+| `GET /events/:id/questions` · `GET /public/events/:slug/questions`         | O M A · Att | What the viewer may see (moderators: everything; others: published, answered and their own), pinned first, then by votes, with `mine`, `votedByMe` and `latestSequence`                                                                                                                                                                                                                                                 |
+| `POST /events/:id/questions` · `POST /public/events/:slug/questions`       | M · Att     | `{ body }`, `Idempotency-Key`. `201`. An attendee's question is `PENDING` while pre-moderation is on; 5 per author per minute; `409 INTERACTION_CLOSED` once the event has ended                                                                                                                                                                                                                                        |
+| `PUT /public/events/:slug/questions/:id/vote` · `DELETE …`                 | Att         | One vote per attendee (primary key); idempotent. Published questions only (`409 QUESTION_NOT_VOTABLE`); votes leave the question's version alone. 60 per attendee per minute                                                                                                                                                                                                                                            |
+| `PATCH /questions/:id`                                                     | M           | `{ status?, pinned? }` with `If-Match`: approve, hide, mark answered, reopen, pin (lowest free slot), unpin. `412` on a stale version; `409 QUESTION_STATUS_INVALID`, `QUESTION_NOT_PINNABLE`, `PIN_LIMIT_REACHED` (three at most, also under concurrency). Audited                                                                                                                                                     |
+| `POST /events/:id/question-triage-runs`                                    | M           | Starts a run on the newest 200 open questions; `202` with its ID. A run already queued or running is returned instead. `503 TRIAGE_UNAVAILABLE` without a model, `409 TRIAGE_NOTHING_TO_SORT`, `429 TRIAGE_BUDGET_SPENT` (the demo's daily budget, or `TRIAGE_DAILY_BUDGET_USD`), 10 per event per 10 minutes                                                                                                           |
+| `GET /events/:id/question-triage-runs/latest`                              | M           | The event's most recent run (`404` if none), so a moderator who comes back finds it                                                                                                                                                                                                                                                                                                                                     |
+| `GET /question-triage-runs/:id`                                            | M           | Status, suggestions (groups with representative, questions and reason; the answer order) or the failure, and model, latency, tokens and cost                                                                                                                                                                                                                                                                            |
+| `POST /question-triage-runs/:id/decision`                                  | M           | `{ acceptedGroups }` (indexes; none rejects all). Once (`409 TRIAGE_ALREADY_DECIDED`), in one transaction under the event lock, against the questions as they are now: a group merges only into a representative that is published or answered, and leaves hidden members alone; `mergedCount` says how many questions it merged. Audited. Merged questions reach other viewers as `WITHDRAWN`, the kept one as `VOTED` |
+| `GET /events/:id/live-ops`                                                 | O M A       | Snapshot for the operations room                                                                                                                                                                                                                                                                                                                                                                                        |
+| `GET /events/:id/live-ops/stream`                                          | O M A       | Server-sent events (section 5)                                                                                                                                                                                                                                                                                                                                                                                          |
+
+### 3.7 Record
+
+| Method and path                             | Role  | Notes                                                                                                                      |
+| ------------------------------------------- | ----- | -------------------------------------------------------------------------------------------------------------------------- |
+| `GET /audit-entries`                        | O M A | `eventId`, `actorId`, `action`, `from`, `to`, cursor                                                                       |
+| `GET /webhook-endpoints` · `POST …`         | O     | Secret returned once on create                                                                                             |
+| `PATCH /webhook-endpoints/:id` · `DELETE …` | O     |                                                                                                                            |
+| `POST /webhook-endpoints/:id/rotate-secret` | O     | New secret returned once                                                                                                   |
+| `GET /webhook-deliveries`                   | O     | `endpointId`, `status`, cursor; includes attempts                                                                          |
+| `POST /webhook-deliveries/:id/redeliver`    | O     | Creates a new attempt                                                                                                      |
+| `GET /events/:id/report`                    | O M A | Once `COMPLETED` (also archived after): `409 REPORT_NOT_AVAILABLE` before, and for a cancelled event                       |
+| `GET /events/:id/report.csv`                | O M A | `text/csv`: figures, minutes and incidents as three tables; text that a spreadsheet would run as a formula starts with `'` |
+
+## 4. Real-time protocol (Socket.IO)
+
+Path `/realtime` on the site's own origin, **WebSocket only**: browsers always send `Origin` on a WebSocket handshake, so the server refuses other sites outright, and without long-polling no instance needs sticky sessions. The handshake is authenticated by the browser's cookies (a staff session, an attendee session, or both). Events are named by their **slug**. Message names and payloads are Zod schemas in `packages/contracts/src/realtime.ts`.
+
+Access is decided again on every join and message (chat, Q&A and heartbeats under the event's row lock), and whenever something that decides it changes: the change writes an `access_changes` row in its own transaction (from the API or the worker), every instance reads the recent rows every second, and re-checks the connections they concern, telling them `session.revoked` and disconnecting those no longer allowed, within seconds (FR-AD-4), whether or not Valkey is up. A connection refused because its event's status changed is told the current status first. Every connection is also re-checked every 30 seconds (`REALTIME_SWEEP_MS`), which is how expired sessions end. Limits: 60 connections per address per minute; 10 per session across instances, taken atomically in Valkey (when Valkey cannot answer, 10 per session on each instance); messages up to 16 KiB (a larger one ends the connection); 30 messages per connection per 10 seconds; 20 chat messages per author per minute.
+
+```mermaid
+sequenceDiagram
+  autonumber
+  participant C as Client
+  participant S as API (gateway)
+  participant D as PostgreSQL
+  C->>S: connect (cookies)
+  S->>S: authenticate session
+  C->>S: channel.join { slug, channel: "CHAT", afterSequence: 41 }
+  S->>D: check eligibility · read journal after 41 (limit 500)
+  S-->>C: ack { replay: [42..57], latestSequence: 57 }
+  Note over C: apply replay, then live events
+  C->>S: chat.send { slug, clientMessageId, body }
+  S->>D: BEGIN · next sequence · insert message + journal · COMMIT
+  S-->>C: ack { message (sequence 58) }
+  S-->>C: chat.events [{ sequence: 58, kind: "MESSAGE_CREATED", message }]
+  Note over C: duplicates ignored by sequence
+```
+
+| Direction       | Name              | Payload                                        | Notes                                                                                                                                                                                                                                                                                      |
+| --------------- | ----------------- | ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Direction       | Name              | Payload                                        | Notes                                                                                                                                                                                                                                                                                      |
+| --------------- | ----------------- | -------------------------------------------    | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------                                                                                                                |
+| client → server | `channel.join`    | `{ slug, channel, afterSequence }`             | Ack returns the replay (at most 500) and the latest sequence, or `RESYNC_REQUIRED` if the gap is larger or the client is ahead (the demo was reset)                                                                                                                                        |
+| client → server | `channel.leave`   | `{ slug, channel }`                            |                                                                                                                                                                                                                                                                                            |
+| client → server | `chat.send`       | `{ slug, clientMessageId, body }`              | Ack returns the stored message; retrying with the same `clientMessageId` returns the same message and sends nothing again. Attendees, Managers and Owners; not Analysts                                                                                                                    |
+| client → server | `watch.heartbeat` | `{ slug }`                                     | Every 30 s while an attendee watches a `LIVE` event: one attendance row per attendee and minute (FR-RN-7)                                                                                                                                                                                  |
+| server → client | `chat.events`     | `[{ sequence, kind, message }, …]`             | `kind`: `MESSAGE_CREATED`, `MESSAGE_DELETED`. One event's chat events, in order, gathered over at most 100 ms into one frame per connection (NFR-4: a frame per message is a write per attendee per message)                                                                               |
+| server → client | `questions.event` | `{ sequence, kind, question }`                 | `kind`: `CREATED`, `UPDATED`, `VOTED`, `MERGED`. A change to a question the viewer may not see (pending, hidden) comes as `{ sequence, kind: "WITHDRAWN", questionId? }`, so no viewer sees a gap; `questionId` only if the question was ever public (the viewer may hold it and drops it) |
+| server → client | `event.status`    | `{ slug, status }`                             | The current public status, whenever it may have changed (it can repeat); switches the watch page from holding slate to stream                                                                                                                                                              |
+| server → client | `session.revoked` | `{ reason: "SIGNED_OUT" \| "ACCESS_REVOKED" }` | Sent before the server disconnects a client whose session ended, or whose access or role on Q&A changed                                                                                                                                                                                    |
+
+**Changing the protocol.** A page stays open across a deploy: the tab keeps its old script and reconnects to the new API. A new API must therefore keep speaking the previous release's protocol, adding a message rather than renaming or reshaping one, and drop the old one a release later. `chat.events` replaced the per-message `chat.event` in milestone 9, before anything was deployed, so no open page ever needed the old name; from milestone 10 the rule applies.
+
+A refused message is acked `{ ok: false, error }`, with `error` one of `UNAUTHENTICATED`, `FORBIDDEN`, `NOT_FOUND`, `CLOSED`, `INVALID`, `RESYNC_REQUIRED`, `RATE_LIMITED`, `UNAVAILABLE`. A refused handshake carries the same codes as its message.
+
+**Client rules.** Load the snapshot over HTTP, then join after its sequence. Hold live events while a join is in flight; apply the replay, then them. Keep the highest applied sequence per channel; ignore events at or below it. Events committed close together can arrive out of order: hold one that is ahead until the gap fills, and if it has not after 2 seconds, join again after the last applied sequence. On reconnect, join with `afterSequence` = that value, and send unacknowledged chat messages again with their `clientMessageId`. On `RESYNC_REQUIRED`, reload the snapshot and continue from its sequence. Reconnect with exponential backoff and jitter (1 s doubling to 30 s).
+
+## 5. Server-sent events (operations room)
+
+`GET /api/v1/events/:id/live-ops/stream`, `Content-Type: text/event-stream`.
+
+| `event:`                                | `data:`                                     | When                    |
+| --------------------------------------- | ------------------------------------------- | ----------------------- |
+| `snapshot`                              | Full operations-room state                  | On connect              |
+| `stream.status`                         | `{ ok, checkedAt, latencyMs }`              | After each stream check |
+| `audience.updated`                      | `{ current, peak }`                         | Every 30 s              |
+| `rates.updated`                         | `{ messagesPerMinute, questionsPerMinute }` | Every 30 s              |
+| `incident.opened` · `incident.resolved` | The incident                                | On change               |
+
+Each message has an increasing `id:`. On reconnect the browser sends `Last-Event-ID`; the server does not replay, and starts again with a fresh `snapshot` numbered after that ID. A change of the event's status also sends a fresh `snapshot` (it carries the status and the timeline). A comment line is sent after 15 seconds without a message, to keep proxies from closing idle connections; `retry: 2000` asks the browser to wait 2 seconds before reconnecting.
+
+Each stream looks at the database every second, from whichever instance holds it, so a change reaches the browser within about a second and no message can be lost between instances. At each look it also re-checks the viewer's session, membership and active workspace, and ends the stream as soon as one no longer allows it. A session may hold 5 streams on one instance (`429 RATE_LIMITED` beyond). Errors before the stream starts are ordinary problem documents (`401`, `404`).
+
+The snapshot (`GET /events/:id/live-ops` returns the same) holds the event, the latest stream check, the audience (`current`: attendees with a heartbeat this minute or the last; `peak`: the most in one minute; `series`: viewers per minute up to now), the rates over the last 60 seconds, the open incidents and the timeline of status changes and incidents.
+
+## 6. Webhooks
+
+### 6.1 Delivery
+
+```http
+POST /customer/receiver HTTP/1.1
+Content-Type: application/json
+OpsPilot-Event-Id: 0193f2a4-7c1e-7b2a-9d1f-3e5c7a9b1d2f
+OpsPilot-Event-Type: event.live
+OpsPilot-Signature: t=1795000000,v1=5f2c…
+
+{
+  "id": "0193f2a4-7c1e-7b2a-9d1f-3e5c7a9b1d2f",
+  "type": "event.live",
+  "occurredAt": "2026-11-20T18:30:02Z",
+  "workspaceId": "…",
+  "data": { "eventId": "…", "title": "Product launch", "startsAt": "2026-11-20T18:30:00Z" }
+}
+```
+
+- **Signature**: `v1` = hex HMAC-SHA256 of `"<t>.<raw body>"` with the endpoint's secret. Receivers should reject timestamps older than 5 minutes.
+- **Success** = any `2xx` within 10 seconds. Anything else, or a timeout, is a failure.
+- **Retries**: up to 5 attempts in total, at about 1 minute, 5 minutes, 30 minutes and 2 hours after the first, with jitter. Then the delivery is `FAILED` and can be resent manually.
+- **Ordering** is not guaranteed; receivers de-duplicate by `id`, which is the same on every attempt and every manual resend (`OpsPilot-Event-Id` repeats it).
+- **Targets** must be `https` and resolve to public addresses (SSRF protection), checked when the endpoint is saved and again at every attempt. Redirects are not followed: a `3xx` is a failure.
+- **Endpoints** are managed by Owners only. The signing secret is returned once, on create and on rotation, and stored encrypted (AES-256-GCM, `WEBHOOK_ENCRYPTION_KEY`). A paused endpoint's deliveries wait and are sent when it is resumed; deleting an endpoint deletes its deliveries.
+- **Records**: each attempt is kept with its status code (or the reason it failed, never the response body) and duration; finished deliveries are deleted after 30 days.
+
+### 6.2 Event types
+
+| Type                  | When                                                                                                                                                                                                         |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `event.ready`         | Event reached `READY`                                                                                                                                                                                        |
+| `event.live`          | Event reached `LIVE`                                                                                                                                                                                         |
+| `event.completed`     | Event reached `COMPLETED`                                                                                                                                                                                    |
+| `event.cancelled`     | Event was cancelled                                                                                                                                                                                          |
+| `attendee.registered` | An attendee verified their email, once per attendee. `data`: `eventId`, `attendeeId`; with the workspace's personal-data setting on, also `name` and `email`, read when sending (never an erased attendee's) |
+
+## 7. OpenAPI document
+
+**Planned, not built yet** (found in the milestone 9 security review). The intent: `npm run contracts:openapi` builds an OpenAPI 3.1 document from the Zod schemas in `packages/contracts`, and CI fails if the committed document is out of date, so API changes are visible in pull-request diffs. Until then, the schemas in `packages/contracts` are the reference.

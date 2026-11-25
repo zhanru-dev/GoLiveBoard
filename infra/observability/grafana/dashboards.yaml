@@ -1,0 +1,11 @@
+# OpsPilot's dashboards, from files (infra/observability/grafana/dashboards).
+apiVersion: 1
+
+providers:
+  - name: OpsPilot
+    type: file
+    folder: OpsPilot
+    disableDeletion: true
+    allowUiUpdates: false
+    options:
+      path: /opspilot/dashboards

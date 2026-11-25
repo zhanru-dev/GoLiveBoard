@@ -1,20 +1,20 @@
+# The image build copies only what it names (infra/docker/Dockerfile); this
+# list keeps the build context small and keeps local secrets and build output
+# out of it even if a COPY is widened later.
 .git
-.github
-.next
-**/.next
-dist
-**/dist
-node_modules
 **/node_modules
+**/dist
+**/.next
+**/*.tsbuildinfo
+**/next-env.d.ts
+apps/api/src/generated
 coverage
 playwright-report
 test-results
-.runtime
+blob-report
 .env
 .env.*
 !.env.example
+*.pem
 *.log
-.idea
-.vscode
-docs
-e2e
+.DS_Store

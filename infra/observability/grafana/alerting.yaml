@@ -1,0 +1,255 @@
+# OpsPilot's alerts (docs/06, section 7), by email to the on-call address.
+# Locally the email lands in Mailpit; in AWS the same rules go to Grafana
+# Cloud (milestone 10). Each names the runbook to follow.
+apiVersion: 1
+
+contactPoints:
+  - orgId: 1
+    name: OpsPilot on call
+    receivers:
+      - uid: opspilot-on-call-email
+        type: email
+        settings:
+          addresses: oncall@opspilot.localhost
+          singleEmail: true
+
+policies:
+  - orgId: 1
+    receiver: OpsPilot on call
+    group_by: [alertname]
+    group_wait: 30s
+    group_interval: 5m
+    repeat_interval: 4h
+
+groups:
+  - orgId: 1
+    name: OpsPilot
+    folder: OpsPilot
+    interval: 30s
+    rules:
+      - uid: opspilot-api-5xx
+        title: API 5xx rate above 2%
+        condition: C
+        for: 5m
+        noDataState: OK
+        execErrState: Error
+        labels:
+          severity: page
+        annotations:
+          summary: More than 2% of API responses have been server errors for 5 minutes.
+          runbook: docs/runbooks/deploy-and-roll-back.md
+        data:
+          - refId: A
+            relativeTimeRange: { from: 600, to: 0 }
+            datasourceUid: prometheus
+            model:
+              refId: A
+              instant: true
+              expr: >-
+                sum(rate(http_server_request_duration_seconds_count{job="opspilot-api",http_response_status_code=~"5.."}[5m]))
+                / sum(rate(http_server_request_duration_seconds_count{job="opspilot-api"}[5m]))
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: gt, params: [0.02] }
+
+      - uid: opspilot-readiness
+        title: API readiness check failing
+        condition: C
+        for: 2m
+        noDataState: Alerting
+        execErrState: Error
+        labels:
+          severity: page
+        annotations:
+          summary: The API's readiness check has not passed for 2 minutes.
+          runbook: docs/runbooks/deploy-and-roll-back.md
+        data:
+          - refId: A
+            relativeTimeRange: { from: 600, to: 0 }
+            datasourceUid: prometheus
+            model:
+              refId: A
+              instant: true
+              expr: >-
+                (max(max_over_time(httpcheck_status{http_status_class="2xx",http_status_code=~"2.."}[1m]))
+                or vector(0))
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: lt, params: [1] }
+
+      - uid: opspilot-queue-age
+        title: Work waiting more than 5 minutes
+        condition: C
+        for: 1m
+        noDataState: OK
+        execErrState: Error
+        labels:
+          severity: page
+        annotations:
+          summary: A job or an outbox message has waited more than 5 minutes; the worker is stuck or too slow. (A worker that is down reports nothing; "Worker not reporting" covers that.)
+          runbook: docs/runbooks/deploy-and-roll-back.md
+        data:
+          - refId: A
+            relativeTimeRange: { from: 600, to: 0 }
+            datasourceUid: prometheus
+            model:
+              refId: A
+              instant: true
+              expr: >-
+                max(opspilot_queue_oldest_job_age_seconds or opspilot_outbox_oldest_message_age_seconds)
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: gt, params: [300] }
+
+      # Only the worker reports queue and outbox metrics, so a worker that is
+      # down makes "Work waiting" see no data, and no data is not an alert
+      # there: nothing waits while nothing is queued. This rule alerts on the
+      # silence itself. Prometheus keeps a series for 5 minutes after its
+      # last sample, so it fires about 6 minutes after the worker stops.
+      # As the stack starts, the rule sees nothing until the worker's first
+      # metrics (15 seconds after it starts) and is pending meanwhile; it
+      # fires only if they take more than about a minute and a half.
+      - uid: opspilot-worker-silent
+        title: Worker not reporting
+        condition: C
+        for: 1m
+        noDataState: OK
+        execErrState: Error
+        labels:
+          severity: page
+        annotations:
+          summary: The worker has sent no metrics for over 5 minutes; it is down or cannot reach the database. Nothing is relayed, delivered, checked or reset.
+          runbook: docs/runbooks/deploy-and-roll-back.md
+        data:
+          - refId: A
+            relativeTimeRange: { from: 600, to: 0 }
+            datasourceUid: prometheus
+            model:
+              refId: A
+              instant: true
+              expr: absent(opspilot_outbox_oldest_message_age_seconds)
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: gt, params: [0] }
+
+      # Field data for NFR-3: the public event page's LCP at the 75th
+      # percentile of real visits. Only judged with at least 20 visits in
+      # the window, so a quiet demo with one slow phone stays silent. The
+      # endpoint is public, but a sender adds at most two paints to a
+      # 30-minute window (browserVitalPerVisitor), so it takes many to
+      # hold the 75th percentile.
+      - uid: opspilot-public-page-slow
+        title: Public page slow for real visitors
+        condition: C
+        for: 10m
+        noDataState: OK
+        execErrState: Error
+        labels:
+          severity: ticket
+        annotations:
+          summary: The public event page's Largest Contentful Paint has been above 2.5 s at the 75th percentile of real visits (30 minutes, at least 20 visits).
+          runbook: docs/runbooks/deploy-and-roll-back.md
+        data:
+          - refId: A
+            relativeTimeRange: { from: 1800, to: 0 }
+            datasourceUid: prometheus
+            model:
+              refId: A
+              instant: true
+              expr: >-
+                histogram_quantile(0.75, sum by (le)
+                (rate(opspilot_web_vital_duration_milliseconds_bucket{opspilot_web_vital="LCP",opspilot_web_route="/e/:slug"}[30m])))
+                and on ()
+                sum(increase(opspilot_web_vital_duration_milliseconds_count{opspilot_web_vital="LCP",opspilot_web_route="/e/:slug"}[30m])) >= 20
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: gt, params: [2500] }
+
+      # A signal from browsers: real-time connections they could not make,
+      # or lost. The API sees nothing of a connection that never reached it
+      # (a proxy, a WebSocket blocked, an instance gone). A sender counts
+      # at most twice per reason in 10 minutes (browserFailurePerVisitor),
+      # so more than 10 means at least six senders.
+      - uid: opspilot-browser-realtime-failing
+        title: Chat connections failing in browsers
+        condition: C
+        for: 0s
+        noDataState: OK
+        execErrState: Error
+        labels:
+          severity: page
+        annotations:
+          summary: Browsers reported more than 10 real-time connections failed or lost in 10 minutes, from at least six senders; chat and questions are not reaching people.
+          runbook: docs/runbooks/deploy-and-roll-back.md
+        data:
+          - refId: A
+            relativeTimeRange: { from: 600, to: 0 }
+            datasourceUid: prometheus
+            model:
+              refId: A
+              instant: true
+              expr: >-
+                sum(increase(opspilot_web_realtime_failures_total[10m]))
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: gt, params: [10] }
+
+      - uid: opspilot-webhook-endpoint-failing
+        title: Webhook endpoint failing
+        condition: C
+        for: 0s
+        noDataState: OK
+        execErrState: Error
+        labels:
+          severity: ticket
+        annotations:
+          summary: Deliveries to one webhook endpoint failed more than 10 times in the last hour.
+          runbook: docs/runbooks/webhook-endpoint-failing.md
+        data:
+          - refId: A
+            relativeTimeRange: { from: 3600, to: 0 }
+            datasourceUid: prometheus
+            model:
+              refId: A
+              instant: true
+              expr: >-
+                max(sum by (opspilot_webhook_endpoint_id)
+                (increase(opspilot_webhook_attempts_total{opspilot_webhook_delivered="false"}[1h])))
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: gt, params: [10] }

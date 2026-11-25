@@ -1,0 +1,68 @@
+# The NFR-4 load test (load/), on demand: one API instance in the
+# production-like stack on a GitHub-hosted Linux runner, a closer stand-in
+# for a server than a laptop. Results are kept as an artifact and recorded
+# in docs/load-tests/. Not part of CI: it takes minutes and measures the
+# runner as much as the code.
+name: Load test
+
+on:
+  workflow_dispatch:
+    inputs:
+      attendees:
+        description: Attendees connected at once
+        default: "500"
+      runner:
+        description: Runner image
+        type: choice
+        options: [ubuntu-24.04, ubuntu-24.04-arm]
+        default: ubuntu-24.04
+
+permissions:
+  contents: read
+
+jobs:
+  load:
+    name: NFR-4 (${{ inputs.attendees }} attendees, ${{ inputs.runner }})
+    runs-on: ${{ inputs.runner }}
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+      # The hosted runner comes with toolchains this job never uses; with
+      # the images and Grafana's data the disk filled to 95%, and object
+      # storage then had no room to grow its volumes (CI run 44404770745).
+      - name: Free disk space for the images and the stack
+        run: |
+          df -h /
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+          df -h /
+      - name: Start the production-like stack
+        run: npm run stack:up
+      - name: The runner
+        run: |
+          nproc
+          free -h
+          docker info --format 'Docker {{.ServerVersion}}, {{.NCPU}} CPUs'
+      - name: Run the load test
+        env:
+          ATTENDEES: ${{ inputs.attendees }}
+        run: |
+          mkdir -p load/out
+          npm run load:nfr4 2>&1 | tee load/out/k6.txt
+      - name: Keep the results
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: load-test-${{ inputs.runner }}-${{ inputs.attendees }}
+          path: |
+            load/out/summary.json
+            load/out/k6.txt
+          if-no-files-found: ignore
+          retention-days: 90
+      - name: Show the stack's logs after a failure
+        if: failure()
+        run: docker compose --file docker-compose.prod.yml logs --no-color --timestamps api

@@ -1,182 +1,350 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
-import { JwtService } from '@nestjs/jwt';
-import { Prisma } from '@prisma/client';
-import * as argon2 from 'argon2';
-import { randomUUID } from 'node:crypto';
-import { PrismaService } from '../prisma/prisma.service';
-import { AccessTokenPayload, RefreshTokenPayload } from './auth.types';
+import { Inject, Injectable } from "@nestjs/common";
+import type { SignInRequest, SignUpRequest } from "@opspilot/contracts";
+import { InjectPinoLogger, PinoLogger } from "nestjs-pino";
+
+import { APP_CONFIG, type AppConfig } from "../config/app-config.js";
+import { PRISMA } from "../database/prisma.js";
+import { DEMO_PEOPLE, DEMO_WORKSPACE } from "../demo/demo-accounts.js";
+import { DemoSeeder } from "../demo/demo-seeder.js";
+import { limitDemoSessions } from "../demo/demo-workspace.js";
+import { Prisma, type PrismaClient } from "../generated/prisma/client.js";
+import { RealtimeSignals } from "../live/realtime-signals.js";
+import { Mailer, mailDeliveryError, type MailMessage } from "../mail/mailer.js";
+import { RATE_LIMITS, RateLimiter } from "../rate-limit/rate-limiter.js";
+import { CLOCK, type Clock } from "../shared/clock.js";
+import { DomainError } from "../shared/domain/domain-error.js";
+import { type AccessTokenKeys, signAccessToken } from "./access-token.js";
+import { REFRESH_TOKEN_TTL_MS, type SessionTokens } from "./cookies.js";
+import { accountExistsEmail, welcomeEmail } from "./emails.js";
+import { PasswordHasher } from "./password-hasher.js";
+import { generateToken, hashToken } from "./tokens.js";
+
+/**
+ * A browser that sends two requests at once with the same refresh cookie
+ * (two tabs, a retried request) presents the old token a moment after the
+ * other request rotated it. That is not theft, so within this window the
+ * session survives; after it, reuse means a copied token and the session is
+ * revoked (ADR-0005).
+ */
+export const REFRESH_REUSE_GRACE_MS = 10_000;
+
+/**
+ * What a refresh produced. `superseded` means the token was rotated by a
+ * concurrent request moments ago: the session is fine and the browser already
+ * holds (or is about to receive) the new cookies, so nothing must be changed.
+ */
+export type RefreshResult =
+  | { readonly kind: "rotated"; readonly tokens: SessionTokens }
+  | { readonly kind: "superseded" };
+
+const UNIQUE_VIOLATION = "P2002";
 
 @Injectable()
 export class AuthService {
+  private readonly tokenKeys: AccessTokenKeys;
+
   constructor(
-    private readonly prisma: PrismaService,
-    private readonly jwt: JwtService,
-    private readonly config: ConfigService,
-  ) {}
-
-  async login(email: string, password: string) {
-    const user = await this.prisma.user.findUnique({
-      where: { email: email.toLowerCase() },
-      include: { memberships: { include: { workspace: true }, take: 1 } },
-    });
-
-    if (!user || !(await argon2.verify(user.passwordHash, password))) {
-      throw new UnauthorizedException('Email or password is incorrect.');
-    }
-
-    return this.createSession(user);
+    @Inject(PRISMA) private readonly prisma: PrismaClient,
+    @Inject(CLOCK) private readonly clock: Clock,
+    @Inject(APP_CONFIG) private readonly config: AppConfig,
+    private readonly mailer: Mailer,
+    private readonly rateLimiter: RateLimiter,
+    private readonly passwords: PasswordHasher,
+    private readonly demo: DemoSeeder,
+    private readonly signals: RealtimeSignals,
+    @InjectPinoLogger(AuthService.name) private readonly logger: PinoLogger,
+  ) {
+    this.tokenKeys = {
+      current: config.auth.jwtSecret,
+      previous: config.auth.jwtPreviousSecret,
+    };
   }
 
-  async refresh(rawToken: string) {
-    let payload: RefreshTokenPayload;
+  /**
+   * Creates a user, a workspace and an Owner membership (FR-WS-1). Behaves
+   * identically, including timing, when the email is already registered: that
+   * case only sends the owner of the address an email.
+   */
+  async signUp(input: SignUpRequest, ip: string): Promise<void> {
+    await this.rateLimiter.consumeOrThrow(RATE_LIMITS.signUpPerIp, ip);
+    // Hash first and always, so both outcomes take the same time.
+    const passwordHash = await this.passwords.hash(input.password);
+    const origin = this.config.app.origin;
     try {
-      payload = await this.jwt.verifyAsync<RefreshTokenPayload>(rawToken, {
-        secret: this.refreshSecret,
-      });
-    } catch {
-      throw new UnauthorizedException('Refresh token is invalid or expired.');
-    }
-
-    if (payload.type !== 'refresh') {
-      throw new UnauthorizedException('Refresh token is invalid.');
-    }
-
-    const session = await this.prisma.session.findUnique({
-      where: { id: payload.sessionId },
-      include: {
-        user: {
-          include: { memberships: { include: { workspace: true }, take: 1 } },
+      await this.prisma.user.create({
+        data: {
+          email: input.email,
+          name: input.name,
+          passwordHash,
+          memberships: {
+            create: {
+              role: "OWNER",
+              workspace: { create: { name: `${input.name}'s workspace` } },
+            },
+          },
         },
-      },
-    });
-
-    if (
-      !session ||
-      session.userId !== payload.sub ||
-      session.revokedAt ||
-      session.expiresAt <= new Date() ||
-      !(await argon2.verify(session.refreshTokenHash, rawToken))
-    ) {
-      throw new UnauthorizedException('Session is no longer active.');
+      });
+    } catch (error) {
+      if (!isUniqueViolation(error)) {
+        throw error;
+      }
+      this.sendInBackground(accountExistsEmail(input.email, origin));
+      return;
     }
+    this.sendInBackground(welcomeEmail(input.email, input.name, origin));
+  }
 
-    return this.rotateSession(
-      session.user,
-      session.id,
-      false,
-      session.refreshTokenHash,
+  /**
+   * Starts a session in the user's first workspace. A wrong password, an
+   * unknown email and a disabled account all fail the same way (FR-AUTH-1).
+   */
+  async signIn(input: SignInRequest, ip: string): Promise<SessionTokens> {
+    // Brute-force protection, per account and per address. Every attempt
+    // takes a slot before the password is checked, so a burst of concurrent
+    // guesses cannot all slip past the limit; a successful sign-in gives its
+    // slot back, so only failures count against the limit.
+    await this.rateLimiter.consumeOrThrow(
+      RATE_LIMITS.signInFailuresPerAccount,
+      input.email,
+    );
+    await this.rateLimiter.consumeOrThrow(RATE_LIMITS.signInFailuresPerIp, ip);
+    const user = await this.prisma.user.findUnique({
+      where: { email: input.email },
+      include: { memberships: { orderBy: { createdAt: "asc" }, take: 1 } },
+    });
+    const passwordMatches =
+      user === null
+        ? await this.passwords.verifyAgainstDummy(input.password)
+        : await this.passwords.verify(user.passwordHash, input.password);
+    if (user === null || !passwordMatches || user.disabledAt !== null) {
+      throw new DomainError("CREDENTIALS_INVALID");
+    }
+    const [membership] = user.memberships;
+    if (membership === undefined) {
+      throw new DomainError("FORBIDDEN", {
+        detail: "You are not a member of any workspace.",
+      });
+    }
+    const tokens = await this.startSession(
+      user.id,
+      membership.workspaceId,
+      user.passwordHash,
+    );
+    await this.rateLimiter.reset(
+      RATE_LIMITS.signInFailuresPerAccount,
+      input.email,
+    );
+    await this.rateLimiter.refund(RATE_LIMITS.signInFailuresPerIp, ip);
+    return tokens;
+  }
+
+  /**
+   * One-click sign-in to the shared demo workspace as its Manager
+   * (FR-AUTH-5). Answers as if the endpoint did not exist unless demo mode
+   * is on. The workspace is created on first use.
+   */
+  async signInToDemo(ip: string): Promise<SessionTokens> {
+    if (!this.config.demo.enabled) {
+      throw new DomainError("NOT_FOUND");
+    }
+    await this.rateLimiter.consumeOrThrow(RATE_LIMITS.demoSignInPerIp, ip);
+    await this.demo.ensure();
+    const visitor = await this.prisma.user.findUniqueOrThrow({
+      where: { id: DEMO_PEOPLE.manager.id },
+      select: { passwordHash: true },
+    });
+    return this.startSession(
+      DEMO_PEOPLE.manager.id,
+      DEMO_WORKSPACE.id,
+      visitor.passwordHash,
+      async (tx, now) => {
+        await this.signals.recheck(
+          tx,
+          "session",
+          await limitDemoSessions(tx, now),
+        );
+      },
     );
   }
 
-  async logout(rawAccessToken?: string) {
-    if (rawAccessToken) {
-      let identity: AccessTokenPayload;
-      try {
-        // A removed member or expired access token can still end its own signed
-        // session. This route grants no resource access and still checks Origin.
-        identity = await this.jwt.verifyAsync<AccessTokenPayload>(
-          rawAccessToken,
-          { secret: this.accessSecret, ignoreExpiration: true },
-        );
-        if (!identity.sessionId || !identity.sub) return;
-      } catch {
-        return;
+  /**
+   * Exchanges a refresh token for a new pair. The old token stops working in
+   * the same statement that issues the new one, so of two concurrent requests
+   * with the same token exactly one succeeds (FR-AUTH-2).
+   */
+  async refresh(refreshToken: string): Promise<RefreshResult> {
+    const now = this.clock.now();
+    const presentedHash = hashToken(refreshToken);
+    const nextToken = generateToken();
+    const nextHash = hashToken(nextToken);
+
+    const { count } = await this.prisma.session.updateMany({
+      where: {
+        refreshTokenHash: presentedHash,
+        revokedAt: null,
+        refreshExpiresAt: { gt: now },
+      },
+      data: {
+        refreshTokenHash: nextHash,
+        previousRefreshTokenHash: presentedHash,
+        rotatedAt: now,
+        refreshExpiresAt: new Date(now.getTime() + REFRESH_TOKEN_TTL_MS),
+      },
+    });
+    if (count === 0) {
+      if (await this.isRecentlyRotated(presentedHash, now)) {
+        return { kind: "superseded" };
       }
-      await this.prisma.session.updateMany({
-        where: {
-          id: identity.sessionId,
-          userId: identity.sub,
-          revokedAt: null,
-        },
-        data: { revokedAt: new Date() },
-      });
+      throw new DomainError("UNAUTHENTICATED");
     }
-  }
-
-  private async createSession(user: UserWithMembership) {
-    const sessionId = randomUUID();
-    return this.rotateSession(user, sessionId, true);
-  }
-
-  private async rotateSession(
-    user: UserWithMembership,
-    sessionId: string,
-    create = false,
-    consumedHash?: string,
-  ) {
-    const membership = user.memberships[0];
-    if (!membership) {
-      throw new UnauthorizedException('User does not belong to a workspace.');
-    }
-
-    const accessPayload: AccessTokenPayload = {
-      sub: user.id,
-      sessionId,
-      workspaceId: membership.workspaceId,
-      email: user.email,
-      name: user.name,
-      workspaceName: membership.workspace.name,
-      role: membership.role,
-    };
-    const refreshPayload: RefreshTokenPayload = {
-      sub: user.id,
-      sessionId,
-      type: 'refresh',
-    };
-    const [accessToken, refreshToken] = await Promise.all([
-      this.jwt.signAsync(accessPayload, {
-        secret: this.accessSecret,
-        expiresIn: '15m',
-      }),
-      this.jwt.signAsync(refreshPayload, {
-        secret: this.refreshSecret,
-        expiresIn: '7d',
-        jwtid: randomUUID(),
-      }),
-    ]);
-    const refreshTokenHash = await argon2.hash(refreshToken);
-    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
-
-    if (create) {
-      await this.prisma.session.create({
-        data: { id: sessionId, userId: user.id, refreshTokenHash, expiresAt },
-      });
-    } else {
-      // Strict single consumption, including concurrent refresh/logout. A lost
-      // rotation response requires a fresh login; never revive a revoked session.
-      const consumed = await this.prisma.session.updateMany({
-        where: {
-          id: sessionId,
-          userId: user.id,
-          refreshTokenHash: consumedHash,
-          revokedAt: null,
-          expiresAt: { gt: new Date() },
-        },
-        data: { refreshTokenHash, expiresAt },
-      });
-      if (consumed.count !== 1)
-        throw new UnauthorizedException(
-          'Refresh token was consumed or the session ended.',
-        );
-    }
-
+    const session = await this.prisma.session.findUniqueOrThrow({
+      where: { refreshTokenHash: nextHash },
+      select: { id: true },
+    });
     return {
-      accessToken,
-      refreshToken,
-      user: accessPayload,
+      kind: "rotated",
+      tokens: {
+        accessToken: await signAccessToken(session.id, this.tokenKeys, now),
+        refreshToken: nextToken,
+      },
     };
   }
 
-  private get accessSecret() {
-    return this.config.getOrThrow<string>('JWT_ACCESS_SECRET');
+  /** Revokes the session the refresh token belongs to (FR-AUTH-3). */
+  async signOut(refreshToken: string): Promise<void> {
+    const presentedHash = hashToken(refreshToken);
+    await this.prisma.$transaction(async (tx) => {
+      const revoked = await tx.session.updateManyAndReturn({
+        where: {
+          OR: [
+            { refreshTokenHash: presentedHash },
+            { previousRefreshTokenHash: presentedHash },
+          ],
+          revokedAt: null,
+        },
+        data: { revokedAt: this.clock.now() },
+        select: { id: true },
+      });
+      // Its live connections end too (FR-AUTH-3).
+      await this.signals.recheck(
+        tx,
+        "session",
+        revoked.map((session) => session.id),
+      );
+    });
   }
 
-  private get refreshSecret() {
-    return this.config.getOrThrow<string>('JWT_REFRESH_SECRET');
+  /**
+   * Creates the session only if the credentials that were just checked are
+   * still the user's. A password reset that commits while the password is
+   * being verified would otherwise be followed by a session it never saw.
+   *
+   * `FOR SHARE` makes the two serialise: sign-ins do not block each other,
+   * but a reset's `UPDATE users` waits for this transaction, and the reset's
+   * next statement, which revokes the user's sessions, then sees this one.
+   * If the reset committed first, the hash no longer matches and the
+   * sign-in fails like a wrong password.
+   */
+  /**
+   * @param afterCreate runs in the same transaction, after the session is
+   * created
+   */
+  private async startSession(
+    userId: string,
+    workspaceId: string,
+    verifiedPasswordHash: string,
+    afterCreate?: (tx: Prisma.TransactionClient, now: Date) => Promise<void>,
+  ): Promise<SessionTokens> {
+    const now = this.clock.now();
+    const refreshToken = generateToken();
+    const session = await this.prisma.$transaction(async (tx) => {
+      const [current] = await tx.$queryRaw<
+        { password_hash: string; disabled_at: Date | null }[]
+      >`
+        SELECT password_hash, disabled_at FROM users
+        WHERE id = ${userId}::uuid
+        FOR SHARE`;
+      if (
+        current?.password_hash !== verifiedPasswordHash ||
+        current.disabled_at !== null
+      ) {
+        throw new DomainError("CREDENTIALS_INVALID");
+      }
+      const created = await tx.session.create({
+        data: {
+          userId,
+          activeWorkspaceId: workspaceId,
+          refreshTokenHash: hashToken(refreshToken),
+          refreshExpiresAt: new Date(now.getTime() + REFRESH_TOKEN_TTL_MS),
+        },
+        select: { id: true },
+      });
+      await afterCreate?.(tx, now);
+      return created;
+    });
+    return {
+      accessToken: await signAccessToken(session.id, this.tokenKeys, now),
+      refreshToken,
+    };
+  }
+
+  /**
+   * A token that was rotated away came back. Within the grace window that is
+   * a concurrent request from the same browser (true). After it, someone may
+   * have a copy of the token, so the session is revoked (false).
+   */
+  private async isRecentlyRotated(
+    presentedHash: string,
+    now: Date,
+  ): Promise<boolean> {
+    const session = await this.prisma.session.findUnique({
+      where: { previousRefreshTokenHash: presentedHash },
+      select: { id: true, rotatedAt: true, revokedAt: true },
+    });
+    if (session === null) {
+      return false;
+    }
+    if (session.revokedAt !== null) {
+      return false;
+    }
+    const rotatedAgoMs =
+      now.getTime() -
+      (session.rotatedAt?.getTime() ?? Number.NEGATIVE_INFINITY);
+    if (rotatedAgoMs < REFRESH_REUSE_GRACE_MS) {
+      return true;
+    }
+    await this.prisma.$transaction(async (tx) => {
+      await tx.session.updateMany({
+        where: { id: session.id, revokedAt: null },
+        data: { revokedAt: now },
+      });
+      await this.signals.recheck(tx, "session", [session.id]);
+    });
+    this.logger.warn(
+      { sessionId: session.id },
+      "Refresh token reused after rotation; session revoked",
+    );
+    return false;
+  }
+
+  /**
+   * Email is sent after the request has its answer, so a slow mail server
+   * cannot delay sign-up or reveal anything through timing. Milestone 3 moves
+   * this to the transactional outbox, which adds retries.
+   */
+  private sendInBackground(message: MailMessage): void {
+    this.mailer.send(message).catch((error: unknown) => {
+      this.logger.error(
+        { err: mailDeliveryError(error) },
+        "Sending email failed",
+      );
+    });
   }
 }
 
-type UserWithMembership = Prisma.UserGetPayload<{
-  include: { memberships: { include: { workspace: true } } };
-}>;
+function isUniqueViolation(error: unknown): boolean {
+  return (
+    error instanceof Prisma.PrismaClientKnownRequestError &&
+    error.code === UNIQUE_VIOLATION
+  );
+}

@@ -1,0 +1,16 @@
+# Added to the collector of grafana/otel-lgtm (OTELCOL_EXTRA_ARGS): checks the
+# API's readiness endpoint every 15 seconds, as an external uptime check
+# would (docs/06, section 7), for the "readiness failing" alert. The URL is
+# OPSPILOT_READINESS_URL. Lists replace the base configuration's, so the
+# metrics pipeline names all its receivers.
+receivers:
+  httpcheck/readiness:
+    targets:
+      - endpoint: ${env:OPSPILOT_READINESS_URL}
+        method: GET
+    collection_interval: 15s
+
+service:
+  pipelines:
+    metrics:
+      receivers: [otlp, prometheus/collector, httpcheck/readiness]

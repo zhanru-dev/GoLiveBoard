@@ -1,0 +1,8 @@
+package-lock.json
+**/dist/
+**/.next/
+**/coverage/
+**/next-env.d.ts
+**/generated/
+playwright-report/
+test-results/

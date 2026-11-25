@@ -1,229 +1,234 @@
+# Continuous integration: every pull request and every push to main.
+# Jobs run in parallel where they do not depend on each other; the final
+# "CI result" job is the single check that branch protection requires.
+#
+# Actions are pinned to full commit SHAs (a tag can be moved to malicious
+# code; a SHA cannot). Dependabot keeps the pins up to date.
 name: CI
 
 on:
-  push:
-    branches: ["main"]
   pull_request:
+  push:
+    branches: [main]
 
+# A newer push to the same pull request makes a running check pointless.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+# Least privilege: these jobs only read the repository.
 permissions:
   contents: read
 
-concurrency:
-  group: ci-${{ github.ref }}
-  cancel-in-progress: true
+env:
+  NEXT_TELEMETRY_DISABLED: "1"
 
 jobs:
   quality:
-    runs-on: ubuntu-latest
-    timeout-minutes: 25
-    services:
-      postgres:
-        image: postgres:17-alpine
-        env:
-          POSTGRES_USER: opspilot
-          POSTGRES_PASSWORD: opspilot
-          POSTGRES_DB: opspilot_test
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U opspilot -d opspilot"
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 10
-    env:
-      CI: "true"
-      DATABASE_URL: postgresql://opspilot:opspilot@localhost:5432/opspilot_test?schema=public
-      API_PORT: "4100"
-      WEB_ORIGIN: http://localhost:3000
-      NEXT_PUBLIC_API_URL: http://localhost:4100/api/v1
-      JWT_ACCESS_SECRET: ci-access-secret-that-is-long-enough-for-tests
-      JWT_REFRESH_SECRET: ci-refresh-secret-that-is-long-enough-for-tests
-      COOKIE_SECURE: "false"
-      REDIS_URL: redis://localhost:6379
-      S3_ENDPOINT: http://localhost:9000
-      S3_PUBLIC_ENDPOINT: http://localhost:9000
-      S3_REGION: us-east-1
-      S3_BUCKET: opspilot-media
-      S3_ACCESS_KEY: opspilot
-      S3_SECRET_KEY: opspilot-local-storage
-      WEBHOOK_SECRET_ENCRYPTION_KEY: ci-webhook-encryption-key-that-is-long-enough
-      WEBHOOK_RECEIVER_BASE_URL: http://localhost:4100/api/v1/demo/webhook-receiver
-      ATTENDEE_EMAIL_ENABLED: "true"
-      SMTP_HOST: localhost
-      SMTP_PORT: "1025"
-      SMTP_SECURE: "false"
-      MAIL_FROM: events@opspilot.test
-      ATTENDEE_TOKEN_ENCRYPTION_KEY: ci-attendee-token-encryption-key-only-for-tests
+    name: Quality (format, lint, types, architecture)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          node-version: 22
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
           cache: npm
       - run: npm ci
-      - run: docker compose up -d --wait redis minio mailpit
-      - run: npm run db:generate
-      - run: npm run db:deploy
-      - run: npm run db:seed
-      - run: npm run lint
-      - run: npm run typecheck
-      - run: npm run test
-      - run: npm run test:chat:state
-      - run: npm run test:topics:state
-      # Real-process recovery suites (media-restart/live-fence children) run the
-      # compiled API, so build before the API integration tests on a cold checkout.
-      - run: npm run build
-      - run: npm run test:e2e --workspace=@opspilot/api -- --runInBand
-      - run: npm audit --omit=dev
-      - run: npx playwright install --with-deps chromium
-      - run: npm run test:ui
-      - run: npm run test:ui:isolated
-      - run: CHAT_RECOVERY_PRODUCTION_WEB=1 npm run test:chat:recovery
+      - run: npm run check
 
-  # Real RTMP -> MediaMTX -> authenticated HLS. The quality job runs without
-  # BROADCAST_ENABLED, so broadcast.e2e-spec is skipped there; this job runs it and
-  # the real-browser broadcast suite against the disposable broadcast test stack.
-  broadcast:
-    needs: quality
-    runs-on: ubuntu-latest
+  unit:
+    name: Unit and component tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      # Also fails if domain/ folders drop below 90% line or branch coverage.
+      - run: npm run test:coverage
+
+  integration:
+    name: Integration tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      # GitHub-hosted Ubuntu runners include Docker, which Testcontainers uses
+      # to start PostgreSQL and Valkey for these tests.
+      - run: npm run test:int
+
+  security:
+    name: Security (dependency audit, secret scan)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      GITLEAKS_VERSION: 8.30.1
+      GITLEAKS_SHA256: 551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # The whole history: a secret removed in a later commit is still leaked.
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+      # Production dependencies only: development tools never reach users.
+      # Advisories reviewed and allowed, each until a date, are listed in
+      # audit-allowlist.json (docs/06-infrastructure-and-operations.md,
+      # "Dependency audit").
+      - name: Audit production dependencies
+        run: node scripts/audit.mjs
+      # Overrides in package.json (effect, for Prisma's config) must leave a
+      # valid tree: the overridden package where its parent finds it, and no
+      # one else's peer range broken by it. Read from the lock: this job
+      # installs nothing.
+      - name: Overridden packages resolve as declared
+        run: npm ls --package-lock-only effect basic-ftp --all
+      - name: Install gitleaks (checksum verified)
+        run: |
+          archive="gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          curl -sSfL -o "$archive" \
+            "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/${archive}"
+          echo "${GITLEAKS_SHA256}  ${archive}" | sha256sum --check --strict
+          tar -xzf "$archive" gitleaks
+      - name: Scan the history for secrets
+        run: ./gitleaks git --redact --verbose .
+
+  # The production images, built natively for each platform the demo host
+  # may run (it is ARM), scanned, then tested as they will run: the stack in
+  # docker-compose.prod.yml over HTTPS, with every browser test and the smoke
+  # tests (docs/06, section 1.4).
+  infrastructure:
+    name: Infrastructure (Terraform fmt, validate, tests, tflint, checkov)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # No AWS account is used: providers are mocked in the tests, and
+      # validate and the scanners read the code only (docs/06, section 5).
+      - name: Check the Terraform
+        env:
+          # Read-only, for tflint's download of the AWS ruleset (GitHub's
+          # anonymous API limit is shared by everyone on the runner's address).
+          GITHUB_TOKEN: ${{ github.token }}
+        run: bash scripts/infra-check.sh all
+
+  images:
+    name: Images (${{ matrix.platform }})
+    needs: [quality, unit, integration]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux/amd64
+            runner: ubuntu-24.04
+          - platform: linux/arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
     timeout-minutes: 30
     env:
-      CI: "true"
-      FFMPEG_PATH: /usr/bin/ffmpeg
+      TRIVY_IMAGE: aquasec/trivy:0.76.2@sha256:8f6bb947dbc528902e11f2f5be52f7b519f6a39d5d148f41166f2040499768fb
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          node-version: 22
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
           cache: npm
-      - name: Install FFmpeg publisher
-        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
+      # The hosted runner comes with toolchains this job never uses; with
+      # the images and Grafana's data the disk filled to 95%, and object
+      # storage then had no room to grow its volumes (CI run 44404770745).
+      - name: Free disk space for the images and the stack
+        run: |
+          df -h /
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+          df -h /
+      - name: Build the api and web images
+        run: docker compose --file docker-compose.prod.yml build
+      # Fixable HIGH and CRITICAL vulnerabilities fail the build, and so does
+      # any secret found in an image. Unfixed ones are reported by Dependabot
+      # and Trivy runs once a fix exists.
+      - name: Scan the images (Trivy)
+        run: |
+          for image in opspilot-api:local opspilot-web:local; do
+            docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
+              "$TRIVY_IMAGE" image --no-progress --scanners vuln,secret \
+              --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 "$image"
+          done
+      - name: Start the production-like stack
+        run: npm run stack:up
       - run: npm ci
-      - run: node scripts/with-broadcast-env.mjs npm run db:generate
-      # Starts Postgres/MinIO/Mailpit (docker-compose.chat-test.yml), the broadcast
-      # Redis, migrates/seeds opspilot_broadcast_test and starts MediaMTX.
-      - run: npm run broadcast:test:setup
-      - run: node scripts/with-broadcast-env.mjs npm run build
-      - run: npm run test:broadcast:api
-      - run: npx playwright install --with-deps chromium
-      - run: npm run test:broadcast:browser
-      - name: Print MediaMTX logs on failure
-        if: failure()
-        run: docker logs opspilot-broadcast-test-mediamtx-1 2>&1 | tail -200 || true
-      - name: Clean up broadcast services
-        if: always()
+      - name: Install Chromium for Playwright
+        run: npx playwright install --with-deps chromium
+      - name: Browser and smoke tests against the stack, over HTTPS
+        run: npm run test:e2e:stack
+      # The public event page's budget (NFR-3), on the seeded demo event, as
+      # a mid-range phone on slow 4G. Once, on amd64: the same page and
+      # budget would only measure the runner twice.
+      - name: Lighthouse on the public event page
+        if: matrix.platform == 'linux/amd64'
         run: |
-          node scripts/with-broadcast-env.mjs docker compose -p opspilot-broadcast-test -f docker-compose.broadcast.yml down || true
-          docker rm -f opspilot-broadcast-test-redis 2>/dev/null || true
-          docker compose -f docker-compose.chat-test.yml down --volumes
+          site=https://opspilot.localhost:3443
+          jar="$(mktemp)"
+          curl -sSfk -c "$jar" -X POST -H "Origin: $site" "$site/api/v1/auth/demo"
+          slug="$(curl -sSfk -b "$jar" "$site/api/v1/events?q=Autumn" | jq -r '.items[0].slug')"
+          LIGHTHOUSE_URL="$site/e/$slug" \
+          CHROME_PATH="$(node -e "import('@playwright/test').then((m) => console.log(m.chromium.executablePath()))")" \
+            npm run lighthouse
+      - name: Keep the Lighthouse reports
+        if: always() && matrix.platform == 'linux/amd64'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: lighthouse
+          path: .lighthouseci
+          # A dot directory: upload-artifact skips those unless told.
+          include-hidden-files: true
+          if-no-files-found: ignore
+          retention-days: 30
+      - name: Show the stack's logs after a failure
+        if: failure()
+        run: docker compose --file docker-compose.prod.yml logs --no-color --timestamps
+      - name: Keep the Playwright report of a failed run
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: playwright-report-${{ matrix.runner }}
+          path: playwright-report
+          retention-days: 7
 
-  containers:
-    needs: quality
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    services:
-      postgres:
-        image: postgres:17-alpine
-        env:
-          POSTGRES_USER: opspilot
-          POSTGRES_PASSWORD: opspilot
-          POSTGRES_DB: opspilot_test
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U opspilot -d opspilot"
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 10
-    env:
-      NODE_ENV: test
-      DATABASE_URL: postgresql://opspilot:opspilot@localhost:5432/opspilot_test?schema=public
-      API_HOST: 0.0.0.0
-      API_PORT: "4100"
-      WEB_ORIGIN: http://localhost:3000
-      JWT_ACCESS_SECRET: ci-access-secret-that-is-long-enough-for-tests
-      JWT_REFRESH_SECRET: ci-refresh-secret-that-is-long-enough-for-tests
-      COOKIE_SECURE: "false"
-      COOKIE_SAME_SITE: lax
-      TRUST_PROXY: "false"
-      REDIS_URL: redis://localhost:6379
-      S3_ENDPOINT: http://localhost:9000
-      S3_PUBLIC_ENDPOINT: http://localhost:9000
-      S3_REGION: us-east-1
-      S3_BUCKET: opspilot-media
-      S3_ACCESS_KEY: opspilot
-      S3_SECRET_KEY: opspilot-local-storage
-      S3_FORCE_PATH_STYLE: "true"
-      S3_AUTO_CREATE_BUCKET: "true"
-      WEBHOOK_SECRET_ENCRYPTION_KEY: ci-webhook-encryption-key-that-is-long-enough
-      WEBHOOK_RECEIVER_BASE_URL: http://localhost:4100/api/v1/demo/webhook-receiver
+  result:
+    name: CI result
+    if: always()
+    needs: [quality, unit, integration, security, infrastructure, images]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 2
     steps:
-      - uses: actions/checkout@v7
-      - run: docker compose up -d --wait redis minio
-      - name: Build production images
+      - name: Fail unless every job succeeded
+        env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
         run: |
-          docker build --target api -f apps/api/Dockerfile -t opspilot-api:ci .
-          docker build --target worker -f apps/api/Dockerfile -t opspilot-worker:ci .
-          docker build \
-            --build-arg NEXT_PUBLIC_API_URL=http://localhost:4100/api/v1 \
-            -f apps/web/Dockerfile \
-            -t opspilot-web:ci \
-            .
-      - name: Apply migrations from the API image
-        run: |
-          docker run --rm --network host \
-            -e DATABASE_URL \
-            opspilot-api:ci \
-            npm run db:deploy
-      - name: Start production containers
-        run: |
-          docker run -d --name opspilot-api-ci --network host \
-            -e NODE_ENV -e DATABASE_URL -e API_HOST -e API_PORT \
-            -e WEB_ORIGIN -e JWT_ACCESS_SECRET -e JWT_REFRESH_SECRET \
-            -e COOKIE_SECURE -e COOKIE_SAME_SITE -e TRUST_PROXY \
-            -e REDIS_URL -e S3_ENDPOINT -e S3_PUBLIC_ENDPOINT \
-            -e S3_REGION -e S3_BUCKET -e S3_ACCESS_KEY -e S3_SECRET_KEY \
-            -e S3_FORCE_PATH_STYLE -e S3_AUTO_CREATE_BUCKET \
-            -e WEBHOOK_SECRET_ENCRYPTION_KEY -e WEBHOOK_RECEIVER_BASE_URL \
-            opspilot-api:ci
-          for attempt in {1..30}; do
-            if curl --fail --silent http://localhost:4100/api/v1/health/ready > /dev/null; then
-              break
+          echo "Job results: $RESULTS"
+          for result in $RESULTS; do
+            if [ "$result" != "success" ]; then
+              exit 1
             fi
-            sleep 2
           done
-          curl --fail --silent http://localhost:4100/api/v1/health/ready
-          docker run -d --name opspilot-worker-ci --network host \
-            -e NODE_ENV -e DATABASE_URL -e API_HOST -e API_PORT \
-            -e WEB_ORIGIN -e JWT_ACCESS_SECRET -e JWT_REFRESH_SECRET \
-            -e COOKIE_SECURE -e COOKIE_SAME_SITE -e TRUST_PROXY \
-            -e REDIS_URL -e S3_ENDPOINT -e S3_PUBLIC_ENDPOINT \
-            -e S3_REGION -e S3_BUCKET -e S3_ACCESS_KEY -e S3_SECRET_KEY \
-            -e S3_FORCE_PATH_STYLE -e S3_AUTO_CREATE_BUCKET \
-            -e WEBHOOK_SECRET_ENCRYPTION_KEY -e WEBHOOK_RECEIVER_BASE_URL \
-            opspilot-worker:ci
-          docker run -d --name opspilot-web-ci --network host opspilot-web:ci
-      - name: Verify production containers
-        run: |
-          for attempt in {1..30}; do
-            if curl --fail --silent http://localhost:4100/api/v1/health/ready > /tmp/readiness.json \
-              && curl --fail --silent http://localhost:3000/login > /dev/null; then
-              break
-            fi
-            sleep 2
-          done
-          cat /tmp/readiness.json
-          grep -q '"status":"ready"' /tmp/readiness.json
-          test "$(docker inspect -f '{{.State.Running}}' opspilot-worker-ci)" = "true"
-          docker logs opspilot-worker-ci 2>&1 | grep -q "OpsPilot background worker is ready."
-      - name: Print container logs on failure
-        if: failure()
-        run: |
-          docker logs opspilot-api-ci 2>&1 || true
-          docker logs opspilot-worker-ci 2>&1 || true
-          docker logs opspilot-web-ci 2>&1 || true
-      - name: Clean up containers
-        if: always()
-        run: |
-          docker rm -f opspilot-api-ci opspilot-worker-ci opspilot-web-ci 2>/dev/null || true
-          docker compose down --volumes

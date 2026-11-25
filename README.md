@@ -1,367 +1,219 @@
 # OpsPilot
 
-[![CI](https://github.com/zhanru-dev/OpsPilot/actions/workflows/ci.yml/badge.svg)](https://github.com/zhanru-dev/OpsPilot/actions/workflows/ci.yml)
+**An operations platform for teams running high-stakes online events:** product launches, customer conferences, company all-hands.
 
-OpsPilot is an English-first B2B operations platform for teams running complex online events. Its first vertical, **StreamOps**, turns fragmented event setup into an explainable launch-readiness workflow: accountable ownership, audience policy, critical runbooks, watch-page content, media state, recommendations and audit history in one control surface.
+It answers the question operations teams struggle with most, **"is this event ready to go live?"**, and keeps the event under control while it runs: who is admitted, what the audience asks, whether the stream is healthy, and what happened afterwards.
 
-`v2.0.0` is the current release candidate. It extends the production-ready v1.5 platform with live-session control, public registration, scoped attendee identity, restricted access and live audience polling. The golden flow is database-backed, tenant-scoped, role-aware, asynchronous, measured, tested and documented.
+> **Live demo:** coming with the AWS deployment (milestone 10). Until then, the [production-like stack](#try-it-in-five-minutes) runs the same images on your machine, demo workspace included.
 
-## Product Thesis
+**History.** This is OpsPilot's second version. The first was built in this repository from September to November 2026; the second was then written from a fresh design, milestone by milestone, in a separate repository, and its history merged here (commit `1f86d89`), so both are in `git log`. Its development was AI-assisted (Claude), as the commits' `Co-Authored-By` lines show; each milestone was reviewed independently, with mutation testing, before it was accepted ([docs/07](docs/07-delivery-plan.md)).
 
-> OpsPilot helps operations teams make complex online events launch-ready, execute them safely and leave an auditable record of every important decision.
+---
 
-The centrepiece is **Launch Control**. A versioned rules engine converts operational evidence into a score out of 100, distinguishes hard blockers from non-blocking gaps, and prevents invalid state transitions. Recommendations explain both the evidence and the suggested action.
+## What it does
 
-## Platform Evidence
+One event, from preparation to the record afterwards (the "golden flow", [docs/01](docs/01-product-requirements.md#3-golden-flow)):
 
-- Next.js 16, React 19, TypeScript and Tailwind CSS application.
-- NestJS REST API with secure cookie sessions, token rotation and rate limiting.
-- PostgreSQL and Prisma schema for users, workspaces, memberships, events and evidence.
-- Workspace-scoped RBAC for operations managers and read-only analysts.
-- Guarded `DRAFT -> CONFIGURING -> READY -> LIVE -> COMPLETED -> ARCHIVED` lifecycle.
-- Event-scoped live operations room with durable updates and realtime refresh.
-- Persistent event Chat for workspace staff and admitted attendees, with current-permission moderation, WebSocket delivery and missed-message recovery.
-- Event Q&A with private review queues, replies, versioned edits, seven-pin moderation, audience settings and authenticated snapshot recovery.
-- Draft, open and closed live polls with serialised lifecycle controls.
-- Public registration with single-use email verification and scoped HttpOnly attendee sessions.
-- Invitation-only and exact email-domain access with immediate session revocation.
-- Pseudonymous attendee poll responses separated from workspace user identities.
-- Archived-event immutability enforced by both the API and Launch Control.
-- Versioned, deterministic readiness and recommendation engines.
-- Optional grounded OpenAI recommendation provider behind a workspace feature flag.
-- Strict structured output, evidence-key validation, persisted runs and explicit human confirmation.
-- Deterministic fallback keeps the public demo complete without an API key.
-- Editable event ownership and schedules, access policies, critical runbooks and watch-page content.
-- Reversible ready-media attachment with readiness recalculation and audit evidence.
-- Direct browser uploads through short-lived presigned URLs into private S3-compatible storage.
-- ffprobe validation and FFmpeg video/audio derivatives in an independent BullMQ worker.
-- Persisted processing jobs, progress, attempts, failure evidence and controlled retries.
-- Short-lived private playback URLs, resumable multipart uploads and durable cancellation/deletion cleanup.
-- Transactional domain-event outbox with signed `event.ready` and `event.started` webhooks.
-- Bounded webhook retries, duplicate suppression, attempt history, manual recovery and trace IDs.
-- Integration Centre for endpoint subscriptions, delivery health and retry evidence.
-- Persisted daily operational analytics, date ranges and CSV export.
-- Browser/API error fingerprints, trace evidence and manager resolution.
-- Public recruiter-readable `/case-study` route with a real product screenshot.
-- Actor-attributed audit history and request IDs.
-- OpenAPI 3.1 contract and local Swagger UI.
-- Unit, API integration, tenant-isolation, RBAC, session-rotation, media and browser golden-flow tests.
-- Responsive mobile list views, accessible focus-trapped dialogs and server-side audit search.
-- Automated WCAG checks plus desktop and mobile visual verification.
-- Zero known production dependency vulnerabilities at release verification.
+| Step        | Who                           | What OpsPilot does                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| ----------- | ----------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Prepare** | Owner, Manager                | Create the event; in **Launch Control**, fill in the runbook, the access policy, the stream and the holding slate. They add up to a **readiness score**. A hard blocker (no reachable stream, say) stops the event from becoming ready or going live, even when two people press "go live" at the same moment                                                                                                                                 |
+| **Admit**   | Attendees                     | A fast public event page, server-rendered. Registration with address verification; access policies (public, limited to email domains, or invitation-only) and invitations; reminders sent once; recorded consent; erasure on request                                                                                                                                                                                                          |
+| **Run**     | Moderators, attendees         | Watch with live **chat and moderated Q&A** (votes, pins, answers), with no message lost or duplicated across reconnects. Access revoked mid-stream ends the connection within 5 seconds. **AI triage** groups questions that ask the same thing and suggests what to answer first; nothing changes until a moderator accepts, and Q&A carries on if the model fails. The **operations room** shows stream health, audience and incidents live |
+| **Record**  | Owner, Manager, other systems | A **report** (registration funnel, audience, interaction) with CSV export; signed **webhooks** with retries; a searchable **audit trail** of every change                                                                                                                                                                                                                                                                                     |
+
+---
+
+## Try it in five minutes
+
+You need Docker with Compose v2, Node.js 26 (see `.nvmrc`) and npm 11.
+
+```bash
+npm ci
+npm run stack:up        # builds the production images and starts everything behind Caddy over HTTPS
+```
+
+Open <https://opspilot.localhost:3443>.
+
+The certificate comes from a local authority your browser does not trust yet, so either accept the warning or [trust the authority](docs/06-infrastructure-and-operations.md#14-production-like-stack).
+
+**A quick tour: the demo workspace.**
+
+1. Choose **Try the demo** on the sign-in page. You are now the Manager of a shared workspace with sample events, reset every night.
+2. Open "Autumn product launch" in Launch Control. The readiness score and its blockers show what stands between the event and going live.
+3. Open the event's public page (its link is under Audience) in another browser profile, and register with any address at `northwind.example`, the domain its access policy admits. No real email is sent: once you have registered, the page links to the **demo inbox**, where the confirmation link is.
+
+The demo cannot go live: visitors may not set a stream URL (docs/06, section 10), so live chat and Q&A need the full run below.
+
+**The whole golden flow, in a workspace of your own.**
+
+1. **Sign up** on the stack. Its emails go to Mailpit at <http://127.0.0.1:8037>.
+2. **Prepare:**
+   - Create an event, and open it in Launch Control.
+   - For the stream, use a public HLS test stream, for example Apple's `https://devstreaming-cdn.apple.com/videos/streaming/examples/img_bipbop_adv_example_fmp4/master.m3u8`.
+   - Choose **Check now** in the Stream section: the stream counts as reachable after a check that succeeded within 5 minutes.
+   - Clear the other blockers it lists (the access policy, the critical runbook tasks, a holding slate: a JPEG, PNG or WebP image) until the event is ready, then go live.
+3. **Admit:** in another browser profile, open the public page, register, and confirm through the email in Mailpit.
+4. **Run:**
+   - Watch, chat and ask questions as the attendee.
+   - As the Manager, moderate them, and try **AI suggestions** after asking the same question twice. The stack groups identical questions without a model (`AI_PROVIDER=offline`).
+   - The operations room shows the stream, the audience and incidents.
+5. **Record:** end the event, then open its **Report** and export the CSV. The audit trail has every change.
+
+**See it from the inside:** Grafana at <http://127.0.0.1:3037> has the **OpsPilot overview** dashboard, its alerts, and a trace of every request.
+
+`npm run test:e2e:stack` runs the browser tests against this stack; `npm run stack:down` stops it.
+
+---
 
 ## Architecture
 
+A **modular monolith** ([ADR-0002](docs/adr/0002-modular-monolith.md)) in three processes behind **one origin** ([ADR-0003](docs/adr/0003-single-origin.md)). Request and message shapes are **Zod schemas shared** by server and client ([ADR-0004](docs/adr/0004-shared-zod-contracts.md)).
+
 ```mermaid
 flowchart LR
-    Browser["Next.js web app"] -->|"HttpOnly cookie + JSON"| API["NestJS API"]
-    API --> Auth["Auth and RBAC guards"]
-    API --> Domain["Events, readiness and recommendations"]
-    API --> Analytics["Snapshots and error evidence"]
-    API -.->|"Optional, feature flagged"| OpenAI["OpenAI Responses API"]
-    API --> Storage[("Private S3-compatible storage")]
-    API --> Redis[("Redis / BullMQ")]
-    Redis --> Worker["Media and delivery worker"]
-    Worker --> Storage
-    Worker --> DB
-    Worker --> Receiver["Signed webhook receiver"]
-    API --> Governance["Audit and request tracing"]
-    Auth --> DB[("PostgreSQL")]
-    Domain --> DB
-    Governance --> DB
-    Prisma["Prisma migrations and seed"] --> DB
+  browser["Browser<br/>staff and attendees"]
+  subgraph host["One origin, behind Caddy (HTTPS)"]
+    web["web<br/>Next.js 16 (server rendering)"]
+    api["api<br/>NestJS 12: REST, Socket.IO, SSE"]
+    worker["worker<br/>NestJS 12: outbox relay, BullMQ jobs"]
+  end
+  pg[("PostgreSQL 18<br/>source of truth, outbox")]
+  valkey[("Valkey<br/>queues, rate limits, presence")]
+  s3[("S3-compatible storage<br/>holding slates")]
+  mail["SMTP / SES"]
+  claude["Claude (Anthropic API)<br/>AI triage"]
+  ext["Customers' systems<br/>webhooks, HLS streams"]
+  otel["OpenTelemetry → Grafana<br/>traces, metrics, alerts"]
+
+  browser -->|"pages"| web
+  browser -->|"/api, WebSocket, SSE"| api
+  browser -->|"presigned upload"| s3
+  web --> api
+  api --> pg
+  api --> valkey
+  worker --> pg
+  worker --> valkey
+  worker --> mail
+  worker --> claude
+  worker -->|"signed webhooks, stream checks"| ext
+  api -.-> otel
+  worker -.-> otel
+  web -.-> otel
 ```
 
-See [Architecture](docs/architecture.md), [Threat Model](docs/threat-model.md), [Reliability Runbook](docs/runbooks/v1.1-media-and-webhooks.md), [v1.2 Release Evidence](docs/v1.2-release.md), [Quality Report](docs/evidence/v1.2-quality-report.md), [Narrated Demo](docs/evidence/opspilot-v1.2-demo.mp4), [Portfolio Case Study](docs/case-study.md) and the authoritative [Product Strategy](docs/product-strategy.md).
+**Key mechanisms:**
 
-## Stack
+- **Writes are transactions in PostgreSQL.** Row and advisory locks guard the races that matter ([ADR-0006](docs/adr/0006-postgres-prisma-concurrency.md)): go-live against a blocker, votes and pins, the AI budget. Each is proven by a test that forces the overlap.
+- **Side effects leave through a transactional outbox** ([ADR-0007](docs/adr/0007-transactional-outbox.md)). A change and the message about it commit together; the worker relays them to BullMQ queues (webhooks, AI triage, reminders, maintenance), whose jobs are safe to run twice.
+- **Real time:**
+  - **Socket.IO** carries chat and Q&A, with per-channel sequence journals, so a client that reconnects catches up with nothing lost or duplicated ([ADR-0008](docs/adr/0008-realtime-transports.md)).
+  - **Server-sent events** feed the operations room.
+- **Sessions:** HTTP-only cookies with rotating refresh tokens and reuse detection ([ADR-0005](docs/adr/0005-session-authentication.md)). Every request re-checks workspace and role; another workspace's resources are always `404`.
+- **Observability:** OpenTelemetry traces follow a click from the browser through the API and the outbox into the worker's job, with metrics, dashboards and alerts as code ([ADR-0011](docs/adr/0011-observability.md)). Errors go to Sentry.
 
-| Layer      | Technology                                                                           |
-| ---------- | ------------------------------------------------------------------------------------ |
-| Web        | Next.js 16, React 19, Tailwind CSS 4, TanStack Query, React Hook Form, Zod, Recharts |
-| API        | NestJS 11, TypeScript, class-validator, secure cookies, JWT and Argon2               |
-| Data       | PostgreSQL 17, Prisma 6, Redis 7 and private S3-compatible object storage            |
-| Quality    | ESLint, Jest, Supertest, Playwright and axe-core                                     |
-| Operations | BullMQ workers, FFmpeg/ffprobe, health metrics, OpenAPI 3.1 and Docker Compose       |
+**In AWS** ([ADR-0010](docs/adr/0010-aws-deployment.md), [docs/06](docs/06-infrastructure-and-operations.md#5-aws-infrastructure-terraform)):
 
-## Learning Guide
+- **Compute and data:** one ARM EC2 host runs the containers; RDS PostgreSQL sits in private subnets; S3, SES and ECR; secrets in Parameter Store.
+- **Delivery:** everything in Terraform. GitHub Actions deploys through OIDC (no stored keys) and SSM: migrations first, then a smoke test, and an automatic rollback to the previous images when it fails.
 
-A Chinese study handbook with architecture and business-flow diagrams, a 23-lesson curriculum and a code-quality plan lives in [`docs/learning/`](docs/learning/README.md).
+| Layer          | Technology                                                                                                                                    |
+| -------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| Web            | Next.js 16, React 19, Tailwind CSS 4, shadcn/ui (Radix), TanStack Query, hls.js                                                               |
+| API and worker | NestJS 12 (ES modules), Prisma 7, BullMQ, Socket.IO, pino, Zod 4                                                                              |
+| Data           | PostgreSQL 18, Valkey, S3 (SeaweedFS locally)                                                                                                 |
+| AI             | Official Anthropic SDK behind an interface of OpsPilot's own (`claude-opus-5-5` by default) ([ADR-0012](docs/adr/0012-ai-question-triage.md)) |
+| Quality        | TypeScript 6 (strict), ESLint, Prettier, dependency-cruiser, Vitest, Testcontainers, Playwright, axe, Lighthouse CI, k6, ZAP                  |
+| Operations     | Docker (multi-stage, non-root, amd64 and arm64), Caddy, OpenTelemetry, Grafana, Sentry, Terraform, GitHub Actions                             |
 
-## Local Setup
+---
 
-Requirements: Node.js 22+, npm 10+ and Docker Desktop.
+## Evidence
 
-```powershell
-Copy-Item .env.example .env
-npm install
-npm run services:up
-npm run db:generate
-npm run db:deploy
-npm run db:seed
-npm run dev
-```
+Claims you can check in this repository:
 
-| Surface       | URL                                       |
-| ------------- | ----------------------------------------- |
-| Web app       | `http://localhost:3000`                   |
-| REST API      | `http://localhost:4100/api/v1`            |
-| Swagger UI    | `http://localhost:4100/docs`              |
-| OpenAPI JSON  | `http://localhost:4100/docs/openapi.json` |
-| MinIO console | `http://localhost:9001`                   |
+| Area                | What backs it                                                                                                                                                                                                                                                                                                            |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Tests**           | <ul><li>900+ unit and component tests, with 90% coverage required on domain code.</li><li>560+ integration tests against real PostgreSQL, Valkey and S3 in containers.</li><li>Browser tests against the production images over HTTPS, on amd64 and arm64, in every CI run.</li></ul>                                    |
+| **Tests that test** | Every fix lands with a regression test, checked by a mutation that must make it fail. The mutation lists were re-run by independent reviewers each milestone                                                                                                                                                             |
+| **Concurrency**     | Race tests force the overlap with locks and gates; they do not hope for it                                                                                                                                                                                                                                               |
+| **Performance**     | <ul><li>NFR-4 load test: 500 attendees, 20 chat messages per second, one API instance; delivery at p95 0.57 s ([record](docs/load-tests/2026-11-18-nfr4-local.md)).</li><li>Public page: Lighthouse performance 0.92–0.99, accessibility 1.00, LCP 0.8–1.0 s, INP under 100 ms ([record](docs/lighthouse.md)).</li></ul> |
+| **Accessibility**   | WCAG 2.2 AA audit, criterion by criterion; a keyboard-only walkthrough of the golden flow, and reflow at 320 px, in CI ([audit](docs/accessibility-audit.md))                                                                                                                                                            |
+| **Security**        | OWASP ASVS 5.0 level 2 review with ZAP scans ([review](docs/security-review.md)); SSRF protection on every outbound call; dependency audit, secret scan and image scan in CI                                                                                                                                             |
+| **Operations**      | <ul><li>Six runbooks, each rehearsed: rollback, point-in-time restore, secret rotation, failing webhooks, false stream outages, failed demo reset ([runbooks](docs/runbooks/README.md)).</li><li>Five alert rules, each tested to fire past its threshold.</li></ul>                                                     |
 
-The API uses `4100` by default and remains configurable through the environment.
+---
 
-### Object storage image
+## Trade-offs
 
-Local development and CI use an S3-compatible MinIO server. The upstream `minio/minio`
-repository has been removed from Docker Hub, so the exact build verified by this project's
-media test suites (`RELEASE.2025-09-07T16-13-09Z`, unmodified, AGPL-3.0) is mirrored at
-`ghcr.io/zhanru-dev/minio`. This keeps test environments reproducible; that release no
-longer receives upstream updates. It is a local/test dependency only: the application talks
-to the S3 API through the AWS SDK, so a deployment should use managed S3 (or another
-maintained S3-compatible service) configured through the `S3_*` variables.
+Decisions made on purpose, and what they cost:
 
-## Chat and Topics integration: isolated local environment
+- **A modular monolith, not services.** One deployable, with module boundaries enforced by dependency-cruiser. Splitting later is a deployment change, because the modules talk through interfaces and the outbox. _Cost:_ the API and the worker scale together until then.
+- **One EC2 host, not ECS and a load balancer.** It fits the demo's capacity and budget (about $30–50 a month). _Cost:_ a single point of failure for the application tier (the 99.5% objective allows it). The containers are already production-shaped, so ECS Fargate, an ALB and ElastiCache need only infrastructure changes.
+- **Revocation by polling the database every second, not pub/sub.** "Access ends within 5 seconds" must hold even when a broker message is lost. _Cost:_ a small, constant query load per instance.
+- **Chat delivered in 100 ms frames.** It cut the API's writes per message from one per attendee to one per attendee per frame, and made NFR-4 pass. _Cost:_ up to 100 ms more latency per message, still well within the 1 s objective.
+- **The model sees labels (`q1…qN`), never IDs.** A made-up label fails validation instead of touching a real question. Nothing the model says changes anything until a moderator confirms. _Cost:_ one broken suggestion discards the whole set.
+- **No OpenTelemetry SDK in the browser.** The browser starts the trace with a `traceparent` header of its own; the public page keeps its JavaScript budget (under 150 kB). _Cost:_ browser-side timing is not traced.
 
-The first Mudu integration slice adds Chat to existing StreamOps Live Operations and
-the admitted attendee page. See the [foundation contract](docs/integration/mudu-integration-foundation.md)
-and [migration report, verification and limitations](docs/integration/chat-migration-report.md).
-Topics/Q&A is now integrated on the same surfaces. See its [migration report](docs/integration/topics-migration-report.md).
-These commands describe the original Chat/Topics slice; the later streaming and media sections below cover their separate integrations.
+**Known limits, stated plainly:**
 
-From the repository root, use the separate services below to avoid the ordinary development database:
+- **Not yet done by a person:** listening to the golden flow with a screen reader (planned before the public demo).
+- **Not built:** a generated OpenAPI document.
+- **Measured on a laptop:** the load test, and the runbook rehearsals, ran on the local stack. Both run again on AWS in milestone 10.
 
-```sh
+---
+
+## Develop
+
+```bash
+cp .env.example .env     # local settings; adjust ports here if they clash
 npm ci
-docker compose -f docker-compose.chat-test.yml up -d --wait
-node scripts/with-chat-test-env.mjs npm run db:generate
-node scripts/with-chat-test-env.mjs npm run db:deploy
-# First use of this disposable database ONLY. The existing seed replaces demo data.
-node scripts/with-chat-test-env.mjs npm run db:seed
-node scripts/with-chat-test-env.mjs npm run dev
+npm run services:up      # PostgreSQL, Valkey, Mailpit, SeaweedFS (S3) and the Caddy proxy
+npm run db:deploy        # apply database migrations
+npm run dev              # web app, API, worker and contracts in watch mode
 ```
 
-On subsequent starts, run Compose, `db:generate`, `db:deploy` and `dev`; do not reseed. Secrets are
-generated locally in ignored `.runtime/chat-test-secrets.json` with mode 0600. By default the wrapper
-targets `opspilot_chat_test` on port 5546, Redis 6381 and isolated object storage 9002, with
-Web/API on 3000/4100. Use `localhost` consistently for browser cookies.
+Open <http://localhost:3300> and create a workspace. Emails (invitations, password resets) appear in Mailpit at <http://localhost:8036>. The API answers on the same origin, for example <http://localhost:3300/api/v1/health/ready>.
 
-### Running tests beside a developer environment
+| Command                                      | What it does                                                                                                      |
+| -------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| `npm run check`                              | Formatting, lint, types and architecture rules                                                                    |
+| `npm test`                                   | Unit and component tests                                                                                          |
+| `npm run test:int`                           | API integration tests (starts its own containers; needs `openssl` on the PATH)                                    |
+| `npm run build`, then `npm run test:e2e`     | Playwright against the production builds (needs `services:up` and `db:deploy`; it serves whatever was built last) |
+| `npm run stack:up`, `npm run test:e2e:stack` | The production images over HTTPS, and the browser tests against them                                              |
+| `npm run observability:up`                   | Grafana with traces, metrics, dashboards and alerts for local development                                         |
+| `npm run load:nfr4`                          | The NFR-4 load test against the stack ([how](docs/load-tests/2026-11-18-nfr4-local.md))                           |
+| `npm run db:seed`                            | Load the demo workspace, or put it back to its seed                                                               |
 
-All disposable test addresses come from [`scripts/test-env.mjs`](scripts/test-env.mjs); the
-wrappers, Compose files, Playwright configurations and specs read the same values. Override
-them to run a second fully isolated stack while ordinary development servers keep running:
-
-| Variable | Default | Purpose |
-| --- | --- | --- |
-| `OPSPILOT_TEST_WEB_PORT` / `OPSPILOT_TEST_API_PORT` | 3000 / 4100 | Test web and API processes |
-| `OPSPILOT_TEST_POSTGRES_PORT` / `_CONTAINER` | 5546 / `opspilot-chat-test-postgres-1` | Disposable PostgreSQL |
-| `OPSPILOT_TEST_REDIS_PORT`, `_BROADCAST_REDIS_PORT`, `_MEDIA_REDIS_PORT` | 6381, 6394, 6402 | Redis per suite |
-| `OPSPILOT_TEST_MINIO_PORT`, `_SMTP_PORT`, `_MAILPIT_PORT` | 9002, 1026, 8025 | Object storage and mail |
-| `OPSPILOT_TEST_RTMP_PORT`, `_HLS_PORT`, `_MEDIA_CONTROL_PORT` | 1937, 8890, 9999 | MediaMTX |
-| `OPSPILOT_TEST_MEDIAMTX_CONTAINER` | `opspilot-broadcast-test-mediamtx-1` | MediaMTX container used by restart tests |
-
-Use `COMPOSE_PROJECT_NAME=<name>` with `docker-compose.chat-test.yml` to create separately named
-containers, and set the matching `*_CONTAINER` variables. Browser suites refuse any
-`DATABASE_URL` that is not a `*_test` database and never reuse an already running server
-unless `E2E_REUSE_SERVER=1` is set.
-
-1. Sign in at `http://localhost:3000/login` with the seeded Alex account below.
-2. Open **Product Operations Forum → Live Operations**, or
-   `http://localhost:3000/streamops/events/33333333-3333-4333-8333-333333333335/live`.
-3. In a separate browser profile/private window, open
-   `http://localhost:3000/events/33333333-3333-4333-8333-333333333335/register`.
-4. Register a local test email, open its message in Mailpit at `http://localhost:8025`,
-   and open/confirm the verification link in that attendee window. Chat and Questions & answers appear after admission.
-5. Send in either window, remove a message as Alex, and reload to verify persistence.
-6. Submit an attendee question. Alex can open **Pending**, approve it, reply, pin/unpin,
-   edit or delete it. **Question settings** controls audience publishing/replies/review.
-   Other attendees see the question only after approval. Topics and Polls remain separate.
-
-Topics tests are available as `test:topics:state`, `test:topics:api` and
-`test:topics:browser`. Backend/browser tests require an isolated database ending `_test`,
-with migrations and demo fixtures installed once. Stop local Web/API/worker processes before
-browser suites. For production-web verification, run `npm run build` under the test environment,
-then `E2E_PRODUCTION_WEB=1 npm run test:topics:browser` (or `test:ui` for all integration flows).
-The [Topics report](docs/integration/topics-migration-report.md) records the exact isolated
-environment and commands used during this integration.
-
-Run Chat fault recovery tests with
-`node scripts/with-chat-test-env.mjs npm run test:chat:recovery` after stopping the local
-Web/API/worker processes. The suite starts its own isolated test API and browsers; it verifies
-real database timeouts for both staff and attendees. See the
-[reconnection repair report](docs/acceptance/opspilot-chat-reconnection-remediation.md)
-for production-build mode, regression results and environment requirements.
-
-For an existing populated OpsPilot database, use its normal configuration and apply only
-`npm run db:generate` and `npm run db:deploy`. Do not reset or seed it for this migration.
-
-## Production Images
-
-The v1.5 release candidate packages each long-running process independently from the monorepo root:
-
-```powershell
-npm run containers:build
-```
-
-| Image                   | Process                             | Runtime probe               |
-| ----------------------- | ----------------------------------- | --------------------------- |
-| `opspilot-api:local`    | `node apps/api/dist/main.js`        | `/api/v1/health/ready`      |
-| `opspilot-worker:local` | `node apps/api/dist/worker.js`      | Process and queue telemetry |
-| `opspilot-web:local`    | Next.js standalone server on `PORT` | `/login`                    |
-
-The API image includes the Prisma CLI so a deployment can run `npm run db:deploy` from the exact release image before accepting traffic. Demo seeding is never automatic: in production, `npm run db:seed` refuses to run unless that one command explicitly receives `DEMO_SEED_ALLOWED=true`.
-
-The Web image requires `NEXT_PUBLIC_API_URL` as a build argument because browser-visible Next.js variables are compiled into the client bundle. The API accepts either `API_PORT` or a platform-provided `PORT`, validates all required dependencies at startup, and supports cross-site secure cookies through `COOKIE_SECURE=true` and `COOKIE_SAME_SITE=none`.
-
-A complete deployment uses separate API, worker and Web services with managed PostgreSQL, Redis and private S3-compatible storage. The worker has no public port. Production storage must exist before startup, use `S3_AUTO_CREATE_BUCKET=false`, and set `S3_FORCE_PATH_STYLE` to match the provider.
-
-## Demo Accounts
-
-The login page has one email/password flow. Its demo account shortcuts only fill the form; every account authenticates through the same endpoint and receives the role assigned to it in the database.
-
-| Role               | User        | Capability                                                              |
-| ------------------ | ----------- | ----------------------------------------------------------------------- |
-| Operations Manager | Alex Morgan | Configure events, resolve blockers and transition launch state          |
-| Audience Analyst   | Maya Chen   | Inspect readiness, recommendations and audit evidence in read-only mode |
-
-Direct credential login is also available for API testing:
-
-- `alex.morgan@opspilot.demo` / `DemoPass123!`
-- `maya.chen@opspilot.demo` / `DemoPass123!`
-
-These accounts are seed data only and must not be used outside local or isolated demo environments.
-
-## Quality Commands
-
-```powershell
-npm run lint
-npm run typecheck
-npm run test
-npm run test:e2e
-npm run test:ui
-npm run build
-npm audit --omit=dev
-```
-
-`test:ui` refuses to run against a database that is not `*_test`. CI provides one; locally run it
-through the isolated wrapper, for example `node scripts/with-media-test-env.mjs env E2E_PRODUCTION_WEB=1 npm run test:ui`
-after `npm run build` under the same wrapper.
-
-The Playwright suite exercises the complete manager lifecycle through Archive, verifies analyst read-only boundaries, checks AI/analytics evidence, protects core pages from mobile overflow, and runs axe checks on key product surfaces.
-
-## Readiness Model
-
-| Criterion                  | Points | Hard blocker |
-| -------------------------- | -----: | :----------: |
-| Accountable owner          |     10 |     Yes      |
-| Valid schedule             |     10 |     Yes      |
-| Audience access policy     |     25 |     Yes      |
-| Visible watch-page content |     15 |      No      |
-| Ready media attached       |     15 |      No      |
-| Critical runbook complete  |     25 |     Yes      |
-
-Scores and evidence are calculated by the API. The UI does not decide whether a launch is allowed.
-
-## Version Boundary
-
-`v2.0.0` adds the live event and audience-engagement layer while preserving the v1.5 deployment boundary: independently deployable Web, API and worker processes; fail-fast production configuration; private media storage; and release smoke tests. This candidate is intentionally not deployed. A hosted release still requires the deployment gate against managed dependencies.
-
-## Clean-Room Boundary
-
-OpsPilot is an original implementation informed by general enterprise livestream operations and the author's prior domain experience. It does not reuse proprietary source code, assets, branding, private data, credentials, captured API routes or copied screen layouts from another product.
-
-Research materials and implementation artefacts are kept separate. The codebase expresses original domain names, contracts, visual design and behaviour. See [ADR 0001](docs/adr/0001-clean-room-product-boundary.md).
-
-## Repository Layout
+**Repository layout:**
 
 ```text
-apps/
-  api/                 NestJS API and tests
-  web/                 Next.js product UI
-docs/
-  adr/                 Architecture decisions
-  architecture.md      System and domain design
-  case-study.md        Portfolio narrative and interview evidence
-  evidence/            Measured AI and release-quality evidence
-  product-strategy.md  Scope and release roadmap
-  threat-model.md      Security assumptions and mitigations
-e2e/                   Playwright golden flow
-prisma/                Schema, migration and deterministic seed
+apps/api            NestJS API and worker (one codebase, two entry points), Prisma schema and migrations
+apps/web            Next.js web app: public pages, the signed-in app, the watch page
+packages/contracts  Zod schemas and error codes shared by both
+e2e                 Playwright tests: the golden flow, accessibility, keyboard, layout, security, observability
+infra               Dockerfile, Caddy, Grafana dashboards and alerts
+load                k6 load test and its seed
+docs                requirements, architecture, data model, API, standards, operations, plan, ADRs,
+                    runbooks and the milestone 9 evidence
 ```
 
-## Integrated live broadcasting (local opt-in)
+---
 
-Live video uses the existing StreamEvent and admission flow. It has its own
-BroadcastSession; ending video does not complete the event or close Chat, Topics
-or Polls. Ordinary startup remains streaming-disabled.
+## Documentation
 
-For this existing integration workspace (preserves the current local database):
+| Document                                                                  | What it covers                                                           |
+| ------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
+| [Documentation index](docs/README.md)                                     | How the documents fit together, the order to read them, and the evidence |
+| [Product requirements](docs/01-product-requirements.md)                   | Problem, users, golden flow, functional and non-functional requirements  |
+| [Architecture](docs/02-architecture.md)                                   | System context, components, technology choices, cross-cutting concerns   |
+| [Domain and data model](docs/03-domain-and-data-model.md)                 | Modules, entities, invariants, state machines, data retention            |
+| [API and contracts](docs/04-api-and-contracts.md)                         | REST conventions, endpoint catalogue, real-time protocols, webhooks      |
+| [Engineering standards](docs/05-engineering-standards.md)                 | Code, testing, security, accessibility and review standards              |
+| [Infrastructure and operations](docs/06-infrastructure-and-operations.md) | Local environment, CI/CD, AWS, observability, runbooks                   |
+| [Delivery plan](docs/07-delivery-plan.md)                                 | Milestones, exit criteria and how they map to lessons                    |
+| [Architecture decision records](docs/adr/README.md)                       | Why each significant decision was made                                   |
 
-```sh
-npm run broadcast:setup
-npm run broadcast:dev
-```
+## Status
 
-Stop the existing development process before starting another one on ports
-3000/4100. Setup only deploys additive migrations; it never resets or reseeds the
-existing database. For a fresh, disposable demonstration environment instead:
-
-```sh
-npm run broadcast:test:setup
-node scripts/with-broadcast-env.mjs npm run dev
-```
-
-Open `http://localhost:3000`, sign in with a local demo account, open an event's
-Live Operations, and prepare a broadcast. Expand **Publisher connection** and
-generate a key. Use OBS with H.264/AAC, server `rtmp://127.0.0.1:1937/live`, and
-the generated stream key. An attendee registers and verifies the existing email
-link, then follows **Enter Watch Room** (`/events/<event-id>/watch`). Separate
-browser profiles are independent participants. PUBLIC registration still requires
-admission before protected video access.
-
-Docker Desktop and FFmpeg (for automated stream fixtures) are required. Local
-MediaMTX ports 1937/8890/9999 avoid the Mudu source environment. Development and
-isolated broadcast tests share those ports and must run sequentially. Re-run the
-appropriate setup when switching between their generated secrets.
-
-```sh
-npm run broadcast:test:setup
-npm run build
-npm run test:broadcast:migration
-npm run test:broadcast:api
-npm run test:broadcast:browser
-```
-
-These tests use `opspilot_broadcast_test`, separate Redis6394 and an isolated media
-namespace. See the [migration report](docs/integration/live-streaming-migration-report.md)
-for the contracts, measured recovery, fault tests, production limitations and
-credential-safe FFmpeg example. No Live Streaming or Media Library assets are
-copied from captured historical Mudu material.
-
-
-## Integrated Media Library
-
-Staff can upload multiple MP4/MOV/MP3/WAV/M4A files (100 MiB / 5 minutes), pause,
-retry, cancel and resume after reload by reselecting the original file. Three
-file workers transfer sequential 5 MiB parts. The existing BullMQ/FFmpeg pipeline
-produces private previews and video thumbnails; READY means processing succeeded.
-Unreferenced terminal assets may be deleted, with durable storage cleanup.
-Existing ready assets are retained until explicit deletion.
-
-Use the existing `npm run broadcast:setup` / `npm run broadcast:dev` environment
-and open `/streamops/media`. Setup applies additive migrations without reseeding
-existing development data. For disposable verification:
-
-```sh
-npm run media:test:setup
-node scripts/with-media-test-env.mjs npm run build
-npm run test:media:state
-npm run test:media:api
-npm run test:media:browser
-```
-
-See [Media integration, recovery contracts and evidence](docs/integration/media-library-migration-report.md).
-Do not run test suites against shared data. Already issued private URLs retain
-their documented TTL; new operations use current server-side permissions.
+Milestones 1 to 9 are built and accepted: the whole golden flow, hardened with tracing, alerts, load, accessibility and security work. Milestone 10, deployment to AWS and the public launch, is in progress.

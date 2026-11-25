@@ -1,18 +1,37 @@
-import { NestFactory } from '@nestjs/core';
-import { ConfigService } from '@nestjs/config';
-import { AppModule } from './app.module';
-import { configureApp } from './configure-app';
+import { NestFactory } from "@nestjs/core";
+import type { NestExpressApplication } from "@nestjs/platform-express";
 
-async function bootstrap() {
-  const app = await NestFactory.create(AppModule, {
-    forceCloseConnections: true,
-  });
-  const config = app.get(ConfigService);
-  configureApp(app);
-  app.enableShutdownHooks();
+import { AppModule } from "./app.module.js";
+import { APP_OPTIONS, configureApp } from "./app.setup.js";
+import {
+  type AppConfig,
+  ConfigError,
+  loadConfig,
+} from "./config/app-config.js";
+import { initErrorReporting } from "./observability/error-reporting.js";
 
-  const host = config.getOrThrow<string>('API_HOST');
-  const port = config.getOrThrow<number>('API_PORT');
-  await app.listen(port, host);
+function loadConfigOrExit(): AppConfig {
+  try {
+    return loadConfig(process.env);
+  } catch (error) {
+    if (error instanceof ConfigError) {
+      // The logger is not configured yet, so write the problems directly.
+      process.stderr.write(`${error.message}\n`);
+      process.exit(1);
+    }
+    throw error;
+  }
 }
-void bootstrap();
+
+const config = loadConfigOrExit();
+// Before the application starts, so errors during start-up are reported too.
+initErrorReporting(config, "api");
+const app = await NestFactory.create<NestExpressApplication>(
+  AppModule.forRoot(config),
+  APP_OPTIONS,
+);
+configureApp(app);
+// On SIGTERM (a deploy or `docker stop`), finish open requests and close
+// connections before exiting.
+app.enableShutdownHooks();
+await app.listen(config.api.port, config.api.host);

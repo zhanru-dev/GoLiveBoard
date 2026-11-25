@@ -1,69 +1,153 @@
+# Local infrastructure. The applications run on your machine (`npm run dev`);
+# these containers provide what they depend on.
+#
+#   npm run services:up     start everything and wait until it is healthy
+#   npm run services:down   stop (data in named volumes is kept)
+#
+# Every port is bound to 127.0.0.1, so nothing is reachable from your network,
+# and can be changed in .env. Images are pinned to exact versions; the
+# integration tests use the same ones (apps/api/src/testing/containers.ts).
+name: opspilot
+
 services:
-  postgres:
-    image: postgres:17-alpine
-    restart: unless-stopped
+  # One origin for the browser, as in production: /api/* and /realtime go to
+  # the API, everything else to the web app.
+  proxy:
+    image: caddy:2.11.9-alpine
+    ports:
+      - "127.0.0.1:${PROXY_PORT:-3300}:80"
     environment:
-      POSTGRES_DB: opspilot
+      API_UPSTREAM: host.docker.internal:${API_PORT:-4301}
+      WEB_UPSTREAM: host.docker.internal:3301
+    extra_hosts:
+      # Docker Desktop provides host.docker.internal; Linux needs this line.
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ./infra/docker/Caddyfile:/etc/caddy/Caddyfile:ro
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "wget",
+          "-q",
+          "-O",
+          "/dev/null",
+          "http://127.0.0.1:2019/config/",
+        ]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  postgres:
+    image: postgres:18.6-alpine
+    ports:
+      - "127.0.0.1:${POSTGRES_PORT:-5443}:5432"
+    environment:
+      # Local development only; production uses RDS with generated credentials.
       POSTGRES_USER: opspilot
       POSTGRES_PASSWORD: opspilot
-    ports:
-      - "5544:5432"
+      POSTGRES_DB: opspilot
     volumes:
-      - opspilot_postgres_data:/var/lib/postgresql/data
+      # PostgreSQL 18 images keep data in /var/lib/postgresql/18/docker, so the
+      # volume is mounted one level up.
+      - postgres-data:/var/lib/postgresql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U opspilot -d opspilot"]
       interval: 5s
-      timeout: 5s
+      timeout: 3s
       retries: 10
 
-  redis:
-    image: redis:7.4.10-alpine
-    restart: unless-stopped
-    command: ["redis-server", "--appendonly", "yes"]
+  valkey:
+    image: valkey/valkey:9.1.3-alpine
     ports:
-      - "6379:6379"
-    volumes:
-      - opspilot_redis_data:/data
+      - "127.0.0.1:${VALKEY_PORT:-6392}:6379"
+    # No volume: Valkey holds only data that can be rebuilt (queues come from
+    # the outbox, counters and presence are temporary).
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD", "valkey-cli", "ping"]
       interval: 5s
-      timeout: 5s
+      timeout: 3s
       retries: 10
 
-  minio:
-    image: ghcr.io/zhanru-dev/minio:RELEASE.2025-09-07T16-13-09Z
-    restart: unless-stopped
-    command: server /data --console-address ":9001"
-    environment:
-      MINIO_ROOT_USER: opspilot
-      MINIO_ROOT_PASSWORD: opspilot-local-storage
-      MINIO_API_CORS_ALLOW_ORIGIN: "http://localhost:3000"
-    ports:
-      - "9000:9000"
-      - "9001:9001"
-    volumes:
-      - opspilot_minio_data:/data
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
-      interval: 5s
-      timeout: 5s
-      retries: 20
-
+  # Catches every email the app sends; read them at http://localhost:8036.
   mailpit:
-    image: axllent/mailpit:v1.31.0
-    restart: unless-stopped
+    image: axllent/mailpit:v1.33.1
     ports:
-      - "127.0.0.1:1025:1025"
-      - "127.0.0.1:8025:8025"
-    environment:
-      MP_MAX_MESSAGES: 200
+      - "127.0.0.1:${MAILPIT_SMTP_PORT:-1036}:1025"
+      - "127.0.0.1:${MAILPIT_UI_PORT:-8036}:8025"
     healthcheck:
       test: ["CMD", "/mailpit", "readyz"]
       interval: 5s
-      timeout: 5s
+      timeout: 3s
       retries: 10
 
+  # Traces, metrics, dashboards and alerts (docs/06, section 7): Grafana at
+  # http://127.0.0.1:3310, OTLP/HTTP on 127.0.0.1:4318. Heavy, so started on
+  # request: `npm run observability:up`, then set
+  # OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 in .env. Alert emails
+  # go to Mailpit.
+  lgtm:
+    profiles: [observability]
+    image: grafana/otel-lgtm:0.39.0@sha256:4c8056c9c05fcb3c8fd93800e85334bfd79b4d0271b47a54a121a64af41fe1fe
+    environment:
+      OTELCOL_EXTRA_ARGS: --config=file:/opspilot/otelcol-readiness.yaml
+      # The API runs on this machine in development.
+      OPSPILOT_READINESS_URL: http://host.docker.internal:4301/api/v1/health/ready
+      GF_SMTP_ENABLED: "true"
+      GF_SMTP_HOST: mailpit:1025
+      GF_SMTP_FROM_ADDRESS: alerts@opspilot.localhost
+      GF_SMTP_FROM_NAME: OpsPilot alerts
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ./infra/observability/otelcol-readiness.yaml:/opspilot/otelcol-readiness.yaml:ro
+      - ./infra/observability/grafana/dashboards:/opspilot/dashboards:ro
+      - ./infra/observability/grafana/dashboards.yaml:/otel-lgtm/grafana/conf/provisioning/dashboards/opspilot.yaml:ro
+      - ./infra/observability/grafana/alerting.yaml:/otel-lgtm/grafana/conf/provisioning/alerting/opspilot.yaml:ro
+      - lgtm-data:/data
+    ports:
+      - "127.0.0.1:${GRAFANA_PORT:-3310}:3000"
+      - "127.0.0.1:${OTLP_HTTP_PORT:-4318}:4318"
+    healthcheck:
+      test: ["CMD-SHELL", "test -f /tmp/ready"]
+      interval: 5s
+      timeout: 3s
+      retries: 60
+
+  # S3-compatible object storage for uploads (holding slates). Production
+  # uses Amazon S3; the API creates the bucket and its CORS rule locally.
+  s3:
+    image: chrislusf/seaweedfs:4.53
+    command:
+      - server
+      - -s3
+      - -s3.config=/etc/seaweedfs/s3.json
+      - -dir=/data
+      - -ip.bind=0.0.0.0
+      # Small volumes, so every bucket gets some on a small disk too
+      # (SEAWEEDFS_STORAGE_FLAGS in apps/api/src/testing/containers.ts).
+      - -master.volumeSizeLimitMB=64
+    ports:
+      - "127.0.0.1:${S3_PORT:-8333}:8333"
+    volumes:
+      # Local credentials only (infra/docker/seaweedfs-s3.json).
+      - ./infra/docker/seaweedfs-s3.json:/etc/seaweedfs/s3.json:ro
+      - s3-data:/data
+    healthcheck:
+      # The S3 gateway answering is not enough: until the volume server has
+      # registered with the master, every upload fails ("failed to find
+      # writable volumes", seen once in CI after a slow start). Healthy
+      # means the master has room for a volume too.
+      test:
+        [
+          "CMD-SHELL",
+          'wget -q -O /dev/null http://127.0.0.1:8333/healthz && wget -q -O - http://127.0.0.1:9333/dir/status | grep -q ''"Free":[1-9]''',
+        ]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
 volumes:
-  opspilot_postgres_data:
-  opspilot_redis_data:
-  opspilot_minio_data:
+  postgres-data:
+  s3-data:
+  lgtm-data:

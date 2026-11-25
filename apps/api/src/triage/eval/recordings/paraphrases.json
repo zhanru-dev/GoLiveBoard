@@ -1,0 +1,26 @@
+{
+  "case": "paraphrases",
+  "model": "claude-opus-5-5",
+  "hash": "d6c3571a45cee1d6f896a2697753d73fde78ae867ff2b75d9072e1fadbedce5a",
+  "output": {
+    "groups": [
+      {
+        "representative": "q1",
+        "questions": ["q1", "q2", "q3"],
+        "reason": "All ask whether a recording will be available to watch later."
+      },
+      {
+        "representative": "q6",
+        "questions": ["q5", "q6"],
+        "reason": "Both ask how to get the slides after the session."
+      }
+    ],
+    "answer_order": ["q1", "q6", "q7", "q4"]
+  },
+  "usage": {
+    "inputTokens": 818,
+    "outputTokens": 115
+  },
+  "latencyMs": 2904,
+  "recordedAt": "2026-11-17T17:11:11.515Z"
+}

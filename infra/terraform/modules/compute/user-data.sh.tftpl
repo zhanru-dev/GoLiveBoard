@@ -1,0 +1,20 @@
+#!/bin/bash
+# First boot of the application host (Amazon Linux 2023, arm64). Installs
+# Docker and Compose; everything the application needs arrives later with
+# each deploy (SSM document "${deploy_document}"). Nobody logs in: access is
+# through SSM Session Manager only.
+set -euo pipefail
+
+dnf install -y docker
+systemctl enable --now docker
+
+# Compose is not packaged for Amazon Linux 2023: the release binary, checked
+# against its published SHA-256.
+mkdir -p /usr/local/lib/docker/cli-plugins
+curl -fsSL -o /usr/local/lib/docker/cli-plugins/docker-compose \
+  "https://github.com/docker/compose/releases/download/${compose_version}/docker-compose-linux-aarch64"
+echo "${compose_sha256}  /usr/local/lib/docker/cli-plugins/docker-compose" | sha256sum -c -
+chmod 0755 /usr/local/lib/docker/cli-plugins/docker-compose
+
+# Where releases live: one directory per commit, and "current".
+install -d -m 0750 /opt/opspilot /opt/opspilot/releases

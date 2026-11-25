@@ -4,109 +4,166 @@ import {
   Get,
   HttpCode,
   Post,
+  Put,
   Req,
   Res,
-  UnauthorizedException,
-} from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
-import type { CookieOptions, Request, Response } from 'express';
-import { CurrentUser } from '../common/decorators/current-user.decorator';
-import { Public } from '../common/decorators/public.decorator';
-import type { AuthenticatedUser } from '../common/request-context';
-import { AuthService } from './auth.service';
-import { LoginDto } from './dto/login.dto';
+} from "@nestjs/common";
+import {
+  type Accepted,
+  type Me,
+  PasswordResetConfirmRequest,
+  PasswordResetRequest,
+  SignInRequest,
+  SignUpRequest,
+  SwitchWorkspaceRequest,
+} from "@opspilot/contracts";
+import type { Request, Response } from "express";
 
-@Controller('auth')
+import { type Actor, CurrentActor, Public } from "./actor.js";
+import { AuthService, type RefreshResult } from "./auth.service.js";
+import {
+  clearSessionCookies,
+  readRefreshCookie,
+  setSessionCookies,
+} from "./cookies.js";
+import { MeService } from "./me.service.js";
+import { PasswordResetService } from "./password-reset.service.js";
+import { DomainError } from "../shared/domain/domain-error.js";
+
+@Controller("auth")
 export class AuthController {
   constructor(
     private readonly auth: AuthService,
-    private readonly config: ConfigService,
+    private readonly passwordReset: PasswordResetService,
   ) {}
 
+  /** Always `202` with the same body: nothing reveals whether the email was new. */
   @Public()
-  @Post('login')
-  @HttpCode(200)
-  async login(
-    @Body() dto: LoginDto,
-    @Res({ passthrough: true }) response: Response,
-  ) {
-    const session = await this.auth.login(dto.email, dto.password);
-    this.setCookies(response, session.accessToken, session.refreshToken);
-    return { user: this.publicUser(session.user) };
+  @Post("sign-up")
+  @HttpCode(202)
+  async signUp(
+    @Body({ schema: SignUpRequest }) body: SignUpRequest,
+    @Req() request: Request,
+  ): Promise<Accepted> {
+    await this.auth.signUp(body, clientIp(request));
+    return { status: "accepted" };
   }
 
   @Public()
-  @Post('refresh')
-  @HttpCode(200)
+  @Post("sign-in")
+  @HttpCode(204)
+  async signIn(
+    @Body({ schema: SignInRequest }) body: SignInRequest,
+    @Req() request: Request,
+    @Res({ passthrough: true }) response: Response,
+  ): Promise<void> {
+    setSessionCookies(
+      response,
+      await this.auth.signIn(body, clientIp(request)),
+    );
+  }
+
+  /** Demo mode only (FR-AUTH-5); otherwise `404`, as if it did not exist. */
+  @Public()
+  @Post("demo")
+  @HttpCode(204)
+  async signInToDemo(
+    @Req() request: Request,
+    @Res({ passthrough: true }) response: Response,
+  ): Promise<void> {
+    setSessionCookies(
+      response,
+      await this.auth.signInToDemo(clientIp(request)),
+    );
+  }
+
+  @Public()
+  @Post("refresh")
+  @HttpCode(204)
   async refresh(
     @Req() request: Request,
     @Res({ passthrough: true }) response: Response,
-  ) {
-    const token = request.cookies?.opspilot_refresh as string | undefined;
-    if (!token) throw new UnauthorizedException('Refresh token is missing.');
-    const session = await this.auth.refresh(token);
-    this.setCookies(response, session.accessToken, session.refreshToken);
-    return { user: this.publicUser(session.user) };
+  ): Promise<void> {
+    const refreshToken = readRefreshCookie(request);
+    if (refreshToken === undefined) {
+      throw new DomainError("UNAUTHENTICATED");
+    }
+    let result: RefreshResult;
+    try {
+      result = await this.auth.refresh(refreshToken);
+    } catch (error) {
+      clearSessionCookies(response);
+      throw error;
+    }
+    // A concurrent request already rotated this token. Its response carries
+    // the new cookies; answering this one with no cookies at all leaves them
+    // in place, where clearing them here would sign the browser out.
+    if (result.kind === "rotated") {
+      setSessionCookies(response, result.tokens);
+    }
+  }
+
+  /** Works with an expired access token: the refresh cookie names the session. */
+  @Public()
+  @Post("sign-out")
+  @HttpCode(204)
+  async signOut(
+    @Req() request: Request,
+    @Res({ passthrough: true }) response: Response,
+  ): Promise<void> {
+    const refreshToken = readRefreshCookie(request);
+    if (refreshToken !== undefined) {
+      await this.auth.signOut(refreshToken);
+    }
+    clearSessionCookies(response);
+  }
+
+  /** Always `202` with the same body: nothing reveals whether the account exists. */
+  @Public()
+  @Post("password-reset/request")
+  @HttpCode(202)
+  async requestPasswordReset(
+    @Body({ schema: PasswordResetRequest }) body: PasswordResetRequest,
+    @Req() request: Request,
+  ): Promise<Accepted> {
+    await this.passwordReset.request(body, clientIp(request));
+    return { status: "accepted" };
   }
 
   @Public()
-  @Post('logout')
+  @Post("password-reset/confirm")
   @HttpCode(204)
-  async logout(
-    @Req() request: Request,
-    @Res({ passthrough: true }) response: Response,
-  ) {
-    await this.auth.logout(
-      request.cookies?.opspilot_access as string | undefined,
-    );
-    response.clearCookie('opspilot_access', this.cookieOptions('/'));
-    response.clearCookie(
-      'opspilot_refresh',
-      this.cookieOptions('/api/v1/auth'),
-    );
+  async confirmPasswordReset(
+    @Body({ schema: PasswordResetConfirmRequest })
+    body: PasswordResetConfirmRequest,
+  ): Promise<void> {
+    await this.passwordReset.confirm(body);
+  }
+}
+
+@Controller("me")
+export class MeController {
+  constructor(private readonly me: MeService) {}
+
+  @Get()
+  describe(@CurrentActor() actor: Actor): Promise<Me> {
+    return this.me.describe(actor);
   }
 
-  @Get('me')
-  me(@CurrentUser() user: AuthenticatedUser) {
-    return { user: this.publicUser(user) };
+  /** FR-WS-4: the next request is scoped to the chosen workspace. */
+  @Put("active-workspace")
+  switchWorkspace(
+    @CurrentActor() actor: Actor,
+    @Body({ schema: SwitchWorkspaceRequest }) body: SwitchWorkspaceRequest,
+  ): Promise<Me> {
+    return this.me.switchWorkspace(actor, body.workspaceId);
   }
+}
 
-  private setCookies(
-    response: Response,
-    accessToken: string,
-    refreshToken: string,
-  ) {
-    response.cookie('opspilot_access', accessToken, {
-      ...this.cookieOptions('/'),
-      maxAge: 15 * 60 * 1000,
-    });
-    response.cookie('opspilot_refresh', refreshToken, {
-      ...this.cookieOptions('/api/v1/auth'),
-      maxAge: 7 * 24 * 60 * 60 * 1000,
-    });
-  }
-
-  private cookieOptions(path: string): CookieOptions {
-    return {
-      httpOnly: true,
-      secure: this.config.getOrThrow<boolean>('COOKIE_SECURE'),
-      sameSite: this.config.getOrThrow<'lax' | 'strict' | 'none'>(
-        'COOKIE_SAME_SITE',
-      ),
-      path,
-    };
-  }
-
-  private publicUser(
-    user: Omit<AuthenticatedUser, 'id'> & { sub?: string; id?: string },
-  ) {
-    return {
-      id: user.id ?? user.sub,
-      email: user.email,
-      name: user.name,
-      workspaceId: user.workspaceId,
-      workspaceName: user.workspaceName,
-      role: user.role,
-    };
-  }
+/**
+ * The client's address. Behind Caddy, Express derives it from X-Forwarded-For
+ * because `trust proxy` is set to the number of proxies in front of the API.
+ */
+function clientIp(request: Request): string {
+  return request.ip ?? "unknown";
 }

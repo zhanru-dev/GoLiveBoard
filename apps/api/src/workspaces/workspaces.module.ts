@@ -1,5 +1,25 @@
-import { Module } from '@nestjs/common';
-import { WorkspacesController } from './workspaces.controller';
+import { Module } from "@nestjs/common";
 
-@Module({ controllers: [WorkspacesController] })
+import { PasswordHasherModule } from "../auth/password-hasher.js";
+import { RealtimeSignalsModule } from "../live/realtime-signals.js";
+import { DatabaseModule } from "../database/database.module.js";
+import { MailModule } from "../mail/mail.module.js";
+import { InvitationsService } from "./invitations.service.js";
+import { MembersService } from "./members.service.js";
+import {
+  TeamInvitationsController,
+  WorkspaceController,
+} from "./workspace.controller.js";
+import { WorkspaceService } from "./workspace.service.js";
+
+@Module({
+  imports: [
+    DatabaseModule,
+    MailModule,
+    PasswordHasherModule,
+    RealtimeSignalsModule,
+  ],
+  controllers: [WorkspaceController, TeamInvitationsController],
+  providers: [WorkspaceService, MembersService, InvitationsService],
+})
 export class WorkspacesModule {}

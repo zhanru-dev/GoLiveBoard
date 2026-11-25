@@ -1,0 +1,164 @@
+import { BullMQOtel } from "bullmq-otel";
+import type { ConnectionOptions, DefaultJobOptions } from "bullmq";
+
+import type { AppConfig } from "../config/app-config.js";
+
+/** Checks of event streams: scheduled every 30 seconds, or requested. */
+export const STREAM_CHECKS_QUEUE = "stream-checks";
+
+export const STREAM_CHECK_JOBS = {
+  /** Checks one event's stream for one slot (CheckStreamJob). */
+  check: "check",
+  /** Repeats every 30 seconds and enqueues a check per due event. */
+  schedule: "schedule",
+} as const;
+
+/** Work on a schedule: reminders, retention, the nightly demo reset. */
+export const MAINTENANCE_QUEUE = "maintenance";
+
+export const MAINTENANCE_JOBS = {
+  /** Restores the demo workspace to its seed (FR-AUTH-5). */
+  demoReset: "demo-reset",
+  /**
+   * Every 5 minutes: empties the storage prefixes recorded in
+   * `pending_file_purges` whose upload links have expired.
+   */
+  filePurge: "file-purge",
+  /**
+   * Legacy (DemoEventsDeletedPayload): queued by an earlier build. Now it
+   * only records the events' prefixes for the sweep.
+   */
+  legacyDemoPurgeFiles: "demo-purge-files",
+  /** Every minute: sends the reminders that are due (FR-AD-5). */
+  reminders: "reminders",
+  /** Daily: anonymises and deletes what is past retention (FR-AD-6). */
+  retention: "retention",
+} as const;
+
+/**
+ * Webhooks (FR-RC-2), apart from maintenance: a send can take 10 seconds,
+ * which must not hold up reminders or the retention job.
+ */
+export const WEBHOOKS_QUEUE = "webhooks";
+export const WEBHOOK_JOBS = {
+  /** Turns one outbox message into a delivery per subscribed endpoint. */
+  fanOut: "fan-out",
+  /** Every 5 seconds: sends the deliveries that are due. */
+  deliver: "deliver",
+  /** Every 10 minutes: seals signing secrets again with the current key. */
+  reseal: "reseal",
+} as const;
+
+/**
+ * AI question triage (FR-RN-6): a run waits up to 8 seconds for the model,
+ * on a queue of its own so nothing else waits behind it.
+ */
+export const TRIAGE_QUEUE = "ai-triage";
+export const TRIAGE_JOBS = {
+  /** Carries out one requested run. */
+  run: "run",
+  /** Every minute: closes runs a worker left unfinished. */
+  sweep: "sweep",
+} as const;
+
+/** Every queue the worker consumes. */
+export const QUEUE_NAMES = [
+  STREAM_CHECKS_QUEUE,
+  MAINTENANCE_QUEUE,
+  WEBHOOKS_QUEUE,
+  TRIAGE_QUEUE,
+] as const;
+export type QueueName = (typeof QUEUE_NAMES)[number];
+
+/** A queue command that has not answered by then fails (relay, scheduler). */
+/**
+ * Traces jobs (ADR-0011): a job carries the trace it was queued in, and is
+ * processed in it, so one trace runs from a request to the work it caused.
+ */
+export function queueTelemetry(): BullMQOtel {
+  return new BullMQOtel({ tracerName: "opspilot-queues" });
+}
+
+export const QUEUE_COMMAND_TIMEOUT_MS = 2_000;
+/** How long shutdown waits for a queue or worker to close cleanly. */
+export const SHUTDOWN_GRACE_MS = 3_000;
+
+/**
+ * For adding jobs. A frozen Valkey must not hold the outbox relay forever:
+ * its round would never end and the worker could never shut down (the
+ * milestone 3 review). A command that times out fails the relay's round,
+ * which rolls back, so its messages stay in the outbox and are retried.
+ *
+ * A command timeout alone only fails the caller: the command stays queued
+ * for a reply that a frozen server never sends, so every retry adds one
+ * more (the milestone 3 re-review). The socket timeout drops a connection
+ * that has gone silent with commands outstanding, which fails them all and
+ * reconnects, so what is queued stays bounded while Valkey is frozen.
+ */
+export function producerConnection(config: AppConfig): ConnectionOptions {
+  return {
+    url: config.valkey.url,
+    connectionName: "opspilot-producer",
+    maxRetriesPerRequest: 1,
+    commandTimeout: QUEUE_COMMAND_TIMEOUT_MS,
+    socketTimeout: QUEUE_COMMAND_TIMEOUT_MS,
+  };
+}
+
+/**
+ * For consuming jobs. BullMQ blocks on Valkey while it waits for jobs, so
+ * this connection must retry forever (`maxRetriesPerRequest: null`) and has
+ * no command timeout; shutdown bounds it instead (closeWithin).
+ */
+export function consumerConnection(config: AppConfig): ConnectionOptions {
+  return {
+    url: config.valkey.url,
+    maxRetriesPerRequest: null,
+    connectionName: "opspilot-consumer",
+  };
+}
+
+/**
+ * Closes cleanly if that finishes within the grace period, otherwise forces
+ * the connection shut, so a frozen Valkey cannot keep the process alive.
+ *
+ * @returns whether the clean close finished in time
+ */
+export async function closeWithin(
+  close: () => Promise<void>,
+  forceClose: () => Promise<void>,
+  graceMs: number = SHUTDOWN_GRACE_MS,
+): Promise<boolean> {
+  const expired = (milliseconds: number) =>
+    new Promise<"expired">((resolve) =>
+      setTimeout(() => {
+        resolve("expired");
+      }, milliseconds).unref(),
+    );
+  const outcome = await Promise.race([
+    close().then(
+      () => "closed" as const,
+      () => "closed" as const,
+    ),
+    expired(graceMs),
+  ]);
+  if (outcome === "closed") {
+    return true;
+  }
+  await Promise.race([forceClose().catch(() => undefined), expired(graceMs)]);
+  return false;
+}
+
+const DAY_SECONDS = 24 * 60 * 60;
+
+/**
+ * Failed jobs retry with exponential backoff (1 s, 2 s, 4 s). Finished jobs
+ * are kept for a day: while a job is kept, adding another with the same ID
+ * does nothing, which is what makes re-relayed outbox messages harmless.
+ */
+export const DEFAULT_JOB_OPTIONS: DefaultJobOptions = {
+  attempts: 3,
+  backoff: { type: "exponential", delay: 1_000 },
+  removeOnComplete: { age: DAY_SECONDS },
+  removeOnFail: { age: 7 * DAY_SECONDS },
+};

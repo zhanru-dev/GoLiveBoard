@@ -1,0 +1,21 @@
+{
+  "case": "the same question in several languages",
+  "model": "claude-opus-5-5",
+  "hash": "eb2ce40cb6c508abc5b14e7578760f038438a64022b709393841cdbec46069bf",
+  "output": {
+    "groups": [
+      {
+        "representative": "q2",
+        "questions": ["q1", "q2", "q3"],
+        "reason": "All three ask whether the session will be recorded, in different languages."
+      }
+    ],
+    "answer_order": ["q2", "q4"]
+  },
+  "usage": {
+    "inputTokens": 777,
+    "outputTokens": 72
+  },
+  "latencyMs": 1949,
+  "recordedAt": "2026-11-17T17:11:19.286Z"
+}

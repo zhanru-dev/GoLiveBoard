@@ -1,329 +1,301 @@
+import { Inject, Injectable } from "@nestjs/common";
 import {
-  BadRequestException,
-  Injectable,
-  NotFoundException,
-} from '@nestjs/common';
-import { EventStatus, Prisma, WorkspaceRole } from '@prisma/client';
-import { AuditService } from '../audit/audit.service';
-import { assertEventNotArchived } from '../common/event-mutations';
-import type { AuthenticatedUser } from '../common/request-context';
-import { DomainEventsService } from '../domain-events/domain-events.service';
-import { LiveSessionsService } from '../live-sessions/live-sessions.service';
-import { PrismaService } from '../prisma/prisma.service';
-import { ReadinessService } from '../readiness/readiness.service';
-import { CreateEventDto } from './dto/create-event.dto';
-import { UpdateEventDto } from './dto/update-event.dto';
+  type CreateEventRequest,
+  END_AFTER_START_MESSAGE,
+  EventDetail,
+  type EventPage,
+  type ListEventsQuery,
+  type UpdateEventRequest,
+} from "@opspilot/contracts";
+import { z } from "zod";
 
-const transitionMap: Record<EventStatus, EventStatus[]> = {
-  DRAFT: [EventStatus.CONFIGURING, EventStatus.CANCELLED],
-  CONFIGURING: [EventStatus.READY, EventStatus.CANCELLED],
-  READY: [EventStatus.CONFIGURING, EventStatus.LIVE, EventStatus.CANCELLED],
-  LIVE: [EventStatus.COMPLETED],
-  COMPLETED: [EventStatus.ARCHIVED],
-  ARCHIVED: [],
-  CANCELLED: [EventStatus.ARCHIVED],
-};
+import { recordAudit } from "../audit/audit.js";
+import type { Actor } from "../auth/actor.js";
+import { PRISMA } from "../database/prisma.js";
+import type { Prisma, PrismaClient } from "../generated/prisma/client.js";
+import { decodeCursor, encodeCursor } from "../http/cursor.js";
+import { claimDemoEventSlot } from "../demo/demo-workspace.js";
+import { Idempotency } from "../idempotency/idempotency.js";
+import { CLOCK, type Clock } from "../shared/clock.js";
+import { assertWorkspaceMember } from "../workspaces/membership-check.js";
+import { DomainError } from "../shared/domain/domain-error.js";
+import { isReadOnly } from "./domain/lifecycle.js";
+import { eventSlug } from "./domain/slug.js";
+import {
+  editableFields,
+  EVENT_SELECT,
+  type EventRow,
+  toEventDetail,
+  toEventSummary,
+} from "./event-view.js";
+import { escapeLikePattern } from "./like-pattern.js";
+import { randomSlugSuffix } from "./slug-suffix.js";
 
-// Transitions that integrations (webhooks) are notified about.
-const transitionEventTypes: Partial<Record<EventStatus, string>> = {
-  READY: 'event.ready',
-  LIVE: 'event.started',
-  COMPLETED: 'event.completed',
-};
+/** Where the last item of a page sits in the list's sort order. */
+const ListPosition = z.object({ startsAt: z.iso.datetime(), id: z.uuid() });
 
+export interface CreatedEvent {
+  readonly event: EventDetail;
+  /** True when this was a retry and the original response is returned. */
+  readonly replayed: boolean;
+}
+
+/** FR-EV-1, FR-EV-3 and FR-EV-4. Every query is scoped by the actor's workspace. */
 @Injectable()
 export class EventsService {
   constructor(
-    private readonly prisma: PrismaService,
-    private readonly readiness: ReadinessService,
-    private readonly audit: AuditService,
-    private readonly domainEvents: DomainEventsService,
-    private readonly liveSessions: LiveSessionsService,
+    @Inject(PRISMA) private readonly prisma: PrismaClient,
+    @Inject(CLOCK) private readonly clock: Clock,
+    private readonly idempotency: Idempotency,
   ) {}
 
-  async list(
-    user: AuthenticatedUser,
-    query: {
-      search?: string;
-      status?: EventStatus;
-      page?: number;
-      pageSize?: number;
-    },
-  ) {
-    const page = Math.max(query.page ?? 1, 1);
-    const pageSize = Math.min(Math.max(query.pageSize ?? 20, 1), 50);
-    const where: Prisma.StreamEventWhereInput = {
-      workspaceId: user.workspaceId,
-      ...(query.status ? { status: query.status } : {}),
-      ...(query.search
-        ? {
-            OR: [
-              { title: { contains: query.search, mode: 'insensitive' } },
-              { description: { contains: query.search, mode: 'insensitive' } },
-            ],
-          }
-        : {}),
-    };
-    const [items, total] = await this.prisma.$transaction([
-      this.prisma.streamEvent.findMany({
-        where,
-        include: {
-          owner: { select: { id: true, name: true, avatarInitials: true } },
-          _count: {
-            select: {
-              runbookItems: true,
-              mediaAssets: true,
-              recommendations: true,
-            },
-          },
-        },
-        orderBy: [{ scheduledStart: 'asc' }, { createdAt: 'desc' }],
-        skip: (page - 1) * pageSize,
-        take: pageSize,
-      }),
-      this.prisma.streamEvent.count({ where }),
-    ]);
-    const enriched = await Promise.all(
-      items.map(async (event) => ({
-        ...event,
-        readiness: await this.readiness.calculate(event.id, user.workspaceId),
-      })),
-    );
-    return { items: enriched, pagination: { page, pageSize, total } };
-  }
-
-  async get(eventId: string, user: AuthenticatedUser) {
-    const event = await this.prisma.streamEvent.findFirst({
-      where: { id: eventId, workspaceId: user.workspaceId },
-      include: {
-        owner: {
-          select: { id: true, name: true, email: true, avatarInitials: true },
-        },
-        accessPolicy: true,
-        runbookItems: {
-          include: {
-            owner: { select: { id: true, name: true, avatarInitials: true } },
-          },
-          orderBy: { sortOrder: 'asc' },
-        },
-        contentBlocks: { orderBy: { sortOrder: 'asc' } },
-        mediaAssets: {
-          include: { media: true },
-          orderBy: { createdAt: 'desc' },
-        },
-        recommendations: { orderBy: [{ status: 'asc' }, { severity: 'asc' }] },
-        auditLogs: {
-          include: {
-            actor: { select: { id: true, name: true, avatarInitials: true } },
-          },
-          orderBy: { createdAt: 'desc' },
-          take: 15,
-        },
-      },
+  /**
+   * Keyset pagination on (startsAt, id), newest start first: unlike an
+   * offset, a cursor stays correct while events are added, and every page
+   * costs the same index range scan.
+   */
+  async list(actor: Actor, query: ListEventsQuery): Promise<EventPage> {
+    const after =
+      query.cursor === undefined
+        ? undefined
+        : decodeCursor(query.cursor, ListPosition);
+    const conditions: Prisma.EventWhereInput[] = [
+      { workspaceId: actor.workspaceId },
+    ];
+    if (query.q !== undefined) {
+      conditions.push({
+        title: { contains: escapeLikePattern(query.q), mode: "insensitive" },
+      });
+    }
+    if (query.status !== undefined) {
+      conditions.push({ status: { in: query.status } });
+    }
+    if (query.from !== undefined) {
+      conditions.push({ startsAt: { gte: new Date(query.from) } });
+    }
+    if (query.to !== undefined) {
+      conditions.push({ startsAt: { lt: new Date(query.to) } });
+    }
+    if (after !== undefined) {
+      const startsAt = new Date(after.startsAt);
+      conditions.push({
+        OR: [
+          { startsAt: { lt: startsAt } },
+          { startsAt, id: { lt: after.id } },
+        ],
+      });
+    }
+    // One extra row tells whether another page follows.
+    const rows = await this.prisma.event.findMany({
+      where: { AND: conditions },
+      orderBy: [{ startsAt: "desc" }, { id: "desc" }],
+      take: query.limit + 1,
+      select: EVENT_SELECT,
     });
-    if (!event) throw new NotFoundException('Stream event was not found.');
+    const page = rows.slice(0, query.limit);
+    const last = page.at(-1);
     return {
-      ...event,
-      readiness: await this.readiness.calculate(eventId, user.workspaceId),
+      items: page.map(toEventSummary),
+      nextCursor:
+        rows.length > query.limit && last !== undefined
+          ? encodeCursor({ startsAt: last.startsAt.toISOString(), id: last.id })
+          : null,
     };
   }
 
-  async create(dto: CreateEventDto, user: AuthenticatedUser) {
-    const ownerId = await this.requireWorkspaceMember(
-      dto.ownerId ?? user.id,
-      user.workspaceId,
-    );
-    const slugBase = dto.title
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/(^-|-$)/g, '');
-    const slug = `${slugBase}-${Date.now().toString().slice(-5)}`;
-    const event = await this.prisma.$transaction(async (transaction) => {
-      const created = await transaction.streamEvent.create({
-        data: {
-          workspaceId: user.workspaceId,
-          ownerId,
-          title: dto.title,
-          slug,
-          description: dto.description,
-          scheduledStart: new Date(dto.scheduledStart),
-          scheduledEnd: new Date(dto.scheduledEnd),
-          timezone: dto.timezone,
-          expectedAttendees: dto.expectedAttendees,
-          status: EventStatus.DRAFT,
-          runbookItems: {
-            create: [
-              {
-                title: 'Confirm access and registration policy',
-                isCritical: true,
-                ownerId,
-                sortOrder: 1,
-              },
-              {
-                title: 'Complete production readiness review',
-                isCritical: true,
-                ownerId,
-                sortOrder: 2,
-              },
-            ],
-          },
-        },
-      });
-      await this.audit.record(
-        {
-          workspaceId: user.workspaceId,
-          eventId: created.id,
-          actorId: user.id,
-          action: 'event.created',
-          entityType: 'StreamEvent',
-          entityId: created.id,
-          summary: `Created ${created.title}.`,
-        },
-        transaction,
-      );
-      return created;
-    });
-    await this.readiness.assessAndPersist(event.id, user.workspaceId);
-    return this.get(event.id, user);
+  async get(actor: Actor, eventId: string): Promise<EventDetail> {
+    return this.getWith(this.prisma, actor, eventId);
   }
 
-  async update(eventId: string, dto: UpdateEventDto, user: AuthenticatedUser) {
-    const existing = await this.requireEvent(eventId, user.workspaceId);
-    assertEventNotArchived(existing.status);
-    const ownerId = dto.ownerId
-      ? await this.requireWorkspaceMember(dto.ownerId, user.workspaceId)
-      : undefined;
-    const event = await this.prisma.$transaction(async (transaction) => {
-      const updated = await transaction.streamEvent.update({
-        where: { id: eventId },
-        data: {
-          ...(dto.title ? { title: dto.title } : {}),
-          ...(dto.description ? { description: dto.description } : {}),
-          ...(dto.scheduledStart
-            ? { scheduledStart: new Date(dto.scheduledStart) }
-            : {}),
-          ...(dto.scheduledEnd
-            ? { scheduledEnd: new Date(dto.scheduledEnd) }
-            : {}),
-          ...(dto.timezone ? { timezone: dto.timezone } : {}),
-          ...(dto.expectedAttendees !== undefined
-            ? { expectedAttendees: dto.expectedAttendees }
-            : {}),
-          ...(ownerId ? { ownerId } : {}),
-        },
-      });
-      await this.audit.record(
-        {
-          workspaceId: user.workspaceId,
-          eventId,
-          actorId: user.id,
-          action: 'event.updated',
-          entityType: 'StreamEvent',
-          entityId: eventId,
-          summary: `Updated ${updated.title}.`,
-          changes: dto as Prisma.InputJsonValue,
-        },
-        transaction,
-      );
-      return updated;
-    });
-    await this.readiness.assessAndPersist(eventId, user.workspaceId);
-    return event;
-  }
-
-  async transition(
+  /** Reads an event through the given client, e.g. inside a transaction. */
+  async getWith(
+    client: Prisma.TransactionClient,
+    actor: Actor,
     eventId: string,
-    nextStatus: EventStatus,
-    user: AuthenticatedUser,
-  ) {
-    const event = await this.requireEvent(eventId, user.workspaceId);
-    if (!transitionMap[event.status].includes(nextStatus)) {
-      throw new BadRequestException(
-        `Cannot move an event from ${event.status} to ${nextStatus}.`,
+  ): Promise<EventDetail> {
+    return toEventDetail(await this.findOrThrow(client, actor, eventId));
+  }
+
+  /**
+   * Creates a `DRAFT` event. With an idempotency key, a retried request
+   * returns the first response instead of creating a second event.
+   */
+  async create(
+    actor: Actor,
+    input: CreateEventRequest,
+    idempotencyKey: string | undefined,
+  ): Promise<CreatedEvent> {
+    if (input.ownerUserId !== null) {
+      await assertWorkspaceMember(
+        this.prisma,
+        actor.workspaceId,
+        input.ownerUserId,
+        "ownerUserId",
       );
     }
-    if (nextStatus === EventStatus.READY || nextStatus === EventStatus.LIVE) {
-      const readiness = await this.readiness.calculate(
-        eventId,
-        user.workspaceId,
-      );
-      if (readiness.blockers.length) {
-        throw new BadRequestException({
-          message: `Resolve all hard blockers before moving this event to ${nextStatus.toLowerCase()}.`,
-          blockers: readiness.blockers,
-        });
+    return this.prisma.$transaction(async (tx) => {
+      const work = async () => {
+        await claimDemoEventSlot(tx, actor.workspaceId);
+        return { status: 201, body: await this.insert(tx, actor, input) };
+      };
+      if (idempotencyKey === undefined) {
+        return { event: (await work()).body, replayed: false };
       }
-    }
-    const updated = await this.prisma.$transaction(async (transaction) => {
-      const changed = await transaction.streamEvent.update({
-        where: { id: eventId },
-        data: { status: nextStatus },
-      });
-      if (nextStatus === EventStatus.LIVE) {
-        await this.liveSessions.startForEvent(event, user.id, transaction);
-      } else if (nextStatus === EventStatus.COMPLETED) {
-        await this.liveSessions.endForEvent(event, user.id, transaction);
-      }
-      await this.audit.record(
+      const outcome = await this.idempotency.run(
+        tx,
         {
-          workspaceId: user.workspaceId,
-          eventId,
-          actorId: user.id,
-          action: `event.${nextStatus.toLowerCase()}`,
-          entityType: 'StreamEvent',
-          entityId: eventId,
-          summary: `Moved ${event.title} from ${event.status} to ${nextStatus}.`,
-          changes: { from: event.status, to: nextStatus },
+          scope: `${actor.workspaceId}:${actor.userId}:create-event`,
+          key: idempotencyKey,
+          body: input,
         },
-        transaction,
+        work,
       );
-      const domainEventType = transitionEventTypes[nextStatus] ?? null;
-      if (domainEventType) {
-        await this.domainEvents.record(
-          {
-            workspaceId: user.workspaceId,
-            type: domainEventType,
-            aggregateType: 'StreamEvent',
-            aggregateId: eventId,
-            payload: {
-              eventId,
-              title: event.title,
-              previousStatus: event.status,
-              status: nextStatus,
-              actorId: user.id,
-            },
-          },
-          transaction,
+      return {
+        event: EventDetail.parse(outcome.body),
+        replayed: outcome.replayed,
+      };
+    });
+  }
+
+  /**
+   * Applies a change made from version `expectedVersion`. The version is
+   * compared in the UPDATE itself, so of two edits made from the same
+   * version exactly one wins and the other gets `412` instead of silently
+   * overwriting it (FR-EV-1).
+   */
+  async update(
+    actor: Actor,
+    eventId: string,
+    expectedVersion: number,
+    changes: UpdateEventRequest,
+  ): Promise<EventDetail> {
+    return this.prisma.$transaction(async (tx) => {
+      const current = await this.findOrThrow(tx, actor, eventId);
+      assertWritable(current);
+      if (current.version !== expectedVersion) {
+        throw new DomainError("VERSION_CONFLICT");
+      }
+      assertEndsAfterStarts({ ...editableFields(current), ...changes });
+      if (changes.ownerUserId !== undefined && changes.ownerUserId !== null) {
+        await assertWorkspaceMember(
+          tx,
+          actor.workspaceId,
+          changes.ownerUserId,
+          "ownerUserId",
         );
       }
-      return changed;
+
+      const { count } = await tx.event.updateMany({
+        where: {
+          id: eventId,
+          workspaceId: actor.workspaceId,
+          version: expectedVersion,
+          status: { not: "ARCHIVED" },
+        },
+        data: {
+          ...changes,
+          version: { increment: 1 },
+          updatedAt: this.clock.now(),
+        },
+      });
+      if (count === 0) {
+        // Another request committed between our read and this update.
+        assertWritable(await this.findOrThrow(tx, actor, eventId));
+        throw new DomainError("VERSION_CONFLICT");
+      }
+      await recordAudit(tx, actor, {
+        action: "event.updated",
+        targetType: "event",
+        targetId: eventId,
+        eventId,
+        ...changedFields(editableFields(current), changes),
+      });
+      return toEventDetail(await this.findOrThrow(tx, actor, eventId));
     });
-    return updated;
   }
 
-  private async requireEvent(eventId: string, workspaceId: string) {
-    const event = await this.prisma.streamEvent.findFirst({
-      where: { id: eventId, workspaceId },
+  private async insert(
+    tx: Prisma.TransactionClient,
+    actor: Actor,
+    input: CreateEventRequest,
+  ): Promise<EventDetail> {
+    const now = this.clock.now();
+    const row = await tx.event.create({
+      data: {
+        workspaceId: actor.workspaceId,
+        slug: eventSlug(input.title, randomSlugSuffix()),
+        title: input.title,
+        description: input.description,
+        startsAt: new Date(input.startsAt),
+        endsAt: new Date(input.endsAt),
+        timeZone: input.timeZone,
+        ownerUserId: input.ownerUserId,
+        expectedAttendance: input.expectedAttendance,
+        createdAt: now,
+        updatedAt: now,
+      },
+      select: EVENT_SELECT,
     });
-    if (!event) throw new NotFoundException('Stream event was not found.');
-    return event;
+    await recordAudit(tx, actor, {
+      action: "event.created",
+      targetType: "event",
+      targetId: row.id,
+      eventId: row.id,
+      after: editableFields(row),
+    });
+    return toEventDetail(row);
   }
 
-  private async requireWorkspaceMember(userId: string, workspaceId: string) {
-    const membership = await this.prisma.workspaceMembership.findUnique({
-      where: { workspaceId_userId: { workspaceId, userId } },
-      select: { userId: true },
+  /** Another workspace's event is `404`, so its existence is not revealed. */
+  private async findOrThrow(
+    client: Prisma.TransactionClient,
+    actor: Actor,
+    eventId: string,
+  ): Promise<EventRow> {
+    const row = await client.event.findFirst({
+      where: { id: eventId, workspaceId: actor.workspaceId },
+      select: EVENT_SELECT,
     });
-    if (!membership) {
-      throw new BadRequestException(
-        'Event owner must be a member of the current workspace.',
-      );
+    if (row === null) {
+      throw new DomainError("NOT_FOUND");
     }
-    return membership.userId;
+    return row;
   }
 }
 
-export const mutableRoles = [
-  WorkspaceRole.ADMIN,
-  WorkspaceRole.OPERATIONS_MANAGER,
-] as const;
+function assertWritable(event: EventRow): void {
+  if (isReadOnly(event.status)) {
+    throw new DomainError("EVENT_ARCHIVED");
+  }
+}
+
+/** The request schema checks this for creates; edits need the stored values. */
+function assertEndsAfterStarts(schedule: {
+  startsAt: string;
+  endsAt: string;
+}): void {
+  if (Date.parse(schedule.endsAt) <= Date.parse(schedule.startsAt)) {
+    throw new DomainError("VALIDATION_FAILED", {
+      errors: [
+        { path: "endsAt", code: "custom", message: END_AFTER_START_MESSAGE },
+      ],
+    });
+  }
+}
+
+/** Before and after values of only the fields an edit actually changes. */
+function changedFields(
+  current: ReturnType<typeof editableFields>,
+  changes: UpdateEventRequest,
+): { before: Prisma.InputJsonObject; after: Prisma.InputJsonObject } {
+  const before: Record<string, Prisma.InputJsonValue | null> = {};
+  const after: Record<string, Prisma.InputJsonValue | null> = {};
+  for (const [field, value] of Object.entries(changes)) {
+    const previous = current[field as keyof typeof current];
+    if (value !== previous) {
+      before[field] = previous;
+      after[field] = value;
+    }
+  }
+  return { before, after };
+}

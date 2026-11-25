@@ -1,0 +1,14 @@
+{
+  "identities": [
+    {
+      "name": "opspilot-local",
+      "credentials": [
+        {
+          "accessKey": "opspilot",
+          "secretKey": "opspilot-local-only"
+        }
+      ],
+      "actions": ["Admin", "Read", "Write", "List", "Tagging"]
+    }
+  ]
+}
