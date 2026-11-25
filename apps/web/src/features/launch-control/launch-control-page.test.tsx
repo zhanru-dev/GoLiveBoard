@@ -16,8 +16,24 @@ import { FakeRealtimeConnection, fakeRealtimeModule } from "@/testing/live";
 import { server } from "@/testing/server";
 
 import { LaunchControlPage } from "./launch-control-page";
+import type * as ReadinessPanelModule from "./readiness-panel";
 
 vi.mock("@/features/live/realtime-connection", () => fakeRealtimeModule());
+
+// One part made to fail on demand, to show it fails alone.
+const failing = vi.hoisted(() => new Set<string>());
+vi.mock("./readiness-panel", async (importOriginal) => {
+  const actual = await importOriginal<typeof ReadinessPanelModule>();
+  return {
+    ...actual,
+    ReadinessPanel: (props: Parameters<typeof actual.ReadinessPanel>[0]) => {
+      if (failing.has("readiness")) {
+        throw new Error("The readiness panel could not render");
+      }
+      return actual.ReadinessPanel(props);
+    },
+  };
+});
 
 const TASK = {
   id: "0195f0a0-0000-7000-8000-0000000000f1",
@@ -886,5 +902,28 @@ describe("LaunchControlPage", () => {
         await screen.findByText(/open once the event is being configured/),
       ).toBeVisible();
     });
+  });
+
+  it("keeps a part that fails to render to that part: the readiness panel breaks, the runbook works", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    vi.stubGlobal("reportError", vi.fn());
+    failing.add("readiness");
+    try {
+      serveEvent();
+      renderScreen(<LaunchControlPage eventId={EVENT_ID} />, OWNER);
+
+      expect(
+        await screen.findByText("Rehearse the opening"),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByText("Something went wrong showing the readiness panel."),
+      ).toBeInTheDocument();
+      expect(
+        screen.queryByText(/Something went wrong showing the runbook/),
+      ).not.toBeInTheDocument();
+    } finally {
+      failing.clear();
+      vi.unstubAllGlobals();
+    }
   });
 });

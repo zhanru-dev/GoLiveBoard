@@ -17,6 +17,7 @@ import { timeInZone } from "@/lib/time";
 import { MinuteChart } from "../charts/minute-chart";
 import { EventStatusBadge, STATUS_LABELS } from "../events/event-status";
 import { type Connection, useLiveOps } from "./use-live-ops";
+import { ErrorBoundary } from "@/components/error-boundary";
 
 const CONNECTION_TEXT: Record<Connection, string> = {
   CONNECTING: "Connecting…",
@@ -71,6 +72,11 @@ export function OpsRoomPage({ eventId }: Readonly<{ eventId: string }>) {
   );
 }
 
+/**
+ * The open incidents come first and stand alone; the figures, the chart and
+ * the timeline each fail on their own (error-boundary.tsx), so a broken
+ * chart never hides an incident.
+ */
 function Room({ room }: Readonly<{ room: LiveOps }>) {
   const zone = room.event.timeZone;
   return (
@@ -99,78 +105,86 @@ function Room({ room }: Readonly<{ room: LiveOps }>) {
           )}
         </div>
       </section>
-      <section
-        aria-label="Figures"
-        className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4"
-      >
-        <Tile title="Stream">
-          {room.stream === null ? (
-            <p>Not checked yet</p>
+      <ErrorBoundary what="the figures">
+        <section
+          aria-label="Figures"
+          className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4"
+        >
+          <Tile title="Stream">
+            {room.stream === null ? (
+              <p>Not checked yet</p>
+            ) : (
+              <>
+                <p className="text-2xl font-semibold">
+                  {room.stream.ok ? "Reachable" : "Unreachable"}
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  {room.stream.ok
+                    ? `${String(room.stream.latencyMs)} ms, `
+                    : ""}
+                  checked at {timeInZone(room.stream.checkedAt, zone)}
+                </p>
+              </>
+            )}
+          </Tile>
+          <Tile title="Watching now">
+            <p className="text-2xl font-semibold">{room.audience.current}</p>
+            <p className="text-sm text-muted-foreground">
+              Peak {room.audience.peak}
+            </p>
+          </Tile>
+          <Tile title="Chat">
+            <p className="text-2xl font-semibold">
+              {room.rates.messagesPerMinute}
+            </p>
+            <p className="text-sm text-muted-foreground">messages a minute</p>
+          </Tile>
+          <Tile title="Questions">
+            <p className="text-2xl font-semibold">
+              {room.rates.questionsPerMinute}
+            </p>
+            <p className="text-sm text-muted-foreground">questions a minute</p>
+          </Tile>
+        </section>
+      </ErrorBoundary>
+      <ErrorBoundary what="the audience chart">
+        <section aria-labelledby="audience-heading" className="grid gap-2">
+          <h2 id="audience-heading" className="text-lg font-semibold">
+            Audience
+          </h2>
+          <MinuteChart
+            label="Viewers per minute"
+            unit="viewers"
+            timeZone={zone}
+            points={room.audience.series.map(({ minute, viewers }) => ({
+              minute,
+              value: viewers,
+            }))}
+          />
+        </section>
+      </ErrorBoundary>
+      <ErrorBoundary what="the timeline">
+        <section aria-labelledby="timeline-heading" className="grid gap-2">
+          <h2 id="timeline-heading" className="text-lg font-semibold">
+            Timeline
+          </h2>
+          {room.timeline.length === 0 ? (
+            <p className="text-muted-foreground">Nothing yet.</p>
           ) : (
-            <>
-              <p className="text-2xl font-semibold">
-                {room.stream.ok ? "Reachable" : "Unreachable"}
-              </p>
-              <p className="text-sm text-muted-foreground">
-                {room.stream.ok ? `${String(room.stream.latencyMs)} ms, ` : ""}
-                checked at {timeInZone(room.stream.checkedAt, zone)}
-              </p>
-            </>
+            <ol className="grid gap-1">
+              {room.timeline.map((moment, index) => (
+                // The timeline only grows at its end.
+                <li key={index}>
+                  <time dateTime={moment.at} className="tabular-nums">
+                    {timeInZone(moment.at, zone)}
+                  </time>{" "}
+                  {describe(moment)}
+                </li>
+              ))}
+            </ol>
           )}
-        </Tile>
-        <Tile title="Watching now">
-          <p className="text-2xl font-semibold">{room.audience.current}</p>
-          <p className="text-sm text-muted-foreground">
-            Peak {room.audience.peak}
-          </p>
-        </Tile>
-        <Tile title="Chat">
-          <p className="text-2xl font-semibold">
-            {room.rates.messagesPerMinute}
-          </p>
-          <p className="text-sm text-muted-foreground">messages a minute</p>
-        </Tile>
-        <Tile title="Questions">
-          <p className="text-2xl font-semibold">
-            {room.rates.questionsPerMinute}
-          </p>
-          <p className="text-sm text-muted-foreground">questions a minute</p>
-        </Tile>
-      </section>
-      <section aria-labelledby="audience-heading" className="grid gap-2">
-        <h2 id="audience-heading" className="text-lg font-semibold">
-          Audience
-        </h2>
-        <MinuteChart
-          label="Viewers per minute"
-          unit="viewers"
-          timeZone={zone}
-          points={room.audience.series.map(({ minute, viewers }) => ({
-            minute,
-            value: viewers,
-          }))}
-        />
-      </section>
-      <section aria-labelledby="timeline-heading" className="grid gap-2">
-        <h2 id="timeline-heading" className="text-lg font-semibold">
-          Timeline
-        </h2>
-        {room.timeline.length === 0 ? (
-          <p className="text-muted-foreground">Nothing yet.</p>
-        ) : (
-          <ol className="grid gap-1">
-            {room.timeline.map((moment, index) => (
-              // The timeline only grows at its end.
-              <li key={index}>
-                <time dateTime={moment.at} className="tabular-nums">
-                  {timeInZone(moment.at, zone)}
-                </time>{" "}
-                {describe(moment)}
-              </li>
-            ))}
-          </ol>
-        )}
-      </section>
+        </section>
+      </ErrorBoundary>
     </>
   );
 }

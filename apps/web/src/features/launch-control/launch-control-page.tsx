@@ -12,6 +12,7 @@ import { ReadinessPanel } from "./readiness-panel";
 import { RunbookSection } from "./runbook-section";
 import { StreamSection } from "./stream-section";
 import { useLaunchControl } from "./use-launch-control";
+import { ErrorBoundary } from "@/components/error-boundary";
 
 /**
  * Launch Control (FR-LC-1 to FR-LC-4): everything that decides whether the
@@ -37,16 +38,34 @@ export function LaunchControlPage({ eventId }: Readonly<{ eventId: string }>) {
     <div className="grid gap-8">
       <EventHeader control={control} event={event.data} />
       <div className="grid gap-8 lg:grid-cols-[1fr_20rem] lg:items-start">
+        {/* Each part fails on its own: one that cannot render leaves the
+            others working (error-boundary.tsx). */}
         <div className="grid gap-8">
-          <RunbookSection control={control} event={event.data} />
-          <AccessPolicySection control={control} eventId={eventId} />
-          <StreamSection control={control} event={event.data} />
-          <HoldingSlateSection control={control} eventId={eventId} />
-          <AudienceSection control={control} event={event.data} />
-          <LiveSection control={control} event={event.data} />
-          <DetailsSection control={control} event={event.data} />
+          <ErrorBoundary what="the runbook">
+            <RunbookSection control={control} event={event.data} />
+          </ErrorBoundary>
+          <ErrorBoundary what="the access policy">
+            <AccessPolicySection control={control} eventId={eventId} />
+          </ErrorBoundary>
+          <ErrorBoundary what="the stream">
+            <StreamSection control={control} event={event.data} />
+          </ErrorBoundary>
+          <ErrorBoundary what="the holding slate">
+            <HoldingSlateSection control={control} eventId={eventId} />
+          </ErrorBoundary>
+          <ErrorBoundary what="the audience">
+            <AudienceSection control={control} event={event.data} />
+          </ErrorBoundary>
+          <ErrorBoundary what="the live controls">
+            <LiveSection control={control} event={event.data} />
+          </ErrorBoundary>
+          <ErrorBoundary what="the event's details">
+            <DetailsSection control={control} event={event.data} />
+          </ErrorBoundary>
         </div>
-        <ReadinessPanel control={control} eventId={eventId} />
+        <ErrorBoundary what="the readiness panel">
+          <ReadinessPanel control={control} eventId={eventId} />
+        </ErrorBoundary>
       </div>
     </div>
   );

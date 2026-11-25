@@ -1,7 +1,7 @@
 import { act, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { http, HttpResponse } from "msw";
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { FakeEventSource } from "@/testing/event-source";
 import { INCIDENT, ROOM } from "@/testing/ops-room";
@@ -9,6 +9,22 @@ import { OWNER, renderScreen } from "@/testing/render";
 import { server } from "@/testing/server";
 
 import { OpsRoomPage } from "./ops-room-page";
+import type * as MinuteChartModule from "../charts/minute-chart";
+
+// One part made to fail on demand, to show it fails alone.
+const failing = vi.hoisted(() => new Set<string>());
+vi.mock("../charts/minute-chart", async (importOriginal) => {
+  const actual = await importOriginal<typeof MinuteChartModule>();
+  return {
+    ...actual,
+    MinuteChart: (props: Parameters<typeof actual.MinuteChart>[0]) => {
+      if (failing.has("chart")) {
+        throw new Error("The chart could not render");
+      }
+      return actual.MinuteChart(props);
+    },
+  };
+});
 
 const EVENT_ID = ROOM.event.id;
 
@@ -166,5 +182,29 @@ describe("OpsRoomPage", () => {
       .setup()
       .click(screen.getByRole("button", { name: "Try again" }));
     expect(FakeEventSource.opened).toHaveLength(2);
+  });
+
+  it("never lets a broken chart hide an incident", () => {
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    vi.stubGlobal("reportError", vi.fn());
+    failing.add("chart");
+    try {
+      const source = show();
+      act(() => {
+        source.emit("incident.opened", INCIDENT);
+      });
+
+      expect(
+        screen.getByText("Something went wrong showing the audience chart."),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole("heading", { name: "Open incidents" }),
+      ).toBeInTheDocument();
+      expect(screen.getByText(/Stream unreachable since/)).toBeInTheDocument();
+      expect(screen.getByText("messages a minute")).toBeInTheDocument();
+    } finally {
+      failing.clear();
+      vi.unstubAllGlobals();
+    }
   });
 });

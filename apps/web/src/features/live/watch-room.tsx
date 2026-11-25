@@ -17,6 +17,7 @@ import { Player } from "./player";
 import { QuestionsPanel } from "./questions-panel";
 import type { ConnectionState } from "./realtime-connection";
 import { useChat, useLiveConnection, useQuestions } from "./use-live";
+import { ErrorBoundary } from "@/components/error-boundary";
 
 /** FR-RN-7: attendees say they are watching every 30 seconds. */
 export const HEARTBEAT_MS = 30_000;
@@ -140,27 +141,35 @@ export function WatchRoom({ info }: Readonly<{ info: WatchInfo }>) {
           ? "Live: chat and questions update as they happen."
           : "Connecting…"}
       </p>
-      <Player
-        status={current}
-        streamUrl={current === "LIVE" ? info.streamUrl : null}
-        slate={info.slate}
-        title={info.title}
-      />
+      {/* The video, the chat and the questions fail on their own: a broken
+          chat leaves the stream playing (error-boundary.tsx). */}
+      <ErrorBoundary what="the video">
+        <Player
+          status={current}
+          streamUrl={current === "LIVE" ? info.streamUrl : null}
+          slate={info.slate}
+          title={info.title}
+        />
+      </ErrorBoundary>
       <div className="grid gap-8 md:grid-cols-2">
-        <ChatPanel
-          messages={chat.messages}
-          pending={chat.pending}
-          onSend={chat.send}
-          onRetry={chat.retry}
-          disabledReason={closedReason}
-        />
-        <QuestionsPanel
-          questions={qa.questions}
-          onAsk={ask}
-          onVote={(question) => void vote(question)}
-          disabledReason={closedReason}
-          error={questionError}
-        />
+        <ErrorBoundary what="the chat">
+          <ChatPanel
+            messages={chat.messages}
+            pending={chat.pending}
+            onSend={chat.send}
+            onRetry={chat.retry}
+            disabledReason={closedReason}
+          />
+        </ErrorBoundary>
+        <ErrorBoundary what="the questions">
+          <QuestionsPanel
+            questions={qa.questions}
+            onAsk={ask}
+            onVote={(question) => void vote(question)}
+            disabledReason={closedReason}
+            error={questionError}
+          />
+        </ErrorBoundary>
       </div>
     </div>
   );

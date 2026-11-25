@@ -10,8 +10,24 @@ import { server } from "@/testing/server";
 import { router } from "@/testing/setup";
 
 import { HEARTBEAT_MS, WatchRoom } from "./watch-room";
+import type * as ChatPanelModule from "./chat-panel";
 
 vi.mock("@/features/live/realtime-connection", () => fakeRealtimeModule());
+
+// One part made to fail on demand, to show it fails alone.
+const failing = vi.hoisted(() => new Set<string>());
+vi.mock("./chat-panel", async (importOriginal) => {
+  const actual = await importOriginal<typeof ChatPanelModule>();
+  return {
+    ...actual,
+    ChatPanel: (props: Parameters<typeof actual.ChatPanel>[0]) => {
+      if (failing.has("chat")) {
+        throw new Error("The chat could not render");
+      }
+      return actual.ChatPanel(props);
+    },
+  };
+});
 
 const SLUG = "product-launch-k3x9q2mz7a";
 const QUESTION = {
@@ -229,5 +245,26 @@ describe("WatchRoom (FR-RN-1)", () => {
     await vi.waitFor(() => {
       expect(router.refresh).toHaveBeenCalledOnce();
     });
+  });
+
+  it("keeps a broken chat to the chat: the slate and the questions stay", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    vi.stubGlobal("reportError", vi.fn());
+    failing.add("chat");
+    try {
+      serveRoom();
+      renderScreen(<WatchRoom info={info()} />);
+
+      expect(await screen.findByText("Will it ship?")).toBeInTheDocument();
+      expect(
+        screen.getByText("Something went wrong showing the chat."),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole("img", { name: /Product launch/ }),
+      ).toBeInTheDocument();
+    } finally {
+      failing.clear();
+      vi.unstubAllGlobals();
+    }
   });
 });

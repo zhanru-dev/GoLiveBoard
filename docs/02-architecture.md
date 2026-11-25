@@ -256,6 +256,13 @@ No wait on a dependency is unbounded, because a frozen dependency (one that acce
 
 Every error response uses `application/problem+json` (RFC 9457) with a stable `code` from `packages/contracts` (for example `EVENT_HAS_BLOCKERS`, `VERSION_CONFLICT`). Unexpected errors return a generic `500` with the request ID; details go to logs and Sentry, never to the client.
 
+In the browser, a rendering error stays as small as it can:
+
+- **One part of a page:** each part of Launch Control, the watch page's video, chat and questions, and the operations room's figures, chart and timeline sits in its own error boundary (`components/error-boundary.tsx`). A part that fails says so and offers "Try again"; the rest keeps working. A broken chart never hides an incident.
+- **A whole page:** a page that fails keeps its layout (`error.tsx` per route group), so the header and navigation stay.
+- **The root layout:** when it fails, `global-error.tsx` replaces it.
+- **Reporting:** each caught error is handed to `window.reportError`, so the lazily loaded Sentry reports it like an uncaught one. An error rendered on the server carries a `digest` and is not reported again, because the server reported it already.
+
 ### 7.8 Configuration and secrets
 
 Each process validates its environment with a Zod schema at startup and refuses to start if anything is missing or malformed. Secrets come from environment variables locally and from AWS Systems Manager Parameter Store in production. Webhook signing secrets are encrypted at rest with AES-256-GCM.
