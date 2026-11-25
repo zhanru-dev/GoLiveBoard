@@ -183,3 +183,33 @@ describe("startErrorReporting", () => {
     );
   });
 });
+
+describe("whenParsed", () => {
+  it.each(["interactive", "complete"] as const)(
+    "resolves at once when the page is already %s",
+    async (readyState) => {
+      // DOMContentLoaded has fired: waiting for it would wait forever.
+      const page = Object.assign(new EventTarget(), { readyState });
+
+      await expect(whenParsed(page)).resolves.toBeUndefined();
+    },
+  );
+
+  it("waits for DOMContentLoaded while the page is loading", async () => {
+    const page = new EventTarget() as EventTarget & {
+      readyState: DocumentReadyState;
+    };
+    page.readyState = "loading";
+    let parsed = false;
+    const waiting = whenParsed(page).then(() => {
+      parsed = true;
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(parsed).toBe(false);
+    page.dispatchEvent(new Event("DOMContentLoaded"));
+    await waiting;
+
+    expect(parsed).toBe(true);
+  });
+});

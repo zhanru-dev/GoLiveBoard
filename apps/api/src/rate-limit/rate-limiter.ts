@@ -50,10 +50,13 @@ export const RATE_LIMITS = {
   /**
    * What one address may add to what the alerts judge: one Web Vital per
    * metric and route, and one real-time failure per reason, per half hour.
-   * Within any alert window an address so counts at most twice (the end of
-   * one fixed window and the start of the next), so a single address can
-   * neither page "connections failing" nor hold the public page's p75.
-   * A real visitor loads a page or two; their later loads go unmeasured.
+   * A window starts at a key's first event, so its counts are at least 30
+   * minutes apart: in a 10-minute alert window an address adds at most one
+   * failure per reason (two in all), and in the 30-minute LCP window one
+   * paint per route. A single address can neither page "connections
+   * failing" nor hold the public page's p75. The price: a visitor's later
+   * loads go unmeasured, and everyone behind one address (an office
+   * proxy, a carrier's NAT) counts as one.
    */
   browserVitalPerVisitor: {
     name: "browser-vital:visitor",

@@ -13,7 +13,7 @@
 - **Dashboard:** "Readiness check" drops to 0, or "Share of 5xx responses" rises.
 - **Users:** pages answer 502, or a new release behaves wrongly.
 
-- **Alert email from browsers:** "Chat connections failing in browsers" (they could not connect to the real-time endpoint, or lost it: a proxy, WebSockets blocked, an instance gone) or "Public page slow for real visitors" (the public event page's LCP above 2.5 s at p75). After a release, both point at it first.
+- **Alert email from browsers:** "Chat connections failing in browsers" (they could not connect to the real-time endpoint, or lost it: a proxy, WebSockets blocked, an instance gone) or "Public page slow for real visitors" (the public event page's LCP above 2.5 s at p75). After a release, both point at it first. Neither sees a problem confined to one network (an office proxy that blocks WebSockets, say): everyone behind one address counts as one sender (the telemetry's limits, docs/06, section 7). When one organisation reports that chat does not work, check their network, not the alert.
 
 ## Checks
 

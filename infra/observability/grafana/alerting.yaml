@@ -155,9 +155,9 @@ groups:
       # Field data for NFR-3: the public event page's LCP at the 75th
       # percentile of real visits. Only judged with at least 20 visits in
       # the window, so a quiet demo with one slow phone stays silent. The
-      # endpoint is public, but a sender adds at most two paints to a
-      # 30-minute window (browserVitalPerVisitor), so it takes many to
-      # hold the 75th percentile.
+      # endpoint is public, but a sender adds at most one paint to a
+      # 30-minute window (browserVitalPerVisitor): on a quiet demo it takes
+      # 20 senders to hold the 75th percentile.
       - uid: opspilot-public-page-slow
         title: Public page slow for real visitors
         condition: C
@@ -193,8 +193,11 @@ groups:
       # A signal from browsers: real-time connections they could not make,
       # or lost. The API sees nothing of a connection that never reached it
       # (a proxy, a WebSocket blocked, an instance gone). A sender counts
-      # at most twice per reason in 10 minutes (browserFailurePerVisitor),
-      # so more than 10 means at least six senders.
+      # at most once per reason in 10 minutes (browserFailurePerVisitor),
+      # two in all, so more than 10 means at least six senders. The
+      # limit's price: everyone behind one address (an office proxy, a
+      # carrier's NAT) is one sender, so a failure confined to one network
+      # cannot page; the runbook says so.
       - uid: opspilot-browser-realtime-failing
         title: Chat connections failing in browsers
         condition: C

@@ -34,6 +34,28 @@ export const SEAWEEDFS_IMAGE = "chrislusf/seaweedfs:4.53";
  */
 const STARTUP_TIMEOUT_MS = 120_000;
 
+/**
+ * Starts a container, and starts it again once if Docker did not bind its
+ * ports within Testcontainers' fixed 30 s, which no option changes: a
+ * busy machine has taken longer. The container that timed out is left to
+ * Testcontainers' reaper.
+ */
+export async function startRetryingPortBinding<T>(
+  start: () => Promise<T>,
+): Promise<T> {
+  try {
+    return await start();
+  } catch (error) {
+    if (
+      error instanceof Error &&
+      error.message.includes("waiting for container ports to be bound")
+    ) {
+      return start();
+    }
+    throw error;
+  }
+}
+
 /** S3 credentials of the test object store; only ever used in tests. */
 export const TEST_S3_CREDENTIALS = {
   accessKeyId: "opspilot-test",
@@ -53,16 +75,20 @@ export const SEAWEEDFS_STORAGE_FLAGS = ["-master.volumeSizeLimitMB=64"];
 
 /** Starts a throwaway PostgreSQL server for one test file. */
 export function startPostgres(): Promise<StartedPostgreSqlContainer> {
-  return new PostgreSqlContainer(POSTGRES_IMAGE)
-    .withStartupTimeout(STARTUP_TIMEOUT_MS)
-    .start();
+  return startRetryingPortBinding(() =>
+    new PostgreSqlContainer(POSTGRES_IMAGE)
+      .withStartupTimeout(STARTUP_TIMEOUT_MS)
+      .start(),
+  );
 }
 
 /** Starts a throwaway Valkey server for one test file. */
 export function startValkey(): Promise<StartedValkeyContainer> {
-  return new ValkeyContainer(VALKEY_IMAGE)
-    .withStartupTimeout(STARTUP_TIMEOUT_MS)
-    .start();
+  return startRetryingPortBinding(() =>
+    new ValkeyContainer(VALKEY_IMAGE)
+      .withStartupTimeout(STARTUP_TIMEOUT_MS)
+      .start(),
+  );
 }
 
 /**
@@ -102,11 +128,11 @@ export function startSeaweedFs(
     .withExposedPorts(S3_PORT)
     .withWaitStrategy(Wait.forHttp("/healthz", S3_PORT))
     .withStartupTimeout(STARTUP_TIMEOUT_MS);
-  return (
+  const configured =
     dataSize === undefined
       ? container
-      : container.withTmpFs({ "/data": `size=${dataSize}` })
-  ).start();
+      : container.withTmpFs({ "/data": `size=${dataSize}` });
+  return startRetryingPortBinding(() => configured.start());
 }
 
 /** The bucket every integration test file shares; object keys are random. */
