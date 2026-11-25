@@ -55,12 +55,17 @@ case "$1 $2" in
     printf '/opspilot/test/DATABASE_URL\\tpostgres://opspilot:pw@db:5432/opspilot\\n'
     printf '/opspilot/test/JWT_SECRET\\tnot-a-real-secret\\n'
     ;;
-  "ecr get-login-password") echo "password" ;;
+  "ecr get-login-password") sleep 1; echo "password" ;;
 esac
 `;
 
+// Reads the password on stdin for `login`, as the real one does: one that
+// exited first would end `aws ecr get-login-password` with SIGPIPE, and the
+// script (pipefail) with 141. The fake aws answers late, so a fake that
+// does not read fails every time instead of now and then.
 const FAKE_DOCKER = `#!/usr/bin/env bash
 echo "docker $* API_IMAGE=\${API_IMAGE:-}" >> "$FAKE_LOG"
+[[ "$1" == login ]] && cat > /dev/null
 if [[ "$1 $2" == "compose up" ]]; then
   echo "docker compose up"
   [[ -n "\${FAIL_UP:-}" ]] && exit 1
