@@ -148,7 +148,7 @@ Claims you can check in this repository:
 Decisions made on purpose, and what they cost:
 
 - **A modular monolith, not services.** One deployable, with module boundaries enforced by dependency-cruiser. Splitting later is a deployment change, because the modules talk through interfaces and the outbox. _Cost:_ the API and the worker scale together until then.
-- **One EC2 host, not ECS and a load balancer.** It fits the demo's capacity and budget (about $30–50 a month). _Cost:_ a single point of failure for the application tier (the 99.5% objective allows it). The containers are already production-shaped, so ECS Fargate, an ALB and ElastiCache need only infrastructure changes.
+- **One EC2 host, not ECS and a load balancer.** It fits the demo's capacity and budget (about $35 a month). _Cost:_ a single point of failure for the application tier (the 99.5% objective allows it), and a few seconds unavailable per deploy. Docker restarts a container that exits, and a watchdog one that hangs. The containers are already production-shaped, so ECS Fargate, an ALB and ElastiCache need only infrastructure changes. [Production readiness](docs/production-readiness.md) compares every area with industry practice: what is at that level, what stops short and why, and in what order the rest would come.
 - **Revocation by polling the database every second, not pub/sub.** "Access ends within 5 seconds" must hold even when a broker message is lost. _Cost:_ a small, constant query load per instance.
 - **Chat delivered in 100 ms frames.** It cut the API's writes per message from one per attendee to one per attendee per frame, and made NFR-4 pass. _Cost:_ up to 100 ms more latency per message, still well within the 1 s objective.
 - **The model sees labels (`q1…qN`), never IDs.** A made-up label fails validation instead of touching a real question. Nothing the model says changes anything until a moderator confirms. _Cost:_ one broken suggestion discards the whole set.
@@ -202,17 +202,18 @@ docs                requirements, architecture, data model, API, standards, oper
 
 ## Documentation
 
-| Document                                                                  | What it covers                                                           |
-| ------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
-| [Documentation index](docs/README.md)                                     | How the documents fit together, the order to read them, and the evidence |
-| [Product requirements](docs/01-product-requirements.md)                   | Problem, users, golden flow, functional and non-functional requirements  |
-| [Architecture](docs/02-architecture.md)                                   | System context, components, technology choices, cross-cutting concerns   |
-| [Domain and data model](docs/03-domain-and-data-model.md)                 | Modules, entities, invariants, state machines, data retention            |
-| [API and contracts](docs/04-api-and-contracts.md)                         | REST conventions, endpoint catalogue, real-time protocols, webhooks      |
-| [Engineering standards](docs/05-engineering-standards.md)                 | Code, testing, security, accessibility and review standards              |
-| [Infrastructure and operations](docs/06-infrastructure-and-operations.md) | Local environment, CI/CD, AWS, observability, runbooks                   |
-| [Delivery plan](docs/07-delivery-plan.md)                                 | Milestones, exit criteria and how they map to lessons                    |
-| [Architecture decision records](docs/adr/README.md)                       | Why each significant decision was made                                   |
+| Document                                                                  | What it covers                                                            |
+| ------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
+| [Documentation index](docs/README.md)                                     | How the documents fit together, the order to read them, and the evidence  |
+| [Product requirements](docs/01-product-requirements.md)                   | Problem, users, golden flow, functional and non-functional requirements   |
+| [Architecture](docs/02-architecture.md)                                   | System context, components, technology choices, cross-cutting concerns    |
+| [Domain and data model](docs/03-domain-and-data-model.md)                 | Modules, entities, invariants, state machines, data retention             |
+| [API and contracts](docs/04-api-and-contracts.md)                         | REST conventions, endpoint catalogue, real-time protocols, webhooks       |
+| [Engineering standards](docs/05-engineering-standards.md)                 | Code, testing, security, accessibility and review standards               |
+| [Infrastructure and operations](docs/06-infrastructure-and-operations.md) | Local environment, CI/CD, AWS, observability, runbooks                    |
+| [Delivery plan](docs/07-delivery-plan.md)                                 | Milestones, exit criteria and how they map to lessons                     |
+| [Architecture decision records](docs/adr/README.md)                       | Why each significant decision was made                                    |
+| [Production readiness](docs/production-readiness.md)                      | Each area against industry practice: what meets it, what stops short, why |
 
 ## Status
 

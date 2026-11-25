@@ -9,6 +9,7 @@ import type { HttpLogger } from "pino-http";
 import { APP_CONFIG, type AppConfig } from "./config/app-config.js";
 import { API_PREFIX } from "./http/api-prefix.js";
 import { RealtimeGateway } from "./live/realtime.gateway.js";
+import { VALKEY_CLIENT, waitForValkey } from "./valkey/valkey.js";
 import { HTTP_LOGGER } from "./observability/logger.js";
 
 /**
@@ -55,4 +56,30 @@ export function configureApp(app: NestExpressApplication): void {
   app.useBodyParser("json", { limit: JSON_BODY_LIMIT });
   // Socket.IO on /realtime, beside the routes (docs/04, section 4).
   app.get(RealtimeGateway).attach(app.getHttpServer());
+}
+
+/** How long the API waits for Valkey before it listens regardless. */
+export const VALKEY_WAIT_MS = 30_000;
+
+/**
+ * Listens once Valkey is connected (waitForValkey), so the first requests
+ * are not refused by the rules that fail closed. If Valkey is still not
+ * there after VALKEY_WAIT_MS, it listens anyway: readiness then reports
+ * Valkey down (the proxy and the alerts see it), which says more than an
+ * API that never starts.
+ */
+export async function listenWhenReady(
+  app: Pick<NestExpressApplication, "get" | "listen">,
+  port: number,
+  host: string,
+  waitMs = VALKEY_WAIT_MS,
+): Promise<void> {
+  if (!(await waitForValkey(app.get(VALKEY_CLIENT), waitMs))) {
+    app
+      .get(Logger)
+      .warn(
+        `Valkey not connected after ${String(waitMs)} ms; listening anyway (readiness reports it)`,
+      );
+  }
+  await app.listen(port, host);
 }

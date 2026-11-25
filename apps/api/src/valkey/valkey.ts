@@ -57,3 +57,31 @@ export async function closeValkeyClient(client: Redis): Promise<void> {
   }
   client.disconnect();
 }
+
+/**
+ * Resolves true once the client is connected (at once if it is), or false
+ * after `timeoutMs`. The API waits for it before it listens (main.ts):
+ * the rules that fail closed (the demo's write budget, AI triage) refuse
+ * every request while Valkey cannot count, and a request that arrived in
+ * the moment between listening and connecting would be refused although
+ * nothing is wrong.
+ */
+export function waitForValkey(
+  client: Pick<Redis, "status" | "once" | "off">,
+  timeoutMs: number,
+): Promise<boolean> {
+  if (client.status === "ready") {
+    return Promise.resolve(true);
+  }
+  return new Promise((resolve) => {
+    const onReady = () => {
+      clearTimeout(timer);
+      resolve(true);
+    };
+    const timer = setTimeout(() => {
+      client.off("ready", onReady);
+      resolve(false);
+    }, timeoutMs);
+    client.once("ready", onReady);
+  });
+}

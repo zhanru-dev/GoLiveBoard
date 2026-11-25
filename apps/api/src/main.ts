@@ -2,7 +2,7 @@ import { NestFactory } from "@nestjs/core";
 import type { NestExpressApplication } from "@nestjs/platform-express";
 
 import { AppModule } from "./app.module.js";
-import { APP_OPTIONS, configureApp } from "./app.setup.js";
+import { APP_OPTIONS, configureApp, listenWhenReady } from "./app.setup.js";
 import {
   type AppConfig,
   ConfigError,
@@ -34,4 +34,5 @@ configureApp(app);
 // On SIGTERM (a deploy or `docker stop`), finish open requests and close
 // connections before exiting.
 app.enableShutdownHooks();
-await app.listen(config.api.port, config.api.host);
+// Not before Valkey is connected: see listenWhenReady.
+await listenWhenReady(app, config.api.port, config.api.host);
