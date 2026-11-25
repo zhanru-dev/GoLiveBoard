@@ -8,14 +8,18 @@ import { useLiveConnection } from "./use-live";
 
 vi.mock("@/features/live/realtime-connection", () => fakeRealtimeModule());
 
-// What reaches the telemetry collector, through the real de-duplication.
+// What reaches the telemetry collector, through the real de-duplication;
+// and what use-live.ts passed, as an argument would replace the collector.
 const reported = vi.hoisted(() => [] as string[]);
+const reporterArguments = vi.hoisted(() => [] as unknown[][]);
 vi.mock("@/lib/browser-telemetry", async (importOriginal) => {
   const actual = await importOriginal<typeof BrowserTelemetry>();
   return {
     ...actual,
-    realtimeFailureReporter: () =>
-      actual.realtimeFailureReporter((reason) => reported.push(reason)),
+    realtimeFailureReporter: (...args: unknown[]) => {
+      reporterArguments.push(args);
+      return actual.realtimeFailureReporter((reason) => reported.push(reason));
+    },
   };
 });
 
@@ -26,6 +30,7 @@ const failure = (reason: "connect-failed" | "lost") => {
 describe("useLiveConnection's real-time failures", () => {
   it("reports each reason once per page view, and again in the next view", () => {
     reported.length = 0;
+    reporterArguments.length = 0;
 
     // The visitor opens the watch page; the connection fails, then keeps
     // being lost while it reconnects.
@@ -41,5 +46,7 @@ describe("useLiveConnection's real-time failures", () => {
     next.unmount();
 
     expect(reported).toEqual(["connect-failed", "lost", "lost"]);
+    // One reporter per view, each sending to the collector (no argument).
+    expect(reporterArguments).toEqual([[], []]);
   });
 });

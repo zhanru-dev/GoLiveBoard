@@ -1,5 +1,6 @@
 import { openEvent } from "./api.js";
 import { expect, SIGNED_IN_MS, test } from "./fixtures.js";
+import { resetRateLimits } from "./rate-limits.js";
 import { E2E_TARGET, target } from "./target.js";
 
 /** The stack's Grafana (docs/06, section 7); no sign-in, local only. */
@@ -285,7 +286,7 @@ test.describe("observability (NFR-7, docs/06 section 7)", () => {
     browser,
     request,
   }) => {
-    test.setTimeout(90_000);
+    test.setTimeout(120_000);
     const query = `sum(opspilot_web_vital_duration_milliseconds_count{opspilot_web_vital="LCP",opspilot_web_route="/e/:slug"})`;
     const count = async () => {
       const body = (await (
@@ -295,19 +296,30 @@ test.describe("observability (NFR-7, docs/06 section 7)", () => {
       ).json()) as { data: { result: { value: [number, string] }[] } };
       return Number(body.data.result[0]?.value[1] ?? "0");
     };
-    const before = await count();
     const event = await openEvent(request);
 
     // A visitor opens the public page, and leaves: the beacon goes out as
     // the page is hidden.
-    const context = await browser.newContext({ ignoreHTTPSErrors: true });
-    const page = await context.newPage();
-    await page.goto(`/e/${event.slug}`);
-    await page.getByLabel("Name").click();
-    await page.close({ runBeforeUnload: true });
-    await context.close();
+    const visit = async () => {
+      const context = await browser.newContext({ ignoreHTTPSErrors: true });
+      const page = await context.newPage();
+      await page.goto(`/e/${event.slug}`);
+      await page.getByLabel("Name").click();
+      await page.close({ runBeforeUnload: true });
+      await context.close();
+    };
 
-    await expect.poll(count, { timeout: 60_000 }).toBeGreaterThan(before);
+    // Every test's browser reaches the API from the proxy's one address,
+    // which counts one paint per route in 30 minutes: a test running
+    // alongside may take that one first, and this visit's is dropped. So
+    // the limit is cleared before each visit, and the visit repeated
+    // until one is counted.
+    const before = await count();
+    await expect(async () => {
+      resetRateLimits("browser-vital:*");
+      await visit();
+      await expect.poll(count, { timeout: 20_000 }).toBeGreaterThan(before);
+    }).toPass({ intervals: [0], timeout: 80_000 });
   });
 
   test("one trace follows a click from the browser through the API to the worker", async ({
