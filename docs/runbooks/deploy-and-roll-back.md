@@ -4,7 +4,7 @@
 
 - every release;
 - a smoke test that fails after a deploy;
-- the alerts "API 5xx rate above 2%", "API readiness check failing", "Worker not reporting" or "Work waiting more than 5 minutes".
+- the alerts "API 5xx rate above 2%", "API readiness check failing", "Worker not reporting", "Work waiting more than 5 minutes", "Chat connections failing in browsers" or "Public page slow for real visitors".
 
 ## Symptoms
 
@@ -12,6 +12,8 @@
 - **Alert email about the worker:** "Worker not reporting" (no metrics from it for over 5 minutes: down, crash-looping, or cut off from the database) or "Work waiting more than 5 minutes" (it runs, but a job or an outbox message has waited that long: stuck or overloaded).
 - **Dashboard:** "Readiness check" drops to 0, or "Share of 5xx responses" rises.
 - **Users:** pages answer 502, or a new release behaves wrongly.
+
+- **Alert email from browsers:** "Chat connections failing in browsers" (they could not connect to the real-time endpoint, or lost it: a proxy, WebSockets blocked, an instance gone) or "Public page slow for real visitors" (the public event page's LCP above 2.5 s at p75). After a release, both point at it first.
 
 ## Checks
 

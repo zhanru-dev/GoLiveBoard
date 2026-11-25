@@ -2,6 +2,7 @@ import {
   errorReportingSettingsFromPage,
   sentryOptions,
 } from "./lib/error-reporting";
+import { startBrowserTelemetry } from "./lib/browser-telemetry";
 import { reportErrorsLazily } from "./lib/lazy-error-reporting";
 
 /**
@@ -20,6 +21,10 @@ function start(): void {
     );
   }
 }
+
+// Web Vitals from real visits (docs/06, section 7); started at once, as
+// the largest paint may come before the page has finished loading.
+void startBrowserTelemetry(window);
 
 if (document.readyState === "loading") {
   document.addEventListener("DOMContentLoaded", start, { once: true });

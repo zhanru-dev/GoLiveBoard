@@ -185,3 +185,9 @@ export {
   WebhookUrl,
 } from "./webhooks.js";
 export { AuditEntry, AuditPage, AuditQuery } from "./audit.js";
+export {
+  BrowserRealtimeFailure,
+  BrowserRoute,
+  BrowserTelemetryRequest,
+  WebVital,
+} from "./browser-telemetry.js";

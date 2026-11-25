@@ -52,3 +52,20 @@ The three runs of each:
 - **The watch page.** It plays a customer's stream.
 
 The CI reports are kept as the run's `lighthouse` artifact.
+
+## Milestone 10: error boundaries and field data
+
+Two changes in milestone 10 added JavaScript to the public event page:
+
+- **Error boundaries (batch 6):** every route group's error page and the global one are loaded with each page.
+- **Web Vitals from real visits (batch 7):** `web-vitals` (3.2 kB) and the beacon that sends them.
+
+**A correction.** The commit of batch 6 (`d583b62`) said the page's JavaScript was unchanged at 141.7 kB. That Lighthouse run reached the stack under review on the same ports, still at `09b2a2e`, not the one built from batch 6; nothing was measured on the change itself.
+
+**Measured on the stack built from the change** (ports moved: `STACK_HTTPS_PORT=4443`):
+
+- **Before trimming:** 149.6 kB, with both changes. Each error page carried its own copy of the button styles' engine.
+- **After:** 147.4 kB. The error pages' button is written out; `web-vitals` stays.
+- **Headroom:** 2.6 kB under the 150 kB budget, down from 8.3 kB. The next change to this page has to pay for itself.
+
+**Field data now exists beside this lab data:** the dashboard's "Real visits" row shows LCP, INP and CLS at the 75th percentile of real visits, the form NFR-3 states its targets in. An alert fires when the public page's LCP is above 2.5 s, once there are enough visits to judge.

@@ -92,15 +92,17 @@ const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
 function setUp(options: { refreshSession?: () => Promise<boolean> } = {}) {
   const socket = new FakeSocket();
   const states: ConnectionState[] = [];
+  const failures: string[] = [];
   const connection = new RealtimeConnection(
     {
       slug: "launch",
       onState: (state) => states.push(state),
       refreshSession: options.refreshSession,
+      onFailure: (reason) => failures.push(reason),
     },
     () => socket as unknown as Socket,
   );
-  return { socket, states, connection };
+  return { socket, states, connection, failures };
 }
 
 const joins = (socket: FakeSocket) =>
@@ -272,5 +274,20 @@ describe("backoff", () => {
     ).toEqual([1_000, 2_000, 4_000, 8_000, 16_000, 30_000, 30_000]);
     expect(backoff(0, () => 0)).toBe(500);
     expect(backoff(9, () => 0.99)).toBe(30_000);
+  });
+});
+
+describe("RealtimeConnection's browser signals", () => {
+  it("reports a connection it could not make, and one it lost, but not a refusal", async () => {
+    const { socket, failures } = setUp();
+
+    socket.fire("connect_error", new Error("xhr poll error"));
+    await flush();
+    socket.fire("connect");
+    socket.fire("disconnect", "transport close");
+    socket.fire("connect_error", new Error("FORBIDDEN"));
+    await flush();
+
+    expect(failures).toEqual(["connect-failed", "lost"]);
   });
 });

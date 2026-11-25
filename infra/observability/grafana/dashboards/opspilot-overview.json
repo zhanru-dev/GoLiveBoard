@@ -427,6 +427,145 @@
           "legendFormat": "{{opspilot_webhook_endpoint_id}}"
         }
       ]
+    },
+    {
+      "id": 13,
+      "type": "row",
+      "title": "Real visits (browsers)",
+      "collapsed": false,
+      "gridPos": {
+        "x": 0,
+        "y": 35,
+        "w": 24,
+        "h": 1
+      },
+      "panels": []
+    },
+    {
+      "id": 14,
+      "type": "timeseries",
+      "title": "LCP and INP at p75 (30 minutes), by route",
+      "description": "Measured in visitors' browsers (NFR-3: LCP under 2.5 s, INP under 200 ms, at the 75th percentile). Alert: the public event page's LCP above 2.5 s, with at least 20 visits.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 36,
+        "w": 10,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "histogram_quantile(0.75, sum by (le, opspilot_web_vital, opspilot_web_route) (rate(opspilot_web_vital_duration_milliseconds_bucket[30m])))",
+          "legendFormat": "{{opspilot_web_vital}} {{opspilot_web_route}}"
+        }
+      ]
+    },
+    {
+      "id": 15,
+      "type": "timeseries",
+      "title": "CLS at p75 (30 minutes), by route",
+      "description": "Cumulative Layout Shift in visitors' browsers; good is under 0.1.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 10,
+        "y": 36,
+        "w": 7,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "histogram_quantile(0.75, sum by (le, opspilot_web_route) (rate(opspilot_web_layout_shift_bucket[30m])))",
+          "legendFormat": "{{opspilot_web_route}}"
+        }
+      ]
+    },
+    {
+      "id": 16,
+      "type": "timeseries",
+      "title": "Real-time connections failing in browsers (15 minutes)",
+      "description": "What the API cannot see: connections never made, or lost. Alert: more than 10 in 10 minutes.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 17,
+        "y": 36,
+        "w": 7,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (opspilot_web_realtime_failure) (increase(opspilot_web_realtime_failures_total[15m]))",
+          "legendFormat": "{{opspilot_web_realtime_failure}}"
+        }
+      ]
     }
   ],
   "editable": false

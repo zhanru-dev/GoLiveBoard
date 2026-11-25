@@ -55,6 +55,11 @@ export interface ConnectionOptions {
    * nothing to renew: their session lasts until the event ends.
    */
   readonly refreshSession?: () => Promise<boolean>;
+  /**
+   * The connection could not be made (not refused: unreachable) or was
+   * lost; reported as a browser signal (browser-telemetry.ts).
+   */
+  readonly onFailure?: (reason: "connect-failed" | "lost") => void;
 }
 
 interface Joined {
@@ -99,6 +104,7 @@ export class RealtimeConnection {
         this.scheduleReconnect();
         return;
       }
+      this.options.onFailure?.("lost");
       this.options.onState("reconnecting");
     });
     this.socket.on("connect_error", (error) => {
@@ -230,6 +236,11 @@ export class RealtimeConnection {
   private async onRefused(code: string): Promise<void> {
     if (this.closed) {
       return;
+    }
+    if (code !== "UNAUTHENTICATED" && code !== "FORBIDDEN") {
+      // Not a refusal: the server could not be reached, or answered with
+      // something other than a decision.
+      this.options.onFailure?.("connect-failed");
     }
     if (code === "UNAUTHENTICATED" || code === "FORBIDDEN") {
       const renewed =

@@ -36,6 +36,17 @@ export const RATE_LIMITS = {
     windowMs: 15 * MINUTE_MS,
   },
   signUpPerIp: { name: "sign-up:ip", limit: 10, windowMs: HOUR_MS },
+  /**
+   * Measurements from browsers: a page view sends a few. Beyond the limit
+   * they are dropped quietly, and while Valkey cannot count, too: losing
+   * some telemetry is better than letting anyone fill the metrics.
+   */
+  browserTelemetryPerIp: {
+    name: "browser-telemetry:ip",
+    limit: 120,
+    windowMs: 10 * MINUTE_MS,
+    failClosed: true,
+  },
   /** Each demo sign-in starts a session; a person needs a handful at most. */
   demoSignInPerIp: { name: "demo-sign-in:ip", limit: 20, windowMs: HOUR_MS },
   /** Registrations for events, from one address (FR-AD-3). */

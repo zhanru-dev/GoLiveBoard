@@ -2,7 +2,6 @@
 
 import { useEffect, useRef } from "react";
 
-import { buttonVariants } from "@/components/ui/button-variants";
 import { reportCaughtError } from "@/lib/report-caught-error";
 
 /**
@@ -12,6 +11,16 @@ import { reportCaughtError } from "@/lib/report-caught-error";
  * message so screen readers announce it, and "Try again" fetches and
  * renders the page afresh (Next.js `retry`).
  */
+/*
+ * The default button's look, written out: every route group's error page
+ * and the global one are loaded with each page, each with its own copy of
+ * what they import, and buttonVariants would bring the class-variance
+ * engine and every variant into each (about 1.3 kB a copy, against the
+ * public page's 150 kB budget).
+ */
+const BUTTON =
+  "inline-flex h-8 items-center justify-center rounded-lg bg-primary px-2.5 text-sm font-medium text-primary-foreground outline-none hover:bg-primary/80 focus-visible:ring-3 focus-visible:ring-ring/50";
+
 export function RouteError({
   error,
   retry,
@@ -38,7 +47,7 @@ export function RouteError({
       </p>
       <button
         type="button"
-        className={buttonVariants({ variant: "default" })}
+        className={BUTTON}
         onClick={() => {
           retry();
         }}

@@ -1,3 +1,4 @@
+import { openEvent } from "./api.js";
 import { expect, SIGNED_IN_MS, test } from "./fixtures.js";
 import { E2E_TARGET, target } from "./target.js";
 
@@ -36,7 +37,7 @@ async function servicesOf(traceId: string): Promise<string[]> {
 test.describe("observability (NFR-7, docs/06 section 7)", () => {
   test.skip(E2E_TARGET !== "stack", "Grafana runs in the stack only");
 
-  test("Grafana has the overview dashboard and the five alert rules", async () => {
+  test("Grafana has the overview dashboard and the seven alert rules", async () => {
     const dashboards = (await (
       await fetch(`${GRAFANA}/api/search?query=OpsPilot%20overview`)
     ).json()) as { uid: string }[];
@@ -47,6 +48,8 @@ test.describe("observability (NFR-7, docs/06 section 7)", () => {
     expect(dashboards.map(({ uid }) => uid)).toContain("opspilot-overview");
     expect(rules.map(({ uid }) => uid).sort()).toEqual([
       "opspilot-api-5xx",
+      "opspilot-browser-realtime-failing",
+      "opspilot-public-page-slow",
       "opspilot-queue-age",
       "opspilot-readiness",
       "opspilot-webhook-endpoint-failing",
@@ -84,7 +87,7 @@ test.describe("observability (NFR-7, docs/06 section 7)", () => {
         },
         { timeout: 90_000 },
       )
-      .toEqual(["ok", "ok", "ok", "ok", "ok"]);
+      .toEqual(["ok", "ok", "ok", "ok", "ok", "ok", "ok"]);
 
     const dashboard = (await (
       await fetch(`${GRAFANA}/api/dashboards/uid/opspilot-overview`)
@@ -94,8 +97,8 @@ test.describe("observability (NFR-7, docs/06 section 7)", () => {
     const queries = dashboard.dashboard.panels.flatMap(({ targets }) =>
       (targets ?? []).map(({ expr }) => expr),
     );
-    // Nine charts, each with one query.
-    expect(queries).toHaveLength(9);
+    // Twelve charts, each with one query.
+    expect(queries).toHaveLength(12);
     // The collector checks the API's readiness (the readiness alert's
     // source): the stack is healthy, so the latest check passed.
     const readiness = queries.find((query) => query.includes("httpcheck"));
@@ -135,6 +138,14 @@ test.describe("observability (NFR-7, docs/06 section 7)", () => {
         normal: "absent(vector(1))",
       },
       "opspilot-webhook-endpoint-failing": {
+        breach: "vector(11)",
+        normal: "vector(10)",
+      },
+      "opspilot-public-page-slow": {
+        breach: "vector(2501)",
+        normal: "vector(2500)",
+      },
+      "opspilot-browser-realtime-failing": {
         breach: "vector(11)",
         normal: "vector(10)",
       },
@@ -268,6 +279,35 @@ test.describe("observability (NFR-7, docs/06 section 7)", () => {
     expect(found).toContain("request completed");
     expect(found).not.toContain(email);
     expect(found).not.toContain("not the right password");
+  });
+
+  test("a real visit's Web Vitals reach Prometheus, by route template", async ({
+    browser,
+    request,
+  }) => {
+    test.setTimeout(90_000);
+    const query = `sum(opspilot_web_vital_duration_milliseconds_count{opspilot_web_vital="LCP",opspilot_web_route="/e/:slug"})`;
+    const count = async () => {
+      const body = (await (
+        await fetch(
+          `${GRAFANA}/api/datasources/proxy/uid/prometheus/api/v1/query?query=${encodeURIComponent(query)}`,
+        )
+      ).json()) as { data: { result: { value: [number, string] }[] } };
+      return Number(body.data.result[0]?.value[1] ?? "0");
+    };
+    const before = await count();
+    const event = await openEvent(request);
+
+    // A visitor opens the public page, and leaves: the beacon goes out as
+    // the page is hidden.
+    const context = await browser.newContext({ ignoreHTTPSErrors: true });
+    const page = await context.newPage();
+    await page.goto(`/e/${event.slug}`);
+    await page.getByLabel("Name").click();
+    await page.close({ runBeforeUnload: true });
+    await context.close();
+
+    await expect.poll(count, { timeout: 60_000 }).toBeGreaterThan(before);
   });
 
   test("one trace follows a click from the browser through the API to the worker", async ({

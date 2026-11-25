@@ -30,9 +30,11 @@ const TARGETS = {
     mailpitURL: "http://127.0.0.1:8036",
     composeFile: "docker-compose.yml",
   },
+  // The stack's ports can be moved with the same variables as its compose
+  // file, so two stacks (one under review, say) can run side by side.
   stack: {
-    baseURL: "https://opspilot.localhost:3443",
-    mailpitURL: "http://127.0.0.1:8037",
+    baseURL: `https://opspilot.localhost:${process.env.STACK_HTTPS_PORT ?? "3443"}`,
+    mailpitURL: `http://127.0.0.1:${process.env.STACK_MAILPIT_UI_PORT ?? "8037"}`,
     composeFile: "docker-compose.prod.yml",
   },
   deployed: {

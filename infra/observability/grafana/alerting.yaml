@@ -152,6 +152,73 @@ groups:
               conditions:
                 - evaluator: { type: gt, params: [0] }
 
+      # Field data for NFR-3: the public event page's LCP at the 75th
+      # percentile of real visits. Only judged with at least 20 visits in
+      # the window, so a quiet demo with one slow phone stays silent.
+      - uid: opspilot-public-page-slow
+        title: Public page slow for real visitors
+        condition: C
+        for: 10m
+        noDataState: OK
+        execErrState: Error
+        labels:
+          severity: ticket
+        annotations:
+          summary: The public event page's Largest Contentful Paint has been above 2.5 s at the 75th percentile of real visits (30 minutes, at least 20 visits).
+          runbook: docs/runbooks/deploy-and-roll-back.md
+        data:
+          - refId: A
+            relativeTimeRange: { from: 1800, to: 0 }
+            datasourceUid: prometheus
+            model:
+              refId: A
+              instant: true
+              expr: >-
+                histogram_quantile(0.75, sum by (le)
+                (rate(opspilot_web_vital_duration_milliseconds_bucket{opspilot_web_vital="LCP",opspilot_web_route="/e/:slug"}[30m])))
+                and on ()
+                sum(increase(opspilot_web_vital_duration_milliseconds_count{opspilot_web_vital="LCP",opspilot_web_route="/e/:slug"}[30m])) >= 20
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: gt, params: [2500] }
+
+      # A signal from browsers: real-time connections they could not make,
+      # or lost. The API sees nothing of a connection that never reached it
+      # (a proxy, a WebSocket blocked, an instance gone).
+      - uid: opspilot-browser-realtime-failing
+        title: Chat connections failing in browsers
+        condition: C
+        for: 0s
+        noDataState: OK
+        execErrState: Error
+        labels:
+          severity: page
+        annotations:
+          summary: Browsers reported more than 10 real-time connections failed or lost in 10 minutes; chat and questions are not reaching people.
+          runbook: docs/runbooks/deploy-and-roll-back.md
+        data:
+          - refId: A
+            relativeTimeRange: { from: 600, to: 0 }
+            datasourceUid: prometheus
+            model:
+              refId: A
+              instant: true
+              expr: >-
+                sum(increase(opspilot_web_realtime_failures_total[10m]))
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: gt, params: [10] }
+
       - uid: opspilot-webhook-endpoint-failing
         title: Webhook endpoint failing
         condition: C

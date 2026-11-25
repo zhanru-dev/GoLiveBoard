@@ -4,6 +4,7 @@ import { LoggerModule } from "nestjs-pino";
 import type { DestinationStream } from "pino";
 
 import { AuditModule } from "./audit/audit.module.js";
+import { BrowserTelemetryModule } from "./browser-telemetry/browser-telemetry.module.js";
 import { LiveOpsModule } from "./live-ops/live-ops.module.js";
 import { ReportsModule } from "./reports/reports.module.js";
 import { TriageModule } from "./triage/triage.module.js";
@@ -67,6 +68,7 @@ export class AppModule {
         LiveOpsModule,
         ReportsModule,
         TriageModule,
+        BrowserTelemetryModule,
         WebhooksModule,
       ],
       providers: [
