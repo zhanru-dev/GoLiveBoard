@@ -49,11 +49,15 @@ permissions:
 jobs:
   deploy:
     name: Deploy to the demo environment
-    # Only a green CI run on main (a push, not a pull request), or by hand.
+    # Only a green CI run on main (a push, not a pull request), or by hand;
+    # and only once the AWS environment exists: the repository variable
+    # DEPLOY_ENABLED is set to "true" as the last step of its setup
+    # (infra/terraform/README.md). Until then, nothing runs and fails.
     if: >-
-      github.event_name == 'workflow_dispatch' ||
-      (github.event.workflow_run.conclusion == 'success' &&
-       github.event.workflow_run.event == 'push')
+      vars.DEPLOY_ENABLED == 'true' &&
+      (github.event_name == 'workflow_dispatch' ||
+       (github.event.workflow_run.conclusion == 'success' &&
+        github.event.workflow_run.event == 'push'))
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 45
     environment:

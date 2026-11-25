@@ -2,7 +2,7 @@
 
 OpsPilot is delivered in three phases and ten milestones. Each milestone ends with a working system that runs in production form locally (from Milestone 4 onwards) and has exit criteria that can be checked. Cloud deployment comes last, in Milestone 10, once the product is complete; everything that can differ between development and production is exercised locally and in CI from Milestone 4, so the move to AWS changes the environment, not the code. Requirement IDs refer to [Product requirements](01-product-requirements.md).
 
-This repository is the **reference implementation**: each milestone is built and verified here first, then taught as a series of lessons in which the learner builds the same milestone in their own repository.
+Each milestone is built and verified here first, then taught as a series of lessons in which the learner builds the same milestone in their own repository.
 
 ## Overview
 

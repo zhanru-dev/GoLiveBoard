@@ -6,7 +6,7 @@ It answers the question operations teams struggle with most, **"is this event re
 
 > **Live demo:** coming with the AWS deployment (milestone 10). Until then, the [production-like stack](#try-it-in-five-minutes) runs the same images on your machine, demo workspace included.
 
-This repository is the **reference implementation** behind the OpsPilot build-along course: every milestone is built, tested and reviewed here first.
+**History.** This is OpsPilot's second version. The first was built in this repository from September to November 2026; the second was then written from a fresh design, milestone by milestone, in a separate repository, and its history merged here (commit `1f86d89`), so both are in `git log`. Its development was AI-assisted (Claude), as the commits' `Co-Authored-By` lines show; each milestone was reviewed independently, with mutation testing, before it was accepted ([docs/07](docs/07-delivery-plan.md)).
 
 ---
 

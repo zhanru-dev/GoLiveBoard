@@ -83,6 +83,7 @@ Each step creates billed resources; the demo's budget is set in step 3.
      - `HOST_INSTANCE_ID` (`host_instance_id`);
      - `DEPLOY_DOCUMENT` (`deploy_document`);
      - `SITE_URL` (`site_url`).
+   - Last, set the **repository** variable `DEPLOY_ENABLED` to `true` (a repository variable, not the environment's: the workflow reads it before it picks the environment). Until then the deploy workflow skips, so a repository without AWS shows no failed runs.
    - The deploy workflow does the rest on every merge to `main` (docs/06, section 4).
 
 **Later changes:** every later change to this directory goes through review. A merge that touches `infra/terraform/environments` is applied by a person until the plan and apply jobs are added to CI with the plan role.
