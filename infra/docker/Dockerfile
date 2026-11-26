@@ -2,8 +2,8 @@
 
 # Production images, built from the repository root:
 #
-#   docker build -f infra/docker/Dockerfile --target api -t opspilot-api .
-#   docker build -f infra/docker/Dockerfile --target web -t opspilot-web .
+#   docker build -f infra/docker/Dockerfile --target api -t goliveboard-api .
+#   docker build -f infra/docker/Dockerfile --target web -t goliveboard-web .
 #
 # `api` runs three ways from one image, so what is migrated, served and
 # worked on is always the same build:
@@ -64,9 +64,9 @@ COPY tsconfig.base.json ./
 COPY packages/contracts packages/contracts
 COPY apps/api apps/api
 COPY apps/web apps/web
-RUN npm run build -w @opspilot/contracts \
- && npm run build -w @opspilot/api \
- && npm run build -w @opspilot/web
+RUN npm run build -w @goliveboard/contracts \
+ && npm run build -w @goliveboard/api \
+ && npm run build -w @goliveboard/web
 
 # The API's production dependencies only. They include the Prisma CLI, which
 # `@prisma/client` declares as an optional peer, so the image can migrate.
@@ -77,7 +77,7 @@ ARG QEMU_CPU
 # Express's 0.7). Both directories go into the image; mkdir keeps the COPY
 # below valid when nothing needs nesting.
 RUN --mount=type=cache,target=/root/.npm \
-    npm ci --omit=dev --workspace @opspilot/api --no-audit --no-fund \
+    npm ci --omit=dev --workspace @goliveboard/api --no-audit --no-fund \
  && mkdir -p apps/api/node_modules
 
 FROM runtime AS api

@@ -46,7 +46,7 @@ export function parseErrorReportingSettings(
 }
 
 /** The name of the `<meta>` tag that carries the settings to the browser. */
-export const ERROR_REPORTING_META = "opspilot-error-reporting";
+export const ERROR_REPORTING_META = "goliveboard-error-reporting";
 
 /**
  * The settings from the server's environment, or null when reporting is off

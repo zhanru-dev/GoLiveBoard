@@ -1,7 +1,7 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import type { EventOwner } from "@opspilot/contracts";
+import type { EventOwner } from "@goliveboard/contracts";
 import { useMemo, useState } from "react";
 import { useForm, useWatch } from "react-hook-form";
 

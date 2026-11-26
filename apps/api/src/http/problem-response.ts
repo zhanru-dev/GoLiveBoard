@@ -5,7 +5,7 @@ import {
   type FieldError,
   ProblemDetails,
   problemTypeFor,
-} from "@opspilot/contracts";
+} from "@goliveboard/contracts";
 
 import { DomainError } from "../shared/domain/domain-error.js";
 import { RequestValidationError } from "./request-validation.js";

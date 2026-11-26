@@ -1,5 +1,5 @@
 import { StandardSchemaValidationPipe } from "@nestjs/common";
-import type { FieldError } from "@opspilot/contracts";
+import type { FieldError } from "@goliveboard/contracts";
 
 /** One problem reported by a Standard Schema library such as Zod. */
 export interface SchemaIssue {

@@ -1,5 +1,5 @@
 import { Inject, Injectable } from "@nestjs/common";
-import type { AttendeeStatus } from "@opspilot/contracts";
+import type { AttendeeStatus } from "@goliveboard/contracts";
 
 import { APP_CONFIG, type AppConfig } from "../config/app-config.js";
 import { PRISMA } from "../database/prisma.js";

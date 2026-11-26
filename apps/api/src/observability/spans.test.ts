@@ -16,8 +16,8 @@ describe("inSpan", () => {
   });
 
   it("runs work in a span of its own, which describeSpan adds to", async () => {
-    const result = await inSpan("thing.do", { "opspilot.id": "1" }, () => {
-      describeSpan({ "opspilot.count": 3 });
+    const result = await inSpan("thing.do", { "goliveboard.id": "1" }, () => {
+      describeSpan({ "goliveboard.count": 3 });
       return Promise.resolve(
         trace.getActiveSpan()?.spanContext().spanId ?? "none",
       );
@@ -25,8 +25,8 @@ describe("inSpan", () => {
 
     const span = captured.spans().find(({ name }) => name === "thing.do");
     expect(span?.attributes).toEqual({
-      "opspilot.id": "1",
-      "opspilot.count": 3,
+      "goliveboard.id": "1",
+      "goliveboard.count": 3,
     });
     expect(result).toBe(span?.spanContext().spanId);
     expect(span?.ended).toBe(true);

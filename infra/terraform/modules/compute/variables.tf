@@ -28,7 +28,7 @@ variable "repository_arns" {
 }
 
 variable "parameter_path" {
-  description = "Parameter Store path of the environment's configuration, e.g. /opspilot/demo."
+  description = "Parameter Store path of the environment's configuration, e.g. /goliveboard/demo."
   type        = string
 }
 

@@ -1,4 +1,4 @@
-import type { EventStatus, WebhookEventType } from "@opspilot/contracts";
+import type { EventStatus, WebhookEventType } from "@goliveboard/contracts";
 
 /** The webhook an event's transition sends, if any (docs/04, section 6.2). */
 export function webhookTypeForTransition(

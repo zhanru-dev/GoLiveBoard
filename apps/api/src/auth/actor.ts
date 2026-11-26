@@ -3,7 +3,7 @@ import {
   type ExecutionContext,
   SetMetadata,
 } from "@nestjs/common";
-import type { Role } from "@opspilot/contracts";
+import type { Role } from "@goliveboard/contracts";
 import type { Request } from "express";
 
 /** Who is making the request, loaded fresh from the database by SessionGuard. */
@@ -33,8 +33,8 @@ export function hasRole(actual: Role, required: Role): boolean {
   return ROLE_RANK[actual] >= ROLE_RANK[required];
 }
 
-export const IS_PUBLIC = "opspilot:isPublic";
-export const REQUIRED_ROLE = "opspilot:requiredRole";
+export const IS_PUBLIC = "goliveboard:isPublic";
+export const REQUIRED_ROLE = "goliveboard:requiredRole";
 
 /** The route needs no session (sign-in, health checks, …). */
 export const Public = () => SetMetadata(IS_PUBLIC, true);

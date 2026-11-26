@@ -35,16 +35,16 @@ describe("UndeliverableAddressGuard", () => {
     expect(inner.sent).toEqual([message("ada@example.com")]);
   });
 
-  it.each(["visitor@demo.opspilot.invalid", "Owner@Demo.OpsPilot.INVALID"])(
-    "never sends to %j, an address that cannot receive email",
-    async (to) => {
-      const inner = new CapturingMailer();
+  it.each([
+    "visitor@demo.goliveboard.invalid",
+    "Owner@Demo.GoLiveBoard.INVALID",
+  ])("never sends to %j, an address that cannot receive email", async (to) => {
+    const inner = new CapturingMailer();
 
-      await new UndeliverableAddressGuard(inner).send(message(to));
+    await new UndeliverableAddressGuard(inner).send(message(to));
 
-      expect(inner.sent).toEqual([]);
-    },
-  );
+    expect(inner.sent).toEqual([]);
+  });
 });
 
 describe("SesMailer", () => {
@@ -61,8 +61,8 @@ describe("SesMailer", () => {
     const mailer = new SesMailer(
       {
         region: "eu-west-2",
-        from: "OpsPilot <no-reply@opspilot.example.com>",
-        configurationSet: "opspilot-demo",
+        from: "GoLiveBoard <no-reply@goliveboard.example.com>",
+        configurationSet: "goliveboard-demo",
       },
       client as never,
     );
@@ -77,8 +77,8 @@ describe("SesMailer", () => {
     const command = client.send.mock.calls[0]?.[0];
     expect(command).toBeInstanceOf(SendEmailCommand);
     expect(command?.input).toMatchObject({
-      ConfigurationSetName: "opspilot-demo",
-      FromEmailAddress: "OpsPilot <no-reply@opspilot.example.com>",
+      ConfigurationSetName: "goliveboard-demo",
+      FromEmailAddress: "GoLiveBoard <no-reply@goliveboard.example.com>",
       Destination: { ToAddresses: ["ada@example.com"] },
     });
     const raw = Buffer.from(command?.input.Content?.Raw?.Data ?? []).toString();
@@ -95,7 +95,7 @@ describe("SesMailer", () => {
     const mailer = new SesMailer(
       {
         region: "eu-west-2",
-        from: "no-reply@opspilot.example.com",
+        from: "no-reply@goliveboard.example.com",
         configurationSet: undefined,
       },
       fakeSes(() => Promise.reject(refusal)) as never,
@@ -120,13 +120,13 @@ describe("createMailer", () => {
     const ses = createMailer({
       transport: "ses",
       region: "eu-west-2",
-      from: "no-reply@opspilot.example.com",
-      configurationSet: "opspilot-demo",
+      from: "no-reply@goliveboard.example.com",
+      configurationSet: "goliveboard-demo",
     });
     const smtp = createMailer({
       transport: "smtp",
       smtpUrl: "smtp://127.0.0.1:1025",
-      from: "no-reply@opspilot.test",
+      from: "no-reply@goliveboard.test",
     });
 
     expect(ses).toBeInstanceOf(UndeliverableAddressGuard);

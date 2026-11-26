@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 
 import type { NestExpressApplication } from "@nestjs/platform-express";
-import { EventReport, ProblemDetails } from "@opspilot/contracts";
+import { EventReport, ProblemDetails } from "@goliveboard/contracts";
 import { afterAll, beforeAll, describe, expect, inject, it } from "vitest";
 
 import { ApiClient, type TestSession } from "../testing/api-client.js";

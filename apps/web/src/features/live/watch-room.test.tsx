@@ -1,4 +1,4 @@
-import type { WatchInfo } from "@opspilot/contracts";
+import type { WatchInfo } from "@goliveboard/contracts";
 import { act, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { http, HttpResponse } from "msw";

@@ -4,7 +4,7 @@
  * money: run it on purpose, before a release or after a prompt or model
  * change.
  *
- *   ANTHROPIC_API_KEY=… npm run eval:record -w @opspilot/api
+ *   ANTHROPIC_API_KEY=… npm run eval:record -w @goliveboard/api
  *
  * It writes src/triage/eval/recordings/*.json and prints each case's score.
  */

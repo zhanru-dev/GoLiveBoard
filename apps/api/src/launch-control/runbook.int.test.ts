@@ -1,5 +1,9 @@
 import type { NestExpressApplication } from "@nestjs/platform-express";
-import { AccessPolicy, ProblemDetails, RunbookTask } from "@opspilot/contracts";
+import {
+  AccessPolicy,
+  ProblemDetails,
+  RunbookTask,
+} from "@goliveboard/contracts";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { z } from "zod";
 

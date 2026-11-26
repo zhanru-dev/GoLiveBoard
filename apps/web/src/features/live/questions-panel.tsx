@@ -1,6 +1,6 @@
 "use client";
 
-import type { Question, QuestionStatus } from "@opspilot/contracts";
+import type { Question, QuestionStatus } from "@goliveboard/contracts";
 import { type SyntheticEvent, useState } from "react";
 
 import { PublicButton } from "../public/public-ui";

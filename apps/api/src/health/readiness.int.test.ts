@@ -1,5 +1,5 @@
 import type { NestExpressApplication } from "@nestjs/platform-express";
-import { HealthReport } from "@opspilot/contracts";
+import { HealthReport } from "@goliveboard/contracts";
 import type { StartedPostgreSqlContainer } from "@testcontainers/postgresql";
 import type { StartedValkeyContainer } from "@testcontainers/valkey";
 import { Redis } from "ioredis";
@@ -60,7 +60,7 @@ describe("readiness with real dependencies", () => {
     const admin = new Client({ connectionString: postgres.getConnectionUri() });
     await admin.connect();
     await admin.query(
-      "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE application_name = 'opspilot-api'",
+      "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE application_name = 'goliveboard-api'",
     );
     await admin.end();
 
@@ -102,7 +102,7 @@ describe("readiness with real dependencies", () => {
       try {
         await vi.waitFor(async () => {
           const clients = String(await observer.call("CLIENT", "LIST"));
-          expect(clients).not.toContain("name=opspilot-api-health");
+          expect(clients).not.toContain("name=goliveboard-api-health");
         });
       } finally {
         observer.disconnect();

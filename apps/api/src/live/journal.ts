@@ -3,7 +3,7 @@ import type {
   ChatEventKind,
   QuestionsEvent,
   RealtimeChannel,
-} from "@opspilot/contracts";
+} from "@goliveboard/contracts";
 
 import type { Prisma } from "../generated/prisma/client.js";
 import { CHAT_MESSAGE_SELECT, toChatMessage } from "./chat-view.js";

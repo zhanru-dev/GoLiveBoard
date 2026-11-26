@@ -5,7 +5,7 @@ import {
   trace,
 } from "@opentelemetry/api";
 
-const tracer = trace.getTracer("opspilot");
+const tracer = trace.getTracer("goliveboard");
 
 /**
  * Runs `work` in a span of its own, a business operation within the

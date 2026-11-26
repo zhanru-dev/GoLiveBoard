@@ -9,6 +9,6 @@ variable "releases_bucket" {
 }
 
 variable "site_origin" {
-  description = "The site's origin, e.g. https://opspilot.example.com: the only one allowed to upload."
+  description = "The site's origin, e.g. https://goliveboard.example.com: the only one allowed to upload."
   type        = string
 }

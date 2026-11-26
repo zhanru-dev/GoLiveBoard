@@ -1,6 +1,6 @@
 "use client";
 
-import { AccessPolicy, type AccessMode } from "@opspilot/contracts";
+import { AccessPolicy, type AccessMode } from "@goliveboard/contracts";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { type SubmitEvent, useState } from "react";
 import { toast } from "sonner";

@@ -1,5 +1,5 @@
 import { Inject, Injectable } from "@nestjs/common";
-import type { EventReport, Incident } from "@opspilot/contracts";
+import type { EventReport, Incident } from "@goliveboard/contracts";
 
 import type { Actor } from "../auth/actor.js";
 import { PRISMA } from "../database/prisma.js";

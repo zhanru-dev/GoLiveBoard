@@ -1,4 +1,4 @@
-import type { Role } from "@opspilot/contracts";
+import type { Role } from "@goliveboard/contracts";
 
 export const ROLE_LABELS: Readonly<Record<Role, string>> = {
   OWNER: "Owner",

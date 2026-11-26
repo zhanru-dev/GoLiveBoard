@@ -6,7 +6,7 @@ import {
   type EventPage,
   type ListEventsQuery,
   type UpdateEventRequest,
-} from "@opspilot/contracts";
+} from "@goliveboard/contracts";
 import { z } from "zod";
 
 import { recordAudit } from "../audit/audit.js";

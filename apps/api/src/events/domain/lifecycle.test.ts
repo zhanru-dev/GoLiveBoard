@@ -1,4 +1,4 @@
-import { EventStatus } from "@opspilot/contracts";
+import { EventStatus } from "@goliveboard/contracts";
 import { describe, expect, it } from "vitest";
 
 import {

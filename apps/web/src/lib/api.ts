@@ -1,4 +1,4 @@
-import { ProblemDetails } from "@opspilot/contracts";
+import { ProblemDetails } from "@goliveboard/contracts";
 import type { z } from "zod";
 import { traceparent } from "./traceparent";
 
@@ -40,7 +40,7 @@ const NO_REFRESH = new Set([
 ]);
 
 /** Held by the tab that is refreshing, so other tabs wait for its cookies. */
-const REFRESH_LOCK = "opspilot:refresh-session";
+const REFRESH_LOCK = "goliveboard:refresh-session";
 
 let refreshing: Promise<boolean> | undefined;
 

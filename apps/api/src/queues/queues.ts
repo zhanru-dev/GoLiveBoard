@@ -76,7 +76,7 @@ export type QueueName = (typeof QUEUE_NAMES)[number];
  * processed in it, so one trace runs from a request to the work it caused.
  */
 export function queueTelemetry(): BullMQOtel {
-  return new BullMQOtel({ tracerName: "opspilot-queues" });
+  return new BullMQOtel({ tracerName: "goliveboard-queues" });
 }
 
 export const QUEUE_COMMAND_TIMEOUT_MS = 2_000;
@@ -98,7 +98,7 @@ export const SHUTDOWN_GRACE_MS = 3_000;
 export function producerConnection(config: AppConfig): ConnectionOptions {
   return {
     url: config.valkey.url,
-    connectionName: "opspilot-producer",
+    connectionName: "goliveboard-producer",
     maxRetriesPerRequest: 1,
     commandTimeout: QUEUE_COMMAND_TIMEOUT_MS,
     socketTimeout: QUEUE_COMMAND_TIMEOUT_MS,
@@ -114,7 +114,7 @@ export function consumerConnection(config: AppConfig): ConnectionOptions {
   return {
     url: config.valkey.url,
     maxRetriesPerRequest: null,
-    connectionName: "opspilot-consumer",
+    connectionName: "goliveboard-consumer",
   };
 }
 

@@ -1,4 +1,4 @@
-import type { AuditEntry, Member } from "@opspilot/contracts";
+import type { AuditEntry, Member } from "@goliveboard/contracts";
 import { screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { http, HttpResponse } from "msw";
@@ -73,7 +73,7 @@ describe("AuditPage", () => {
       .setup()
       .click(screen.getByRole("button", { name: "Load more" }));
 
-    expect(await screen.findByText("OpsPilot")).toBeInTheDocument();
+    expect(await screen.findByText("GoLiveBoard")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Load more" })).toBeNull();
     expect(queries.map((query) => query.get("cursor"))).toEqual([null, "next"]);
   });

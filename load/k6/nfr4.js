@@ -15,8 +15,8 @@ import { Counter, Trend } from "k6/metrics";
 import { WebSocket } from "k6/websockets";
 
 const API = __ENV.API_URL ?? "http://api:4301";
-const ORIGIN = __ENV.APP_ORIGIN ?? "https://opspilot.localhost:3443";
-const COOKIE = "__Host-opspilot_attendee";
+const ORIGIN = __ENV.APP_ORIGIN ?? "https://goliveboard.localhost:3443";
+const COOKIE = "__Host-goliveboard_attendee";
 const session = new SharedArray("session", () => [
   JSON.parse(open("/load/out/session.json")),
 ])[0];

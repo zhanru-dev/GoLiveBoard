@@ -1,5 +1,5 @@
 import { Controller, Get, UseGuards } from "@nestjs/common";
-import type { WatchInfo } from "@opspilot/contracts";
+import type { WatchInfo } from "@goliveboard/contracts";
 
 import {
   type AttendeeActor,

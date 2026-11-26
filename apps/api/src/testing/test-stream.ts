@@ -44,7 +44,7 @@ export class TestStream {
   ) {}
 
   static async start(): Promise<TestStream> {
-    const directory = await mkdtemp(join(tmpdir(), "opspilot-stream-"));
+    const directory = await mkdtemp(join(tmpdir(), "goliveboard-stream-"));
     const key = join(directory, "key.pem");
     const cert = join(directory, "cert.pem");
     await run("openssl", [

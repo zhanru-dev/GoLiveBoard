@@ -2,7 +2,7 @@ import type {
   WebhookDelivery,
   WebhookEndpoint,
   Workspace,
-} from "@opspilot/contracts";
+} from "@goliveboard/contracts";
 import { screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { http, HttpResponse } from "msw";
@@ -16,7 +16,7 @@ import { IntegrationsPage } from "./integrations-page";
 
 const ENDPOINT: WebhookEndpoint = {
   id: "0195f0a0-0000-7000-8000-0000000000d1",
-  url: "https://hooks.example.com/opspilot",
+  url: "https://hooks.example.com/goliveboard",
   eventTypes: ["event.completed", "event.live"],
   description: "CRM",
   active: true,
@@ -84,14 +84,14 @@ describe("IntegrationsPage", () => {
 
     await user.type(
       screen.getByLabelText("Receiver URL"),
-      "https://hooks.example.com/opspilot",
+      "https://hooks.example.com/goliveboard",
     );
     await user.click(screen.getByLabelText(/An event goes live/));
     await user.click(screen.getByLabelText(/An event completes/));
     await user.click(screen.getByRole("button", { name: "Add endpoint" }));
 
     expect(sent).toEqual({
-      url: "https://hooks.example.com/opspilot",
+      url: "https://hooks.example.com/goliveboard",
       eventTypes: ["event.completed", "event.live"],
       description: "",
     });

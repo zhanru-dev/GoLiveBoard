@@ -6,7 +6,7 @@ import {
   type AttendeeStatus,
   type EventDetail,
   type StaffAttendee,
-} from "@opspilot/contracts";
+} from "@goliveboard/contracts";
 import {
   useInfiniteQuery,
   useMutation,

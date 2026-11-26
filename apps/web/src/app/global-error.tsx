@@ -15,7 +15,7 @@ export default function GlobalError(props: {
   return (
     <html lang="en-GB">
       <body className="mx-auto max-w-2xl px-4 font-sans antialiased">
-        <title>Something went wrong · OpsPilot</title>
+        <title>Something went wrong · GoLiveBoard</title>
         <RouteError {...props} />
       </body>
     </html>

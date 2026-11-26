@@ -1,7 +1,7 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { CreateInvitationRequest, Invitation } from "@opspilot/contracts";
+import { CreateInvitationRequest, Invitation } from "@goliveboard/contracts";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { Controller, useForm } from "react-hook-form";

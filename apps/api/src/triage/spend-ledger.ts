@@ -65,7 +65,7 @@ export async function settle(
 }
 
 /** Sweeps that count orphaned reservations take this lock, one at a time. */
-const ORPHANS_LOCK = "opspilot:triage-orphans";
+const ORPHANS_LOCK = "goliveboard:triage-orphans";
 
 /**
  * Counts as spent what runs deleted unsettled still hold (their event was

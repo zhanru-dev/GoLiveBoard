@@ -1,4 +1,4 @@
-import type { Me } from "@opspilot/contracts";
+import type { Me } from "@goliveboard/contracts";
 import { render } from "@testing-library/react";
 import type { ReactElement } from "react";
 

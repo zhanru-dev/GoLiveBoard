@@ -81,8 +81,8 @@ describe("access tokens", () => {
     const payload = Buffer.from(
       JSON.stringify({
         sub: "session-1",
-        iss: "opspilot",
-        aud: "opspilot-api",
+        iss: "goliveboard",
+        aud: "goliveboard-api",
       }),
     ).toString("base64url");
 

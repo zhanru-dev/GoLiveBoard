@@ -4,7 +4,7 @@ import {
   LiveOpsAudience,
   LiveOpsRates,
   LiveOpsStreamStatus,
-} from "@opspilot/contracts";
+} from "@goliveboard/contracts";
 
 const MINUTE_MS = 60_000;
 

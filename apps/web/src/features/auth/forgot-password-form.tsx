@@ -1,7 +1,7 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { PasswordResetRequest } from "@opspilot/contracts";
+import { PasswordResetRequest } from "@goliveboard/contracts";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 

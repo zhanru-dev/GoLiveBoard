@@ -1,8 +1,8 @@
 import { defineProject } from "vitest/config";
 
 // Resolve workspace packages to their TypeScript source, so tests never need a
-// build of @opspilot/contracts first.
-const conditions = ["@opspilot/source", "node", "development|production"];
+// build of @goliveboard/contracts first.
+const conditions = ["@goliveboard/source", "node", "development|production"];
 
 export default defineProject({
   resolve: { conditions },

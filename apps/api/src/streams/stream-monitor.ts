@@ -49,7 +49,7 @@ export class StreamMonitor {
    * that was already queued or running when the event was archived.
    */
   check(eventId: string, slot: Date): Promise<CheckOutcome> {
-    return inSpan("stream.check", { "opspilot.event_id": eventId }, () =>
+    return inSpan("stream.check", { "goliveboard.event_id": eventId }, () =>
       this.checkSlot(eventId, slot),
     );
   }
@@ -67,8 +67,8 @@ export class StreamMonitor {
     const result = await probeStream(this.http, url);
     const latencyMs = Math.round(performance.now() - started);
     describeSpan({
-      "opspilot.stream.healthy": result.ok,
-      "opspilot.stream.latency_ms": latencyMs,
+      "goliveboard.stream.healthy": result.ok,
+      "goliveboard.stream.latency_ms": latencyMs,
     });
     countStreamCheck(eventId, result.ok);
     const checkedAt = this.clock.now();

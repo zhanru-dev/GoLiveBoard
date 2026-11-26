@@ -1,5 +1,5 @@
 import { Inject, Injectable } from "@nestjs/common";
-import type { EventStatus, Role } from "@opspilot/contracts";
+import type { EventStatus, Role } from "@goliveboard/contracts";
 
 import { AttendeeSessions } from "../attendees/attendee-sessions.js";
 import { hasRole } from "../auth/actor.js";

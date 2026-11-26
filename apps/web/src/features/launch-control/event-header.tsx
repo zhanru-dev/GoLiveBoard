@@ -1,6 +1,6 @@
 "use client";
 
-import { Blocker, EventDetail, type EventStatus } from "@opspilot/contracts";
+import { Blocker, EventDetail, type EventStatus } from "@goliveboard/contracts";
 import { useMutation } from "@tanstack/react-query";
 import Link from "next/link";
 import { useState } from "react";

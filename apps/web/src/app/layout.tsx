@@ -14,7 +14,7 @@ import "./globals.css";
 const geist = Geist({ subsets: ["latin"], variable: "--font-sans" });
 
 export const metadata: Metadata = {
-  title: { default: "OpsPilot", template: "%s · OpsPilot" },
+  title: { default: "GoLiveBoard", template: "%s · GoLiveBoard" },
   description:
     "Launch control for online events: know when an event is ready to go live, and keep it under control while it runs.",
 };

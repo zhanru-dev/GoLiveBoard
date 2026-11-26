@@ -85,7 +85,7 @@ const AppConfigSchema = z
     REALTIME_CHANNEL_PREFIX: z
       .string()
       .regex(/^[a-z0-9-]{1,40}$/)
-      .default("opspilot"),
+      .default("goliveboard"),
     LOG_FORMAT: z.enum(["json", "pretty"]).default("json"),
     DATABASE_URL: z.url({
       protocol: /^postgres(ql)?$/,
@@ -121,7 +121,7 @@ const AppConfigSchema = z
     QUEUE_PREFIX: z
       .string()
       .regex(/^[a-z0-9-]{1,40}$/)
-      .default("opspilot"),
+      .default("goliveboard"),
     /** Amazon S3 when unset; SeaweedFS locally. */
     S3_ENDPOINT: z.url({ protocol: /^https?$/ }).optional(),
     /**
@@ -130,7 +130,7 @@ const AppConfigSchema = z
      */
     S3_PUBLIC_ENDPOINT: z.url({ protocol: /^https?$/ }).optional(),
     S3_REGION: z.string().min(1).default("eu-west-2"),
-    S3_BUCKET: z.string().min(3).max(63).default("opspilot-assets"),
+    S3_BUCKET: z.string().min(3).max(63).default("goliveboard-assets"),
     /** Unset in production, where the instance role supplies credentials. */
     S3_ACCESS_KEY_ID: z.string().min(1).optional(),
     S3_SECRET_ACCESS_KEY: z.string().min(1).optional(),

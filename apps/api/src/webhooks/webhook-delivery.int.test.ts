@@ -7,7 +7,7 @@ import {
   WebhookDeliveryPage,
   WebhookEndpointCreated,
   type WebhookEventType,
-} from "@opspilot/contracts";
+} from "@goliveboard/contracts";
 import { afterAll, beforeAll, describe, expect, inject, it } from "vitest";
 
 import { openEvent, PublicClient, registration } from "../testing/admission.js";
@@ -179,11 +179,13 @@ describe(
       expect(received).toHaveLength(3);
       for (const request of received) {
         expect(request.headers["content-type"]).toBe("application/json");
-        expect(request.headers["opspilot-event-id"]).toBe(messageId);
-        expect(request.headers["opspilot-event-type"]).toBe("event.cancelled");
+        expect(request.headers["goliveboard-event-id"]).toBe(messageId);
+        expect(request.headers["goliveboard-event-type"]).toBe(
+          "event.cancelled",
+        );
         expect(
           verifySignature(
-            String(request.headers["opspilot-signature"]),
+            String(request.headers["goliveboard-signature"]),
             secret,
             request.body,
             nowSeconds(),
@@ -208,7 +210,7 @@ describe(
       expect(receiver.accepted(`${secret}x`, nowSeconds())).toEqual([]);
       expect(
         verifySignature(
-          String(received[0]?.headers["opspilot-signature"]),
+          String(received[0]?.headers["goliveboard-signature"]),
           secret,
           `${received[0]?.body ?? ""} `,
           nowSeconds(),
@@ -216,7 +218,7 @@ describe(
       ).toBe(false);
       expect(
         verifySignature(
-          String(received[0]?.headers["opspilot-signature"]),
+          String(received[0]?.headers["goliveboard-signature"]),
           secret,
           received[0]?.body ?? "",
           nowSeconds() + SIGNATURE_TOLERANCE_SECONDS + 3 * 3600,
@@ -287,28 +289,28 @@ describe(
           .find(
             (candidate) =>
               candidate.name === "webhook.send" &&
-              candidate.attributes["opspilot.webhook.endpoint_id"] ===
+              candidate.attributes["goliveboard.webhook.endpoint_id"] ===
                 endpoint.id,
           );
         expect(span?.attributes).toEqual({
-          "opspilot.webhook.delivery_id": delivery?.id,
-          "opspilot.webhook.endpoint_id": endpoint.id,
-          "opspilot.webhook.event_type": "event.cancelled",
-          "opspilot.webhook.attempt": 1,
-          "opspilot.webhook.status_code": 503,
-          "opspilot.webhook.delivered": false,
+          "goliveboard.webhook.delivery_id": delivery?.id,
+          "goliveboard.webhook.endpoint_id": endpoint.id,
+          "goliveboard.webhook.event_type": "event.cancelled",
+          "goliveboard.webhook.attempt": 1,
+          "goliveboard.webhook.status_code": 503,
+          "goliveboard.webhook.delivered": false,
         });
         // The metric the "one endpoint failing" alert reads.
         const attempts = await counted.points(METRICS.webhookAttempts);
         expect(
           attempts.find(
             ({ attributes }) =>
-              attributes["opspilot.webhook.endpoint_id"] === endpoint.id,
+              attributes["goliveboard.webhook.endpoint_id"] === endpoint.id,
           ),
         ).toMatchObject({
           attributes: {
-            "opspilot.webhook.endpoint_id": endpoint.id,
-            "opspilot.webhook.delivered": false,
+            "goliveboard.webhook.endpoint_id": endpoint.id,
+            "goliveboard.webhook.delivered": false,
           },
           value: 1,
         });

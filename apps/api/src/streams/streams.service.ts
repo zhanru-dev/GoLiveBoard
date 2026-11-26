@@ -5,7 +5,7 @@ import type {
   PageQuery,
   StreamCheckPage,
   StreamCheckRequestedPayload,
-} from "@opspilot/contracts";
+} from "@goliveboard/contracts";
 import { z } from "zod";
 
 import { auditableUrl } from "../audit/redact.js";

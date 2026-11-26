@@ -1,6 +1,6 @@
 # 07 · Delivery plan
 
-OpsPilot is delivered in three phases and ten milestones. Each milestone ends with a working system that runs in production form locally (from Milestone 4 onwards) and has exit criteria that can be checked. Cloud deployment comes last, in Milestone 10, once the product is complete; everything that can differ between development and production is exercised locally and in CI from Milestone 4, so the move to AWS changes the environment, not the code. Requirement IDs refer to [Product requirements](01-product-requirements.md).
+GoLiveBoard is delivered in three phases and ten milestones. Each milestone ends with a working system that runs in production form locally (from Milestone 4 onwards) and has exit criteria that can be checked. Cloud deployment comes last, in Milestone 10, once the product is complete; everything that can differ between development and production is exercised locally and in CI from Milestone 4, so the move to AWS changes the environment, not the code. Requirement IDs refer to [Product requirements](01-product-requirements.md).
 
 Each milestone is built and verified here first, then taught as a series of lessons in which the learner builds the same milestone in their own repository.
 
@@ -82,7 +82,7 @@ flowchart LR
 
 ### M10 · Deployment and launch
 
-- **Scope**: Terraform for the AWS demo environment; GitHub OIDC; deploy pipeline with migrations, smoke test and automatic rollback; SES production access and DNS; README with architecture diagram, live link, demo instructions and trade-offs; final ADR review; a two-minute demo video; a real small online event run on OpsPilot, with its report.
+- **Scope**: Terraform for the AWS demo environment; GitHub OIDC; deploy pipeline with migrations, smoke test and automatic rollback; SES production access and DNS; README with architecture diagram, live link, demo instructions and trade-offs; final ADR review; a two-minute demo video; a real small online event run on GoLiveBoard, with its report.
 - **Exit criteria**: a merge to `main` reaches the demo environment with no manual step; a deliberately failing smoke test rolls back automatically; a reviewer who has never seen the project can understand, run and try it from the README alone.
 - **Carried over from M9**: Grafana Cloud in place of the local `grafana/otel-lgtm`, with logs shipped to it; the k6 load test against the AWS environment; each runbook's AWS steps rehearsed there; a screen-reader pass of the golden flow before the public demo.
 - **Done before the AWS account** (2026-11-23):

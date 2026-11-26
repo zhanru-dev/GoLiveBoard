@@ -6,7 +6,7 @@ import {
   DemoInbox,
   ProblemDetails,
   PublicEvent,
-} from "@opspilot/contracts";
+} from "@goliveboard/contracts";
 import request from "supertest";
 import { afterAll, beforeAll, describe, expect, inject, it, vi } from "vitest";
 
@@ -483,7 +483,7 @@ describe("registration and verification (FR-AD-1 to FR-AD-3)", () => {
 
       expect(response.status).toBe(200);
       expect(response.body).toEqual({ slug: event.slug });
-      const cookie = setCookies(response).get("__Host-opspilot_attendee");
+      const cookie = setCookies(response).get("__Host-goliveboard_attendee");
       expect(cookie?.attributes).toMatchObject({
         path: "/",
         httponly: "",
@@ -931,8 +931,8 @@ describe("registration in the demo workspace (FR-AUTH-5)", () => {
     const cookies = setCookies(signIn);
     const visitorSession = {
       email: "visitor",
-      access: cookies.get("__Host-opspilot_access")?.value ?? "",
-      refresh: cookies.get("__Secure-opspilot_refresh")?.value ?? "",
+      access: cookies.get("__Host-goliveboard_access")?.value ?? "",
+      refresh: cookies.get("__Secure-goliveboard_refresh")?.value ?? "",
     };
     return openEvent(api, visitorSession);
   }

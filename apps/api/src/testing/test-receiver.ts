@@ -48,7 +48,7 @@ export class TestReceiver {
   ) {}
 
   static async start(): Promise<TestReceiver> {
-    const directory = await mkdtemp(join(tmpdir(), "opspilot-receiver-"));
+    const directory = await mkdtemp(join(tmpdir(), "goliveboard-receiver-"));
     const key = join(directory, "key.pem");
     const cert = join(directory, "cert.pem");
     await run("openssl", [
@@ -144,7 +144,7 @@ export class TestReceiver {
   accepted(secret: string, nowSeconds: number): unknown[] {
     const seen = new Set<string>();
     return this.requests.flatMap((request) => {
-      const signature = request.headers["opspilot-signature"];
+      const signature = request.headers["goliveboard-signature"];
       if (
         typeof signature !== "string" ||
         !verifySignature(signature, secret, request.body, nowSeconds)

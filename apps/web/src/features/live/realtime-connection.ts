@@ -6,7 +6,7 @@ import type {
   RealtimeChannel,
   RealtimeErrorCode,
   SessionRevoked,
-} from "@opspilot/contracts";
+} from "@goliveboard/contracts";
 import { io, type Socket } from "socket.io-client";
 
 import { ChannelSequence } from "./channel-sequence";

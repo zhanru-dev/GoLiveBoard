@@ -11,7 +11,7 @@ import {
   TriageDecisionRequest,
   type TriageRun,
   type TriageRunStarted,
-} from "@opspilot/contracts";
+} from "@goliveboard/contracts";
 
 import { type Actor, CurrentActor, RequireRole } from "../auth/actor.js";
 import { TriageService } from "./triage.service.js";

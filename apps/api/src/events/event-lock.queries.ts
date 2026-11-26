@@ -1,4 +1,4 @@
-import type { EventStatus } from "@opspilot/contracts";
+import type { EventStatus } from "@goliveboard/contracts";
 
 import type { Prisma } from "../generated/prisma/client.js";
 import { DomainError } from "../shared/domain/domain-error.js";

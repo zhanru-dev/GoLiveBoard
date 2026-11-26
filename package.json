@@ -1,5 +1,5 @@
 {
-  "name": "opspilot",
+  "name": "goliveboard",
   "version": "0.0.0",
   "private": true,
   "description": "Operations platform for teams running high-stakes online events.",
@@ -9,15 +9,15 @@
     "apps/*"
   ],
   "scripts": {
-    "dev": "npm run build -w @opspilot/contracts && concurrently --names contracts,api,worker,web --prefix-colors blue,magenta,yellow,green \"npm run dev -w @opspilot/contracts\" \"npm run dev -w @opspilot/api\" \"npm run dev:worker -w @opspilot/api\" \"npm run dev -w @opspilot/web\"",
+    "dev": "npm run build -w @goliveboard/contracts && concurrently --names contracts,api,worker,web --prefix-colors blue,magenta,yellow,green \"npm run dev -w @goliveboard/contracts\" \"npm run dev -w @goliveboard/api\" \"npm run dev:worker -w @goliveboard/api\" \"npm run dev -w @goliveboard/web\"",
     "services:up": "docker compose up --detach --wait --wait-timeout 120",
     "services:down": "docker compose --profile observability down",
     "observability:up": "docker compose --profile observability up --detach --wait --wait-timeout 300 lgtm",
     "stack:up": "docker compose --file docker-compose.prod.yml up --build --detach --wait --wait-timeout 180",
     "stack:down": "docker compose --file docker-compose.prod.yml down",
-    "db:migrate": "npm run db:migrate -w @opspilot/api --",
-    "db:deploy": "npm run db:deploy -w @opspilot/api",
-    "db:seed": "npm run db:seed -w @opspilot/api",
+    "db:migrate": "npm run db:migrate -w @goliveboard/api --",
+    "db:deploy": "npm run db:deploy -w @goliveboard/api",
+    "db:seed": "npm run db:seed -w @goliveboard/api",
     "build": "npm run build --workspaces --if-present",
     "typecheck": "tsc --noEmit -p tsconfig.json && npm run typecheck --workspaces --if-present",
     "lint": "eslint --max-warnings=0 .",

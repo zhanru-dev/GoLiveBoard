@@ -1,7 +1,7 @@
 mock_provider "aws" {}
 
 variables {
-  name = "opspilot-test"
+  name = "goliveboard-test"
 }
 
 # IDs are only known after apply; the public subnet gets a fixed one so the

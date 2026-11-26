@@ -135,14 +135,14 @@ describe("scrubEvent", () => {
     const event: ErrorEvent = {
       type: undefined,
       request: {
-        url: "https://opspilot.example/reset-password?next=%2Fevents#token=one-time",
-        headers: { Referer: "https://opspilot.example/sign-in?x=1" },
+        url: "https://goliveboard.example/reset-password?next=%2Fevents#token=one-time",
+        headers: { Referer: "https://goliveboard.example/sign-in?x=1" },
       },
     };
 
     expect(scrubEvent(event).request).toEqual({
       method: undefined,
-      url: "https://opspilot.example/reset-password",
+      url: "https://goliveboard.example/reset-password",
     });
   });
 
@@ -151,13 +151,13 @@ describe("scrubEvent", () => {
       type: undefined,
       request: {
         method: "GET",
-        url: "https://opspilot.example/accept-invitation#token=one-time",
+        url: "https://goliveboard.example/accept-invitation#token=one-time",
       },
     };
 
     expect(scrubEvent(event).request).toEqual({
       method: "GET",
-      url: "https://opspilot.example/accept-invitation",
+      url: "https://goliveboard.example/accept-invitation",
     });
   });
 

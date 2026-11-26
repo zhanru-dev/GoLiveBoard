@@ -1,21 +1,21 @@
-# OpsPilot's alerts (docs/06, section 7), by email to the on-call address.
+# GoLiveBoard's alerts (docs/06, section 7), by email to the on-call address.
 # Locally the email lands in Mailpit; in AWS the same rules go to Grafana
 # Cloud (milestone 10). Each names the runbook to follow.
 apiVersion: 1
 
 contactPoints:
   - orgId: 1
-    name: OpsPilot on call
+    name: GoLiveBoard on call
     receivers:
-      - uid: opspilot-on-call-email
+      - uid: goliveboard-on-call-email
         type: email
         settings:
-          addresses: oncall@opspilot.localhost
+          addresses: oncall@goliveboard.localhost
           singleEmail: true
 
 policies:
   - orgId: 1
-    receiver: OpsPilot on call
+    receiver: GoLiveBoard on call
     group_by: [alertname]
     group_wait: 30s
     group_interval: 5m
@@ -23,11 +23,11 @@ policies:
 
 groups:
   - orgId: 1
-    name: OpsPilot
-    folder: OpsPilot
+    name: GoLiveBoard
+    folder: GoLiveBoard
     interval: 30s
     rules:
-      - uid: opspilot-api-5xx
+      - uid: goliveboard-api-5xx
         title: API 5xx rate above 2%
         condition: C
         for: 5m
@@ -46,8 +46,8 @@ groups:
               refId: A
               instant: true
               expr: >-
-                sum(rate(http_server_request_duration_seconds_count{job="opspilot-api",http_response_status_code=~"5.."}[5m]))
-                / sum(rate(http_server_request_duration_seconds_count{job="opspilot-api"}[5m]))
+                sum(rate(http_server_request_duration_seconds_count{job="goliveboard-api",http_response_status_code=~"5.."}[5m]))
+                / sum(rate(http_server_request_duration_seconds_count{job="goliveboard-api"}[5m]))
           - refId: C
             datasourceUid: __expr__
             model:
@@ -57,7 +57,7 @@ groups:
               conditions:
                 - evaluator: { type: gt, params: [0.02] }
 
-      - uid: opspilot-readiness
+      - uid: goliveboard-readiness
         title: API readiness check failing
         condition: C
         for: 2m
@@ -87,7 +87,7 @@ groups:
               conditions:
                 - evaluator: { type: lt, params: [1] }
 
-      - uid: opspilot-queue-age
+      - uid: goliveboard-queue-age
         title: Work waiting more than 5 minutes
         condition: C
         for: 1m
@@ -106,7 +106,7 @@ groups:
               refId: A
               instant: true
               expr: >-
-                max(opspilot_queue_oldest_job_age_seconds or opspilot_outbox_oldest_message_age_seconds)
+                max(goliveboard_queue_oldest_job_age_seconds or goliveboard_outbox_oldest_message_age_seconds)
           - refId: C
             datasourceUid: __expr__
             model:
@@ -124,7 +124,7 @@ groups:
       # As the stack starts, the rule sees nothing until the worker's first
       # metrics (15 seconds after it starts) and is pending meanwhile; it
       # fires only if they take more than about a minute and a half.
-      - uid: opspilot-worker-silent
+      - uid: goliveboard-worker-silent
         title: Worker not reporting
         condition: C
         for: 1m
@@ -142,7 +142,7 @@ groups:
             model:
               refId: A
               instant: true
-              expr: absent(opspilot_outbox_oldest_message_age_seconds)
+              expr: absent(goliveboard_outbox_oldest_message_age_seconds)
           - refId: C
             datasourceUid: __expr__
             model:
@@ -158,7 +158,7 @@ groups:
       # endpoint is public, but a sender adds at most one paint to a
       # 30-minute window (browserVitalPerVisitor): on a quiet demo it takes
       # 20 senders to hold the 75th percentile.
-      - uid: opspilot-public-page-slow
+      - uid: goliveboard-public-page-slow
         title: Public page slow for real visitors
         condition: C
         for: 10m
@@ -178,9 +178,9 @@ groups:
               instant: true
               expr: >-
                 histogram_quantile(0.75, sum by (le)
-                (rate(opspilot_web_vital_duration_milliseconds_bucket{opspilot_web_vital="LCP",opspilot_web_route="/e/:slug"}[30m])))
+                (rate(goliveboard_web_vital_duration_milliseconds_bucket{goliveboard_web_vital="LCP",goliveboard_web_route="/e/:slug"}[30m])))
                 and on ()
-                sum(increase(opspilot_web_vital_duration_milliseconds_count{opspilot_web_vital="LCP",opspilot_web_route="/e/:slug"}[30m])) >= 20
+                sum(increase(goliveboard_web_vital_duration_milliseconds_count{goliveboard_web_vital="LCP",goliveboard_web_route="/e/:slug"}[30m])) >= 20
           - refId: C
             datasourceUid: __expr__
             model:
@@ -198,7 +198,7 @@ groups:
       # limit's price: everyone behind one address (an office proxy, a
       # carrier's NAT) is one sender, so a failure confined to one network
       # cannot page; the runbook says so.
-      - uid: opspilot-browser-realtime-failing
+      - uid: goliveboard-browser-realtime-failing
         title: Chat connections failing in browsers
         condition: C
         for: 0s
@@ -217,7 +217,7 @@ groups:
               refId: A
               instant: true
               expr: >-
-                sum(increase(opspilot_web_realtime_failures_total[10m]))
+                sum(increase(goliveboard_web_realtime_failures_total[10m]))
           - refId: C
             datasourceUid: __expr__
             model:
@@ -227,7 +227,7 @@ groups:
               conditions:
                 - evaluator: { type: gt, params: [10] }
 
-      - uid: opspilot-webhook-endpoint-failing
+      - uid: goliveboard-webhook-endpoint-failing
         title: Webhook endpoint failing
         condition: C
         for: 0s
@@ -246,8 +246,8 @@ groups:
               refId: A
               instant: true
               expr: >-
-                max(sum by (opspilot_webhook_endpoint_id)
-                (increase(opspilot_webhook_attempts_total{opspilot_webhook_delivered="false"}[1h])))
+                max(sum by (goliveboard_webhook_endpoint_id)
+                (increase(goliveboard_webhook_attempts_total{goliveboard_webhook_delivered="false"}[1h])))
           - refId: C
             datasourceUid: __expr__
             model:

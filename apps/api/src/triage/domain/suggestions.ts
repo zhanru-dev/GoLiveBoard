@@ -1,4 +1,4 @@
-import type { TriageSuggestions } from "@opspilot/contracts";
+import type { TriageSuggestions } from "@goliveboard/contracts";
 
 export type SuggestionCheck =
   | { readonly ok: true; readonly suggestions: TriageSuggestions }

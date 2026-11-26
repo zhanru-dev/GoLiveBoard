@@ -1,5 +1,5 @@
 import { Injectable, Module } from "@nestjs/common";
-import { EventStatus } from "@opspilot/contracts";
+import { EventStatus } from "@goliveboard/contracts";
 import { z } from "zod";
 
 import type { Prisma } from "../generated/prisma/client.js";

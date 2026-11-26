@@ -2,7 +2,7 @@ import { randomBytes } from "node:crypto";
 
 import type { INestApplicationContext } from "@nestjs/common";
 import type { NestExpressApplication } from "@nestjs/platform-express";
-import { WebhookEndpointCreated } from "@opspilot/contracts";
+import { WebhookEndpointCreated } from "@goliveboard/contracts";
 import { afterAll, beforeAll, describe, expect, inject, it } from "vitest";
 
 import { openEvent } from "../testing/admission.js";

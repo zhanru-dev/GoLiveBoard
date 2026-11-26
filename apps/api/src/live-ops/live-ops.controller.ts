@@ -6,7 +6,7 @@ import {
   ParseUUIDPipe,
   Res,
 } from "@nestjs/common";
-import type { LiveOps } from "@opspilot/contracts";
+import type { LiveOps } from "@goliveboard/contracts";
 import type { Response } from "express";
 
 import { type Actor, CurrentActor } from "../auth/actor.js";

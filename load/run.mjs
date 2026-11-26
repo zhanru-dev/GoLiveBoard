@@ -59,8 +59,8 @@ execFileSync(
     "psql",
     "--quiet",
     "--set=ON_ERROR_STOP=1",
-    "--username=opspilot",
-    "opspilot",
+    "--username=goliveboard",
+    "goliveboard",
   ],
   { cwd: root, input: sql, stdio: ["pipe", "ignore", "inherit"] },
 );

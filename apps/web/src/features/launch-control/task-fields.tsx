@@ -1,6 +1,6 @@
 "use client";
 
-import { Member } from "@opspilot/contracts";
+import { Member } from "@goliveboard/contracts";
 import { useQuery } from "@tanstack/react-query";
 import { z } from "zod";
 

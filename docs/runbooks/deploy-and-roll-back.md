@@ -43,11 +43,11 @@ Locally, images are named by `STACK_API_IMAGE` and `STACK_WEB_IMAGE`:
 
 ```bash
 # Before every deploy, keep what runs now:
-docker tag opspilot-api:local opspilot-api:previous
-docker tag opspilot-web:local opspilot-web:previous
+docker tag goliveboard-api:local goliveboard-api:previous
+docker tag goliveboard-web:local goliveboard-web:previous
 
 # Roll back:
-STACK_API_IMAGE=opspilot-api:previous STACK_WEB_IMAGE=opspilot-web:previous \
+STACK_API_IMAGE=goliveboard-api:previous STACK_WEB_IMAGE=goliveboard-web:previous \
   docker compose -f docker-compose.prod.yml up -d --wait api worker web
 ```
 
@@ -63,11 +63,11 @@ STACK_API_IMAGE=opspilot-api:previous STACK_WEB_IMAGE=opspilot-web:previous \
 - **Without GitHub:** run the same command on the host directly:
 
   ```bash
-  aws ssm send-command --instance-ids <host_instance_id> --document-name opspilot-demo-deploy \
+  aws ssm send-command --instance-ids <host_instance_id> --document-name goliveboard-demo-deploy \
     --parameters Action=deploy,Sha=<full sha>
   ```
 
-- **Which release is running:** use `Action=current`, or `readlink /opt/opspilot/current` in an SSM session.
+- **Which release is running:** use `Action=current`, or `readlink /opt/goliveboard/current` in an SSM session.
 
 ## Verification
 
@@ -81,5 +81,5 @@ STACK_API_IMAGE=opspilot-api:previous STACK_WEB_IMAGE=opspilot-web:previous \
 | Date       | Where       | What                                                                             | Result                                                                                                                                                                                                                                   |
 | ---------- | ----------- | -------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 2026-11-18 | Local stack | Stopped Valkey: readiness 503                                                    | "API readiness check failing" fired, and its email reached Mailpit after 231 s. Valkey restarted; the alert resolved                                                                                                                     |
-| 2026-11-19 | Local stack | Deployed a release that fails on start (`opspilot-api:release-b`)                | `ps`: `Restarting`; readiness `502`; logs: the start-up error repeated. Rolled back to `release-a`: **healthy 20 s after the rollback started**, readiness `200`                                                                         |
+| 2026-11-19 | Local stack | Deployed a release that fails on start (`goliveboard-api:release-b`)             | `ps`: `Restarting`; readiness `502`; logs: the start-up error repeated. Rolled back to `release-a`: **healthy 20 s after the rollback started**, readiness `200`                                                                         |
 | 2026-11-19 | Local stack | Stopped the worker, with nothing queued (the case the M9 review found unalerted) | "Worker not reporting": pending 5 min 20 s after the stop, firing a minute later, **email after 425 s**. "Work waiting more than 5 minutes" stayed quiet, as designed. Worker started (`up -d --wait worker`): resolved about 40 s later |

@@ -1,4 +1,4 @@
-import type { EventDetail, EventSummary } from "@opspilot/contracts";
+import type { EventDetail, EventSummary } from "@goliveboard/contracts";
 
 import type { Prisma } from "../generated/prisma/client.js";
 import { allowedTransitions } from "./domain/lifecycle.js";

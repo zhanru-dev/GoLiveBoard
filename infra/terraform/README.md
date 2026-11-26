@@ -12,7 +12,7 @@ The infrastructure of [ADR-0010](../../docs/adr/0010-aws-deployment.md) and [doc
 | `bootstrap/`                     | The state bucket and GitHub's OIDC provider. Applied once, by a person, with local state                                                |
 | `modules/`                       | One module per concern: `network`, `database`, `compute`, `storage`, `email`, `registry`, `github-oidc`, `dns`, `budgets`, `parameters` |
 | `environments/demo/`             | The demo environment, wiring the modules; state in the bootstrap's bucket                                                               |
-| `../deploy/host-deploy.sh.tftpl` | The deploy script, installed on the host as the SSM document `opspilot-demo-deploy`                                                     |
+| `../deploy/host-deploy.sh.tftpl` | The deploy script, installed on the host as the SSM document `goliveboard-demo-deploy`                                                  |
 
 ## Checks, without an AWS account
 
@@ -55,7 +55,7 @@ Each step creates billed resources; the demo's budget is set in step 3.
    ```bash
    cd infra/terraform/bootstrap
    terraform init
-   terraform apply -var state_bucket=opspilot-terraform-state-<something of your own>
+   terraform apply -var state_bucket=goliveboard-terraform-state-<something of your own>
    ```
 
 3. **The environment:**

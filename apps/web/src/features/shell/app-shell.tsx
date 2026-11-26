@@ -1,6 +1,6 @@
 "use client";
 
-import type { Me } from "@opspilot/contracts";
+import type { Me } from "@goliveboard/contracts";
 import { useQueryClient } from "@tanstack/react-query";
 import { ChevronsUpDown } from "lucide-react";
 import Link from "next/link";
@@ -76,7 +76,7 @@ export function AppShell({
             sideways (WCAG 1.4.10). */}
         <div className="mx-auto flex max-w-5xl flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3 sm:px-6">
           <Link href="/events" className="font-semibold">
-            OpsPilot
+            GoLiveBoard
           </Link>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>

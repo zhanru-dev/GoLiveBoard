@@ -1,6 +1,6 @@
 "use client";
 
-import { EventDetail, Incident, StreamCheckPage } from "@opspilot/contracts";
+import { EventDetail, Incident, StreamCheckPage } from "@goliveboard/contracts";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { type SubmitEvent, useEffect, useState } from "react";
 import { toast } from "sonner";

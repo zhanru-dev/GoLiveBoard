@@ -1,6 +1,6 @@
 "use client";
 
-import { RunbookTask } from "@opspilot/contracts";
+import { RunbookTask } from "@goliveboard/contracts";
 import { useMutation } from "@tanstack/react-query";
 import { type SubmitEvent, useState } from "react";
 

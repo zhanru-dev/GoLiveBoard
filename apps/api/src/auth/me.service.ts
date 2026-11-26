@@ -1,5 +1,5 @@
 import { Inject, Injectable } from "@nestjs/common";
-import type { Me } from "@opspilot/contracts";
+import type { Me } from "@goliveboard/contracts";
 
 import { PRISMA } from "../database/prisma.js";
 import type { PrismaClient } from "../generated/prisma/client.js";

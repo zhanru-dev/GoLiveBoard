@@ -8,9 +8,9 @@ override_resource {
 }
 
 variables {
-  assets_bucket   = "opspilot-test-assets"
-  releases_bucket = "opspilot-test-releases"
-  site_origin     = "https://opspilot.example.com"
+  assets_bucket   = "goliveboard-test-assets"
+  releases_bucket = "goliveboard-test-releases"
+  site_origin     = "https://goliveboard.example.com"
 }
 
 run "no_bucket_can_be_made_public" {
@@ -41,7 +41,7 @@ run "buckets_refuse_plain_http_and_uploads_come_from_the_site_only" {
     error_message = "Requests without TLS are denied."
   }
   assert {
-    condition     = [for rule in aws_s3_bucket_cors_configuration.assets.cors_rule : toset(rule.allowed_origins)] == [toset(["https://opspilot.example.com"])]
+    condition     = [for rule in aws_s3_bucket_cors_configuration.assets.cors_rule : toset(rule.allowed_origins)] == [toset(["https://goliveboard.example.com"])]
     error_message = "Browsers may upload from the site's origin only."
   }
 }

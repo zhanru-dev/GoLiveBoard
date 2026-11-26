@@ -20,7 +20,7 @@ terraform {
 provider "aws" {
   region = var.region
   default_tags {
-    tags = { Project = "opspilot", ManagedBy = "terraform", Stack = "bootstrap" }
+    tags = { Project = "goliveboard", ManagedBy = "terraform", Stack = "bootstrap" }
   }
 }
 

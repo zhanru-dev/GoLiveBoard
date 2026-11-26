@@ -1,11 +1,11 @@
-# Production readiness: where OpsPilot meets industry practice, and where it stops
+# Production readiness: where GoLiveBoard meets industry practice, and where it stops
 
-OpsPilot runs as a public demo on a budget of about **$35 a month** (ADR-0010).
+GoLiveBoard runs as a public demo on a budget of about **$35 a month** (ADR-0010).
 
-This document compares each area with what a mature commercial SaaS would do. For each place where OpsPilot stops short, it explains:
+This document compares each area with what a mature commercial SaaS would do. For each place where GoLiveBoard stops short, it explains:
 
 - why the industry does it that way;
-- why OpsPilot does not;
+- why GoLiveBoard does not;
 - what it would take to change.
 
 The rule behind every "not done": **anything that raises the monthly cost is left out on purpose**, unless it is needed for correctness or security.
@@ -14,7 +14,7 @@ The cost figures are rough list prices for eu-west-2 at the end of 2026. Check t
 
 ## 1. At industry level
 
-| Area                    | What OpsPilot does                                                                                                                                                                                                                                                                                                                                                                                                              |
+| Area                    | What GoLiveBoard does                                                                                                                                                                                                                                                                                                                                                                                                           |
 | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Architecture**        | <ul><li>A modular monolith (NestJS), with module boundaries enforced by dependency-cruiser and shared contracts in `packages/contracts`.</li><li>Side effects go through a transactional outbox and BullMQ, so a message is neither lost nor sent twice.</li><li>Concurrent changes take row locks in one documented order, and each lock has a test that forces the overlap.</li><li>Decisions are recorded as ADRs.</li></ul> |
 | **Code quality**        | <ul><li>TypeScript strict.</li><li>ESLint with type-aware rules, and Prettier.</li><li>CI enforces all of it.</li></ul>                                                                                                                                                                                                                                                                                                         |
@@ -27,9 +27,9 @@ The cost figures are rough list prices for eu-west-2 at the end of 2026. Check t
 | **Security**            | <ul><li>Reviewed against OWASP ASVS 5.0 level 2, and scanned with ZAP.</li><li>Rate limits, CSRF protection, a CSP with nonces.</li><li>Secrets live in Parameter Store.</li><li>The host has no SSH; it is reached through SSM only.</li></ul>                                                                                                                                                                                 |
 | **Data**                | <ul><li>RDS takes daily backups, kept 7 days, with point-in-time recovery.</li><li>Deletion protection is on, and connections use TLS with a verified certificate.</li><li>Restores are rehearsed (docs/runbooks).</li></ul>                                                                                                                                                                                                    |
 
-## 2. Where OpsPilot stops short, on purpose
+## 2. Where GoLiveBoard stops short, on purpose
 
-| Area                      | Industry standard                                                        | Why the industry does it                                                                  | Why OpsPilot does not                                                                                                                                             | What it would take                                                                              |
+| Area                      | Industry standard                                                        | Why the industry does it                                                                  | Why GoLiveBoard does not                                                                                                                                          | What it would take                                                                              |
 | ------------------------- | ------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
 | **High availability**     | At least two instances across availability zones, behind a load balancer | One machine, or one zone, failing must not take the service down; the business has an SLA | One t4g.small. A demo has no SLA, and a host failure is recovered by hand (rebuild with Terraform, redeploy)                                                      | An Application Load Balancer and a second instance, or ECS on Fargate: roughly **+$40 a month** |
 | **Database availability** | RDS Multi-AZ                                                             | A synchronous standby takes over in a minute or two, without losing committed data        | Single-AZ. Backups and point-in-time recovery cover data loss; the cost is downtime during an outage                                                              | `multi_az = true`: roughly **doubles the database cost (+$15)**                                 |
@@ -60,7 +60,7 @@ The useful conversation is not "it has everything". It is:
 - why this project chose differently at this scale;
 - and the order in which you would add each piece as the service grows.
 
-That order, for OpsPilot:
+That order, for GoLiveBoard:
 
 1. Multi-AZ RDS, once data matters to someone.
 2. A load balancer and a second instance, once an SLA does; that also brings zero-downtime deploys.

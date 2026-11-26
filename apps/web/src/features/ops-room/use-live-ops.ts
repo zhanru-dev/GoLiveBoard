@@ -1,6 +1,6 @@
 "use client";
 
-import type { LiveOps } from "@opspilot/contracts";
+import type { LiveOps } from "@goliveboard/contracts";
 import { useCallback, useEffect, useReducer, useState } from "react";
 
 import { refreshSession } from "@/lib/api";

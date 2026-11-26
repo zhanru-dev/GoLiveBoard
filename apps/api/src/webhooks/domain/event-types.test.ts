@@ -1,4 +1,4 @@
-import type { EventStatus } from "@opspilot/contracts";
+import type { EventStatus } from "@goliveboard/contracts";
 import { describe, expect, it } from "vitest";
 
 import { webhookTypeForTransition } from "./event-types.js";

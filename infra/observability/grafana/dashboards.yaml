@@ -1,11 +1,11 @@
-# OpsPilot's dashboards, from files (infra/observability/grafana/dashboards).
+# GoLiveBoard's dashboards, from files (infra/observability/grafana/dashboards).
 apiVersion: 1
 
 providers:
-  - name: OpsPilot
+  - name: GoLiveBoard
     type: file
-    folder: OpsPilot
+    folder: GoLiveBoard
     disableDeletion: true
     allowUiUpdates: false
     options:
-      path: /opspilot/dashboards
+      path: /goliveboard/dashboards

@@ -12,7 +12,7 @@ import {
   type AssetUpload,
   CreateHoldingSlateUploadRequest,
   type HoldingSlate,
-} from "@opspilot/contracts";
+} from "@goliveboard/contracts";
 
 import { type Actor, CurrentActor, RequireRole } from "../auth/actor.js";
 import { AssetsService } from "./assets.service.js";

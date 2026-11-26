@@ -70,7 +70,7 @@ resource "aws_iam_role_policy_attachment" "ssm" {
 
 # What the host itself does, and nothing more (docs/06, section 5).
 resource "aws_iam_role_policy" "host" {
-  name = "opspilot-host"
+  name = "goliveboard-host"
   role = aws_iam_role.host.id
   policy = jsonencode({
     Version = "2012-10-17"

@@ -8,13 +8,13 @@ import type { CookieOptions, Request, Response } from "express";
  * One browser holds one attendee session at a time; verifying for another
  * event replaces it.
  */
-export const ATTENDEE_COOKIE = "__Host-opspilot_attendee";
+export const ATTENDEE_COOKIE = "__Host-goliveboard_attendee";
 
 /**
  * Demo mode only: the key of this browser's demo inbox, which receives the
  * mail for the attendees it registered in the demo workspace (FR-AUTH-5).
  */
-export const DEMO_INBOX_COOKIE = "__Host-opspilot_demo_inbox";
+export const DEMO_INBOX_COOKIE = "__Host-goliveboard_demo_inbox";
 
 const DEMO_INBOX_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 

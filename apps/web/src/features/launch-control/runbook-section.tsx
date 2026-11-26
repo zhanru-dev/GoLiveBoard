@@ -1,6 +1,6 @@
 "use client";
 
-import { type EventDetail, RunbookTask } from "@opspilot/contracts";
+import { type EventDetail, RunbookTask } from "@goliveboard/contracts";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowDown, ArrowUp, Pencil, Trash2 } from "lucide-react";
 import { useState } from "react";

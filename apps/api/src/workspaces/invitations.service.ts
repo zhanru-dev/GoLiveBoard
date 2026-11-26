@@ -4,7 +4,7 @@ import type {
   CreateInvitationRequest,
   Invitation,
   InvitationPreview,
-} from "@opspilot/contracts";
+} from "@goliveboard/contracts";
 import { InjectPinoLogger, PinoLogger } from "nestjs-pino";
 
 import type { Actor } from "../auth/actor.js";

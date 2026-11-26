@@ -6,7 +6,7 @@ import {
   HOLDING_SLATE_MAX_BYTES,
   HoldingSlate,
   ImageContentType,
-} from "@opspilot/contracts";
+} from "@goliveboard/contracts";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { type ChangeEvent, useId, useState } from "react";
 import { toast } from "sonner";

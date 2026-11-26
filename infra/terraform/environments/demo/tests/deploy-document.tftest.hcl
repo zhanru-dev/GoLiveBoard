@@ -24,13 +24,13 @@ mock_provider "random" {}
 override_resource {
   target          = module.storage.aws_s3_bucket.this
   override_during = plan
-  values          = { id = "opspilot-test-releases", arn = "arn:aws:s3:::opspilot-test-releases" }
+  values          = { id = "goliveboard-test-releases", arn = "arn:aws:s3:::goliveboard-test-releases" }
 }
 
 variables {
-  site_domain              = "opspilot.example.com"
+  site_domain              = "goliveboard.example.com"
   zone_name                = "example.com"
-  bucket_prefix            = "opspilot-test"
+  bucket_prefix            = "goliveboard-test"
   state_bucket             = "state"
   github_oidc_provider_arn = "arn:aws:iam::123456789012:oidc-provider/token.actions.githubusercontent.com"
   github_repository        = "owner/repo"

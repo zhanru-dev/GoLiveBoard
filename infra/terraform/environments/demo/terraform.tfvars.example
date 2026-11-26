@@ -1,11 +1,11 @@
 # Copy to terraform.tfvars (git-ignored) and fill in.
-site_domain              = "opspilot.example.com"
+site_domain              = "goliveboard.example.com"
 zone_name                = "example.com"
 create_zone              = true
-bucket_prefix            = "opspilot-demo-example"
-state_bucket             = "opspilot-terraform-state-example"
+bucket_prefix            = "goliveboard-demo-example"
+state_bucket             = "goliveboard-terraform-state-example"
 github_oidc_provider_arn = "arn:aws:iam::123456789012:oidc-provider/token.actions.githubusercontent.com"
-github_repository        = "owner/OpsPilot"
+github_repository        = "owner/GoLiveBoard"
 alert_email              = "ops@example.com"
 monthly_budget_usd       = 50
 ai_provider              = "offline"

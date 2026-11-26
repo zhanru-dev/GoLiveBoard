@@ -2,7 +2,7 @@
 export const APP_HOME = "/events";
 
 /** Any origin works here: it only gives relative paths something to resolve against. */
-const BASE = new URL("https://opspilot.invalid");
+const BASE = new URL("https://goliveboard.invalid");
 
 /** Backslashes and control characters: browsers repair them into other URLs. */
 // eslint-disable-next-line no-control-regex -- matching control characters is the point

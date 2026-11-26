@@ -1,9 +1,9 @@
 import react from "@vitejs/plugin-react";
 import { defineProject } from "vitest/config";
 
-// Resolve @opspilot/contracts to its TypeScript source, so tests need no build.
+// Resolve @goliveboard/contracts to its TypeScript source, so tests need no build.
 const conditions = [
-  "@opspilot/source",
+  "@goliveboard/source",
   "module",
   "browser",
   "development|production",

@@ -10,7 +10,7 @@ export const FETCH_TIMEOUT_MS = 5_000;
 /** HLS master and media playlists are a few kilobytes; more means a wrong URL. */
 export const MAX_RESPONSE_BYTES = 1024 * 1024;
 const MAX_REDIRECTS = 3;
-const USER_AGENT = "OpsPilot-StreamCheck/1.0";
+const USER_AGENT = "GoLiveBoard-StreamCheck/1.0";
 
 /** Why a fetch did not produce a response. Messages are safe to show staff. */
 export type SafeHttpFailure =

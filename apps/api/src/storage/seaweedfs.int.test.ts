@@ -41,7 +41,7 @@ describe("SeaweedFS on a small disk", () => {
     "stores objects in a second bucket after the first",
     { timeout: 60_000 },
     async () => {
-      for (const bucket of ["first-bucket", "opspilot-assets"]) {
+      for (const bucket of ["first-bucket", "goliveboard-assets"]) {
         await s3.send(new CreateBucketCommand({ Bucket: bucket }));
         await expect(
           s3.send(

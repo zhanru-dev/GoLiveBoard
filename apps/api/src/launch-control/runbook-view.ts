@@ -1,4 +1,4 @@
-import type { RunbookTask } from "@opspilot/contracts";
+import type { RunbookTask } from "@goliveboard/contracts";
 
 import type { Prisma } from "../generated/prisma/client.js";
 

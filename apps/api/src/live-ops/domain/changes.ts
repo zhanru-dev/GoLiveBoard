@@ -1,4 +1,4 @@
-import type { Incident } from "@opspilot/contracts";
+import type { Incident } from "@goliveboard/contracts";
 
 /** What the stream last told the browser. */
 export interface Told {

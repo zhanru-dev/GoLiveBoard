@@ -29,6 +29,6 @@ export function createDatabasePool(config: AppConfig): Pool {
     idleTimeoutMillis: IDLE_TIMEOUT_MS,
     query_timeout: QUERY_TIMEOUT_MS,
     // Shown in pg_stat_activity, so a database operator can tell who is connected.
-    application_name: "opspilot-api",
+    application_name: "goliveboard-api",
   });
 }

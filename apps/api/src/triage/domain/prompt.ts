@@ -1,4 +1,4 @@
-import type { TriageSuggestions } from "@opspilot/contracts";
+import type { TriageSuggestions } from "@goliveboard/contracts";
 import { z } from "zod";
 
 /** At most this many questions go to the model in one run. */

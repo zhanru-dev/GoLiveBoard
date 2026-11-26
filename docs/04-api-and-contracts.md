@@ -25,7 +25,7 @@
 
 ### 2.1 Status codes
 
-| Code                  | Meaning in OpsPilot                                                                                  |
+| Code                  | Meaning in GoLiveBoard                                                                               |
 | --------------------- | ---------------------------------------------------------------------------------------------------- |
 | `200` / `201` / `204` | Success; `201` for creates with a `Location` header                                                  |
 | `400`                 | The request does not match its schema (field errors in `errors[]`)                                   |
@@ -137,7 +137,7 @@ Every write locks the event row and then the attendee's, the order every path th
 
 ### 3.5 Public and attendee
 
-`Att` routes need the attendee session cookie (`__Host-opspilot_attendee`, an opaque token stored only as a hash). An attendee keeps at most 5 sessions (signing in on another browser ends the oldest) and one unused link: registering again replaces it. Every such request reloads the session, the attendee, the event and its access policy and decides again (FR-AD-2): no session `401`; a session for another event `404`, as if the event did not exist; no longer admitted (revoked, erased, a stricter policy, a revoked invitation, the event archived or cancelled) `403`. A browser holds one attendee session at a time.
+`Att` routes need the attendee session cookie (`__Host-goliveboard_attendee`, an opaque token stored only as a hash). An attendee keeps at most 5 sessions (signing in on another browser ends the oldest) and one unused link: registering again replaces it. Every such request reloads the session, the attendee, the event and its access policy and decides again (FR-AD-2): no session `401`; a session for another event `404`, as if the event did not exist; no longer admitted (revoked, erased, a stricter policy, a revoked invitation, the event archived or cancelled) `403`. A browser holds one attendee session at a time.
 
 | Method and path                           | Role | Notes                                                                                                                                                                                                                                             |
 | ----------------------------------------- | ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -148,7 +148,7 @@ Every write locks the event row and then the attendee's, the order every path th
 | `POST /public/events/:slug/sign-out`      | Att  | `204`; ends this browser's attendee session                                                                                                                                                                                                       |
 | `GET /public/events/:slug/watch`          | Att  | The watch page's data: public status, the stream's address while `LIVE` only, and a short-lived link to the holding slate (verified slates only)                                                                                                  |
 | `POST /public/reminders/unsubscribe`      | Pub  | `{ "token": "…" }` from the reminder email (an HMAC of the attendee ID; nothing stored). `204`, also when repeated; `400 TOKEN_INVALID`                                                                                                           |
-| `GET /public/demo-inbox`                  | Pub  | Demo mode only, otherwise `404`. The mail for the attendees this browser registered in the demo workspace (by its `__Host-opspilot_demo_inbox` cookie), newest first                                                                              |
+| `GET /public/demo-inbox`                  | Pub  | Demo mode only, otherwise `404`. The mail for the attendees this browser registered in the demo workspace (by its `__Host-goliveboard_demo_inbox` cookie), newest first                                                                           |
 
 ### 3.6 Live interaction
 
@@ -251,9 +251,9 @@ The snapshot (`GET /events/:id/live-ops` returns the same) holds the event, the 
 ```http
 POST /customer/receiver HTTP/1.1
 Content-Type: application/json
-OpsPilot-Event-Id: 0193f2a4-7c1e-7b2a-9d1f-3e5c7a9b1d2f
-OpsPilot-Event-Type: event.live
-OpsPilot-Signature: t=1795000000,v1=5f2c…
+GoLiveBoard-Event-Id: 0193f2a4-7c1e-7b2a-9d1f-3e5c7a9b1d2f
+GoLiveBoard-Event-Type: event.live
+GoLiveBoard-Signature: t=1795000000,v1=5f2c…
 
 {
   "id": "0193f2a4-7c1e-7b2a-9d1f-3e5c7a9b1d2f",
@@ -267,7 +267,7 @@ OpsPilot-Signature: t=1795000000,v1=5f2c…
 - **Signature**: `v1` = hex HMAC-SHA256 of `"<t>.<raw body>"` with the endpoint's secret. Receivers should reject timestamps older than 5 minutes.
 - **Success** = any `2xx` within 10 seconds. Anything else, or a timeout, is a failure.
 - **Retries**: up to 5 attempts in total, at about 1 minute, 5 minutes, 30 minutes and 2 hours after the first, with jitter. Then the delivery is `FAILED` and can be resent manually.
-- **Ordering** is not guaranteed; receivers de-duplicate by `id`, which is the same on every attempt and every manual resend (`OpsPilot-Event-Id` repeats it).
+- **Ordering** is not guaranteed; receivers de-duplicate by `id`, which is the same on every attempt and every manual resend (`GoLiveBoard-Event-Id` repeats it).
 - **Targets** must be `https` and resolve to public addresses (SSRF protection), checked when the endpoint is saved and again at every attempt. Redirects are not followed: a `3xx` is a failure.
 - **Endpoints** are managed by Owners only. The signing secret is returned once, on create and on rotation, and stored encrypted (AES-256-GCM, `WEBHOOK_ENCRYPTION_KEY`). A paused endpoint's deliveries wait and are sent when it is resumed; deleting an endpoint deletes its deliveries.
 - **Records**: each attempt is kept with its status code (or the reason it failed, never the response body) and duration; finished deliveries are deleted after 30 days.

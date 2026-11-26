@@ -3,7 +3,7 @@ import type {
   AttendeeStatus,
   EventStatus,
   PublicEventStatus,
-} from "@opspilot/contracts";
+} from "@goliveboard/contracts";
 
 /**
  * Whether an event has a public page. A draft is not announced yet, and an

@@ -1,4 +1,4 @@
-import type { AttendeeMe, PublicEvent } from "@opspilot/contracts";
+import type { AttendeeMe, PublicEvent } from "@goliveboard/contracts";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { cache } from "react";
@@ -36,7 +36,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
       title: event.title,
       description: `${when}. ${description}`,
       url: `/e/${event.slug}`,
-      siteName: "OpsPilot",
+      siteName: "GoLiveBoard",
     },
     twitter: { card: "summary", title: event.title, description },
   };
@@ -61,7 +61,7 @@ export default async function Page({ params }: Props) {
   return (
     <>
       <header className="grid gap-2">
-        <p className="text-sm font-medium text-muted-foreground">OpsPilot</p>
+        <p className="text-sm font-medium text-muted-foreground">GoLiveBoard</p>
         <h1 className="text-3xl font-semibold tracking-tight">{event.title}</h1>
         <EventTime
           startsAt={event.startsAt}

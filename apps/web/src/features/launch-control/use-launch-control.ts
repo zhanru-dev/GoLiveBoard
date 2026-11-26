@@ -1,6 +1,6 @@
 "use client";
 
-import { EventDetail } from "@opspilot/contracts";
+import { EventDetail } from "@goliveboard/contracts";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { api } from "@/lib/api";

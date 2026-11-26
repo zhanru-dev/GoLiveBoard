@@ -16,15 +16,15 @@ mock_provider "aws" {
 }
 
 variables {
-  name                 = "opspilot-test"
+  name                 = "goliveboard-test"
   oidc_provider_arn    = "arn:aws:iam::123456789012:oidc-provider/token.actions.githubusercontent.com"
   repository           = "owner/repo"
-  repository_arns      = ["arn:aws:ecr:eu-west-2:123456789012:repository/opspilot-api"]
+  repository_arns      = ["arn:aws:ecr:eu-west-2:123456789012:repository/goliveboard-api"]
   releases_bucket_arn  = "arn:aws:s3:::releases"
-  deploy_document_name = "opspilot-test-deploy"
+  deploy_document_name = "goliveboard-test-deploy"
   instance_arn         = "arn:aws:ec2:eu-west-2:123456789012:instance/i-0123456789abcdef0"
   state_bucket_arn     = "arn:aws:s3:::state"
-  parameter_path       = "/opspilot/test"
+  parameter_path       = "/goliveboard/test"
 }
 
 run "deploy_trusts_only_the_demo_environment_of_this_repository" {
@@ -72,7 +72,7 @@ run "deploy_runs_only_its_document_on_the_host" {
     condition = toset(one([
       for s in data.aws_iam_policy_document.deploy.statement : s.resources if s.sid == "RunDeploy"
       ])) == toset([
-      "arn:aws:ssm:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:document/opspilot-test-deploy",
+      "arn:aws:ssm:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:document/goliveboard-test-deploy",
       "arn:aws:ec2:eu-west-2:123456789012:instance/i-0123456789abcdef0",
     ])
     error_message = "ssm:SendCommand must be limited to the deploy document and the host."

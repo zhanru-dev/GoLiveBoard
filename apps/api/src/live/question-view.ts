@@ -1,4 +1,4 @@
-import type { Question, QuestionsEvent } from "@opspilot/contracts";
+import type { Question, QuestionsEvent } from "@goliveboard/contracts";
 
 import type { Prisma } from "../generated/prisma/client.js";
 import { FORMER_STAFF_NAME } from "./chat-view.js";

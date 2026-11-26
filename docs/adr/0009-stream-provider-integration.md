@@ -9,7 +9,7 @@ Event teams already use streaming providers (Mux, AWS IVS, Cloudflare Stream and
 
 ## Decision
 
-OpsPilot stores the event's HLS playback URL from the customer's provider. The watch page plays it with hls.js; video never passes through OpsPilot. A worker checks the stream manifest every 30 seconds from an hour before the start, opening and resolving incidents, and the result feeds the readiness score.
+GoLiveBoard stores the event's HLS playback URL from the customer's provider. The watch page plays it with hls.js; video never passes through GoLiveBoard. A worker checks the stream manifest every 30 seconds from an hour before the start, opening and resolving incidents, and the result feeds the readiness score.
 
 ## Consequences
 

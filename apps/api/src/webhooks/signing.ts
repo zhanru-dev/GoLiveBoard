@@ -4,7 +4,7 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 export const SIGNATURE_TOLERANCE_SECONDS = 5 * 60;
 
 /**
- * The `OpsPilot-Signature` header: `t=<unix seconds>,v1=<hex HMAC-SHA256 of
+ * The `GoLiveBoard-Signature` header: `t=<unix seconds>,v1=<hex HMAC-SHA256 of
  * "<t>.<raw body>" with the endpoint's secret>`.
  */
 export function signatureHeader(

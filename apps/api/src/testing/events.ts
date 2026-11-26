@@ -1,4 +1,4 @@
-import { EventDetail, RunbookTask } from "@opspilot/contracts";
+import { EventDetail, RunbookTask } from "@goliveboard/contracts";
 
 import {
   type ApiClient,

@@ -4,7 +4,7 @@ import {
   EventTransitionedPayload,
   ProblemDetails,
   Readiness,
-} from "@opspilot/contracts";
+} from "@goliveboard/contracts";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { ApiClient, type TestSession } from "../testing/api-client.js";

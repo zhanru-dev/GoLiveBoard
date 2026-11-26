@@ -4,7 +4,7 @@ import {
   Readiness,
   type ReadinessCriterion,
   type ReadinessSection,
-} from "@opspilot/contracts";
+} from "@goliveboard/contracts";
 import { useQuery } from "@tanstack/react-query";
 
 import { Badge } from "@/components/ui/badge";

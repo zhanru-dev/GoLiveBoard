@@ -1,5 +1,5 @@
 import { Inject, Injectable } from "@nestjs/common";
-import type { HealthCheckResult, HealthReport } from "@opspilot/contracts";
+import type { HealthCheckResult, HealthReport } from "@goliveboard/contracts";
 import { InjectPinoLogger, PinoLogger } from "nestjs-pino";
 
 import { HEALTH_INDICATORS, type HealthIndicator } from "./health-indicator.js";

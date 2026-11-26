@@ -16,7 +16,7 @@
 #   SHA             the commit to release (40 hex digits)
 #   INSTANCE_ID     the host
 #   DEPLOY_DOCUMENT the SSM document that runs infra/deploy/host-deploy.sh
-#   SITE_URL        e.g. https://opspilot.example.com
+#   SITE_URL        e.g. https://goliveboard.example.com
 #   SMOKE_COMMAND   the smoke tests, e.g. "npx playwright test ..."
 #   READY_TIMEOUT   seconds to wait for readiness (default 180)
 #   POLL_SECONDS    seconds between polls (default 5)

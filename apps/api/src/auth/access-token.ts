@@ -3,8 +3,8 @@ import { errors, jwtVerify, SignJWT } from "jose";
 /** Short, so a stolen token is useful only briefly (FR-AUTH-2). */
 export const ACCESS_TOKEN_TTL_SECONDS = 15 * 60;
 
-const ISSUER = "opspilot";
-const AUDIENCE = "opspilot-api";
+const ISSUER = "goliveboard";
+const AUDIENCE = "goliveboard-api";
 const ALGORITHM = "HS256";
 
 export interface AccessTokenKeys {

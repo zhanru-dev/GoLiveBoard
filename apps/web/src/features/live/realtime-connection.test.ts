@@ -1,4 +1,4 @@
-import type { ChannelJoinAck, ChatEvent } from "@opspilot/contracts";
+import type { ChannelJoinAck, ChatEvent } from "@goliveboard/contracts";
 import type { Socket } from "socket.io-client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 

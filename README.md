@@ -1,4 +1,4 @@
-# OpsPilot
+# GoLiveBoard
 
 **An operations platform for teams running high-stakes online events:** product launches, customer conferences, company all-hands.
 
@@ -6,7 +6,7 @@ It answers the question operations teams struggle with most, **"is this event re
 
 > **Live demo:** coming with the AWS deployment (milestone 10). Until then, the [production-like stack](#try-it-in-five-minutes) runs the same images on your machine, demo workspace included.
 
-**History.** This is OpsPilot's second version. The first was built in this repository from September to November 2026; the second was then written from a fresh design, milestone by milestone, in a separate repository, and its history merged here (commit `1f86d89`), so both are in `git log`. Its development was AI-assisted (Claude), as the commits' `Co-Authored-By` lines show; each milestone was reviewed independently, with mutation testing, before it was accepted ([docs/07](docs/07-delivery-plan.md)).
+**History.** GoLiveBoard was called OpsPilot until November 2026, so older commits use that name. This is its second version. The first was built in this repository from September to November 2026; the second was then written from a fresh design, milestone by milestone, in a separate repository, and its history merged here (commit `1f86d89`), so both are in `git log`. Its development was AI-assisted (Claude), as the commits' `Co-Authored-By` lines show; each milestone was reviewed independently, with mutation testing, before it was accepted ([docs/07](docs/07-delivery-plan.md)).
 
 ---
 
@@ -14,7 +14,7 @@ It answers the question operations teams struggle with most, **"is this event re
 
 One event, from preparation to the record afterwards (the "golden flow", [docs/01](docs/01-product-requirements.md#3-golden-flow)):
 
-| Step        | Who                           | What OpsPilot does                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| Step        | Who                           | What GoLiveBoard does                                                                                                                                                                                                                                                                                                                                                                                                                         |
 | ----------- | ----------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Prepare** | Owner, Manager                | Create the event; in **Launch Control**, fill in the runbook, the access policy, the stream and the holding slate. They add up to a **readiness score**. A hard blocker (no reachable stream, say) stops the event from becoming ready or going live, even when two people press "go live" at the same moment                                                                                                                                 |
 | **Admit**   | Attendees                     | A fast public event page, server-rendered. Registration with address verification; access policies (public, limited to email domains, or invitation-only) and invitations; reminders sent once; recorded consent; erasure on request                                                                                                                                                                                                          |
@@ -32,7 +32,7 @@ npm ci
 npm run stack:up        # builds the production images and starts everything behind Caddy over HTTPS
 ```
 
-Open <https://opspilot.localhost:3443>.
+Open <https://goliveboard.localhost:3443>.
 
 The certificate comes from a local authority your browser does not trust yet, so either accept the warning or [trust the authority](docs/06-infrastructure-and-operations.md#14-production-like-stack).
 
@@ -59,7 +59,7 @@ The demo cannot go live: visitors may not set a stream URL (docs/06, section 10)
    - The operations room shows the stream, the audience and incidents.
 5. **Record:** end the event, then open its **Report** and export the CSV. The audit trail has every change.
 
-**See it from the inside:** Grafana at <http://127.0.0.1:3037> has the **OpsPilot overview** dashboard, its alerts, and a trace of every request.
+**See it from the inside:** Grafana at <http://127.0.0.1:3037> has the **GoLiveBoard overview** dashboard, its alerts, and a trace of every request.
 
 `npm run test:e2e:stack` runs the browser tests against this stack; `npm run stack:down` stops it.
 
@@ -116,14 +116,14 @@ flowchart LR
 - **Compute and data:** one ARM EC2 host runs the containers; RDS PostgreSQL sits in private subnets; S3, SES and ECR; secrets in Parameter Store.
 - **Delivery:** everything in Terraform. GitHub Actions deploys through OIDC (no stored keys) and SSM: migrations first, then a smoke test, and an automatic rollback to the previous images when it fails.
 
-| Layer          | Technology                                                                                                                                    |
-| -------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
-| Web            | Next.js 16, React 19, Tailwind CSS 4, shadcn/ui (Radix), TanStack Query, hls.js                                                               |
-| API and worker | NestJS 12 (ES modules), Prisma 7, BullMQ, Socket.IO, pino, Zod 4                                                                              |
-| Data           | PostgreSQL 18, Valkey, S3 (SeaweedFS locally)                                                                                                 |
-| AI             | Official Anthropic SDK behind an interface of OpsPilot's own (`claude-opus-5-5` by default) ([ADR-0012](docs/adr/0012-ai-question-triage.md)) |
-| Quality        | TypeScript 6 (strict), ESLint, Prettier, dependency-cruiser, Vitest, Testcontainers, Playwright, axe, Lighthouse CI, k6, ZAP                  |
-| Operations     | Docker (multi-stage, non-root, amd64 and arm64), Caddy, OpenTelemetry, Grafana, Sentry, Terraform, GitHub Actions                             |
+| Layer          | Technology                                                                                                                                       |
+| -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Web            | Next.js 16, React 19, Tailwind CSS 4, shadcn/ui (Radix), TanStack Query, hls.js                                                                  |
+| API and worker | NestJS 12 (ES modules), Prisma 7, BullMQ, Socket.IO, pino, Zod 4                                                                                 |
+| Data           | PostgreSQL 18, Valkey, S3 (SeaweedFS locally)                                                                                                    |
+| AI             | Official Anthropic SDK behind an interface of GoLiveBoard's own (`claude-opus-5-5` by default) ([ADR-0012](docs/adr/0012-ai-question-triage.md)) |
+| Quality        | TypeScript 6 (strict), ESLint, Prettier, dependency-cruiser, Vitest, Testcontainers, Playwright, axe, Lighthouse CI, k6, ZAP                     |
+| Operations     | Docker (multi-stage, non-root, amd64 and arm64), Caddy, OpenTelemetry, Grafana, Sentry, Terraform, GitHub Actions                                |
 
 ---
 

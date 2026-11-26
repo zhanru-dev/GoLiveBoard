@@ -1,6 +1,6 @@
 "use client";
 
-import { WebhookDelivery, WebhookDeliveryPage } from "@opspilot/contracts";
+import { WebhookDelivery, WebhookDeliveryPage } from "@goliveboard/contracts";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 

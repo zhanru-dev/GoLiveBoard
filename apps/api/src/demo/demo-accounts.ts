@@ -10,7 +10,7 @@ import type { DemoPersonKey } from "./domain/demo-seed.js";
  * invite or reset the password of a demo account), and the mailer never
  * sends to them.
  */
-export const DEMO_EMAIL_DOMAIN = "demo.opspilot.invalid";
+export const DEMO_EMAIL_DOMAIN = "demo.goliveboard.invalid";
 
 export const DEMO_WORKSPACE = {
   id: "00000000-0000-7000-8000-00000000de00",

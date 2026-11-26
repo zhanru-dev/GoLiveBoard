@@ -11,8 +11,8 @@ export const REFRESH_TOKEN_TTL_MS = 7 * 24 * 60 * 60 * 1000;
  * Path=/ and no Domain, so no subdomain can set or overwrite the cookie;
  * `__Secure-` requires Secure.
  */
-export const ACCESS_COOKIE = "__Host-opspilot_access";
-export const REFRESH_COOKIE = "__Secure-opspilot_refresh";
+export const ACCESS_COOKIE = "__Host-goliveboard_access";
+export const REFRESH_COOKIE = "__Secure-goliveboard_refresh";
 
 /** The refresh token is sent only to the endpoints that need it. */
 const REFRESH_COOKIE_PATH = `/${API_PREFIX}/auth`;

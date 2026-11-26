@@ -1,6 +1,6 @@
 import "server-only";
 
-import { AttendeeMe, Me, PublicEvent, WatchInfo } from "@opspilot/contracts";
+import { AttendeeMe, Me, PublicEvent, WatchInfo } from "@goliveboard/contracts";
 import { cookies } from "next/headers";
 
 /**

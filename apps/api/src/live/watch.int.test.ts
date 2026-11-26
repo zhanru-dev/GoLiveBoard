@@ -1,5 +1,5 @@
 import type { NestExpressApplication } from "@nestjs/platform-express";
-import { WatchInfo } from "@opspilot/contracts";
+import { WatchInfo } from "@goliveboard/contracts";
 import { afterAll, beforeAll, describe, expect, inject, it } from "vitest";
 
 import { ATTENDEE_COOKIE } from "../attendees/attendee-cookies.js";

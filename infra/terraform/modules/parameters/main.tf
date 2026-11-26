@@ -30,7 +30,7 @@ resource "random_bytes" "webhook_key" {
 locals {
   # The database's CA bundle is mounted at this path in the containers, so
   # the connection is verified, not only encrypted (rds.force_ssl).
-  database_url = "postgres://opspilot:${random_password.database.result}@${var.database_address}:${var.database_port}/opspilot?sslmode=verify-full&sslrootcert=${var.database_ca_path}"
+  database_url = "postgres://goliveboard:${random_password.database.result}@${var.database_address}:${var.database_port}/goliveboard?sslmode=verify-full&sslrootcert=${var.database_ca_path}"
 
   secrets = {
     DATABASE_URL           = local.database_url

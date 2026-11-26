@@ -8,7 +8,7 @@ describe("HomePage", () => {
     render(<HomePage />);
 
     expect(
-      screen.getByRole("heading", { level: 1, name: "OpsPilot" }),
+      screen.getByRole("heading", { level: 1, name: "GoLiveBoard" }),
     ).toBeDefined();
     expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1);
   });

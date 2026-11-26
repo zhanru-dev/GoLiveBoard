@@ -1,5 +1,5 @@
 import type { NestExpressApplication } from "@nestjs/platform-express";
-import { Me, ProblemDetails } from "@opspilot/contracts";
+import { Me, ProblemDetails } from "@goliveboard/contracts";
 import { Pool } from "pg";
 import request from "supertest";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -100,7 +100,7 @@ describe("authentication", () => {
         isDemo: false,
       });
       expect(mailer.to(email).map((message) => message.subject)).toEqual([
-        "Welcome to OpsPilot",
+        "Welcome to GoLiveBoard",
       ]);
     });
 
@@ -120,7 +120,7 @@ describe("authentication", () => {
       expect(users.rows[0]).toEqual({ n: 1 });
       expect(
         mailer.to(email.toUpperCase()).map((message) => message.subject),
-      ).toEqual(["You already have an OpsPilot account"]);
+      ).toEqual(["You already have an GoLiveBoard account"]);
     });
 
     it("rejects a short password with a field error", async () => {

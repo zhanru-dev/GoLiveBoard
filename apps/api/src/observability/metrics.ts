@@ -6,23 +6,23 @@ import { type Meter, metrics } from "@opentelemetry/api";
  */
 export const METRICS = {
   /** Jobs per queue and state (wait, delayed, active, failed). */
-  queueJobs: "opspilot.queue.jobs",
+  queueJobs: "goliveboard.queue.jobs",
   /** Age of the oldest job waiting in each queue, in seconds. */
-  queueOldestJobAge: "opspilot.queue.oldest_job_age",
+  queueOldestJobAge: "goliveboard.queue.oldest_job_age",
   /** Age of the oldest outbox message not yet relayed, in seconds. */
-  outboxOldestMessageAge: "opspilot.outbox.oldest_message_age",
+  outboxOldestMessageAge: "goliveboard.outbox.oldest_message_age",
   /** Real-time connections open on this API instance. */
-  realtimeConnections: "opspilot.realtime.connections",
+  realtimeConnections: "goliveboard.realtime.connections",
   /** Stream checks, by whether the stream played. */
-  streamChecks: "opspilot.stream.checks",
+  streamChecks: "goliveboard.stream.checks",
   /** Webhook delivery attempts, per endpoint and outcome. */
-  webhookAttempts: "opspilot.webhook.attempts",
+  webhookAttempts: "goliveboard.webhook.attempts",
   /** LCP and INP measured in visitors' browsers, in ms (NFR-3, at p75). */
-  webVitalDuration: "opspilot.web.vital_duration",
+  webVitalDuration: "goliveboard.web.vital_duration",
   /** CLS measured in visitors' browsers. */
-  webLayoutShift: "opspilot.web.layout_shift",
+  webLayoutShift: "goliveboard.web.layout_shift",
   /** Real-time connections browsers could not make, or lost. */
-  webRealtimeFailures: "opspilot.web.realtime_failures",
+  webRealtimeFailures: "goliveboard.web.realtime_failures",
 } as const;
 
 /**
@@ -31,7 +31,7 @@ export const METRICS = {
  * SDK starts never records.
  */
 export function appMeter(): Meter {
-  return metrics.getMeter("opspilot");
+  return metrics.getMeter("goliveboard");
 }
 
 /** Counts a webhook delivery attempt (alert: one endpoint failing). */
@@ -44,8 +44,8 @@ export function countWebhookAttempt(
       description: "Webhook delivery attempts",
     })
     .add(1, {
-      "opspilot.webhook.endpoint_id": endpointId,
-      "opspilot.webhook.delivered": delivered,
+      "goliveboard.webhook.endpoint_id": endpointId,
+      "goliveboard.webhook.delivered": delivered,
     });
 }
 
@@ -60,8 +60,8 @@ export function recordWebVital(
 ): void {
   const meter = appMeter();
   const attributes = {
-    "opspilot.web.vital": name,
-    "opspilot.web.route": route,
+    "goliveboard.web.vital": name,
+    "goliveboard.web.route": route,
   };
   if (name === "CLS") {
     meter
@@ -97,8 +97,8 @@ export function countRealtimeFailure(reason: string, route: string): void {
       description: "Real-time connections browsers could not make, or lost",
     })
     .add(1, {
-      "opspilot.web.realtime_failure": reason,
-      "opspilot.web.route": route,
+      "goliveboard.web.realtime_failure": reason,
+      "goliveboard.web.route": route,
     });
 }
 
@@ -109,7 +109,7 @@ export function countStreamCheck(eventId: string, healthy: boolean): void {
       description: "Stream checks, by whether the stream played",
     })
     .add(1, {
-      "opspilot.event_id": eventId,
-      "opspilot.stream.healthy": healthy,
+      "goliveboard.event_id": eventId,
+      "goliveboard.stream.healthy": healthy,
     });
 }

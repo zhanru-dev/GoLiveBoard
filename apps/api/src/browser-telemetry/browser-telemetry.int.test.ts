@@ -102,20 +102,20 @@ describe("browser telemetry", { timeout: 60_000 }, () => {
     expect(response.status).toBe(204);
     expect(
       await total(METRICS.webVitalDuration, {
-        "opspilot.web.vital": "LCP",
-        "opspilot.web.route": "/e/:slug",
+        "goliveboard.web.vital": "LCP",
+        "goliveboard.web.route": "/e/:slug",
       }),
     ).toBe(1);
     expect(
-      await total(METRICS.webVitalDuration, { "opspilot.web.vital": "INP" }),
+      await total(METRICS.webVitalDuration, { "goliveboard.web.vital": "INP" }),
     ).toBe(1);
     expect(
-      await total(METRICS.webLayoutShift, { "opspilot.web.vital": "CLS" }),
+      await total(METRICS.webLayoutShift, { "goliveboard.web.vital": "CLS" }),
     ).toBe(1);
     expect(
       await total(METRICS.webRealtimeFailures, {
-        "opspilot.web.realtime_failure": "connect-failed",
-        "opspilot.web.route": "/e/:slug/watch",
+        "goliveboard.web.realtime_failure": "connect-failed",
+        "goliveboard.web.route": "/e/:slug/watch",
       }),
     ).toBe(1);
   });
@@ -175,13 +175,13 @@ describe("browser telemetry", { timeout: 60_000 }, () => {
 
     expect(
       await total(METRICS.webVitalDuration, {
-        "opspilot.web.vital": "LCP",
-        "opspilot.web.route": "/e/:slug",
+        "goliveboard.web.vital": "LCP",
+        "goliveboard.web.route": "/e/:slug",
       }),
     ).toBe(1);
     expect(
       await total(METRICS.webRealtimeFailures, {
-        "opspilot.web.realtime_failure": "lost",
+        "goliveboard.web.realtime_failure": "lost",
       }),
     ).toBe(1);
   });
@@ -197,7 +197,7 @@ describe("browser telemetry", { timeout: 60_000 }, () => {
 
     expect(
       await total(METRICS.webRealtimeFailures, {
-        "opspilot.web.realtime_failure": "lost",
+        "goliveboard.web.realtime_failure": "lost",
       }),
     ).toBe(2);
   });
@@ -225,7 +225,7 @@ describe("browser telemetry", { timeout: 60_000 }, () => {
     expect(beyond.status).toBe(204);
     expect(
       await total(METRICS.webRealtimeFailures, {
-        "opspilot.web.realtime_failure": "connect-failed",
+        "goliveboard.web.realtime_failure": "connect-failed",
       }),
     ).toBe(0);
   });

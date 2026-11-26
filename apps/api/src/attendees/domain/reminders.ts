@@ -1,4 +1,4 @@
-import type { EventStatus } from "@opspilot/contracts";
+import type { EventStatus } from "@goliveboard/contracts";
 
 /** The reminders an attendee receives (FR-AD-5). */
 export type ReminderKind = "DAY_BEFORE" | "HOUR_BEFORE";

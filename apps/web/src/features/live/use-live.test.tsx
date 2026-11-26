@@ -1,4 +1,8 @@
-import type { ChatMessage, ChatSendAck, Question } from "@opspilot/contracts";
+import type {
+  ChatMessage,
+  ChatSendAck,
+  Question,
+} from "@goliveboard/contracts";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 

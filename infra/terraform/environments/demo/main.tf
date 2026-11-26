@@ -3,9 +3,9 @@
 # pipeline (.github/workflows/deploy.yml).
 
 locals {
-  name        = "opspilot-${var.environment}"
+  name        = "goliveboard-${var.environment}"
   site_origin = "https://${var.site_domain}"
-  path        = "/opspilot/${var.environment}"
+  path        = "/goliveboard/${var.environment}"
   document    = "${local.name}-deploy"
   registry    = "${data.aws_caller_identity.current.account_id}.dkr.ecr.${var.region}.amazonaws.com"
 }
@@ -67,7 +67,7 @@ module "parameters" {
   database_address      = module.database.address
   database_port         = module.database.port
   assets_bucket         = module.storage.assets_bucket
-  mail_from             = "OpsPilot <no-reply@${var.site_domain}>"
+  mail_from             = "GoLiveBoard <no-reply@${var.site_domain}>"
   ses_configuration_set = module.email.configuration_set_name
   demo_mode             = var.demo_mode
   ai_provider           = var.ai_provider
@@ -115,7 +115,7 @@ resource "aws_ssm_document" "deploy" {
   document_format = "JSON"
   content = jsonencode({
     schemaVersion = "2.2"
-    description   = "Migrate or deploy one OpsPilot release (a commit) on the host"
+    description   = "Migrate or deploy one GoLiveBoard release (a commit) on the host"
     parameters = {
       Action = {
         type          = "String"
@@ -133,16 +133,16 @@ resource "aws_ssm_document" "deploy" {
       inputs = {
         timeoutSeconds = "900"
         runCommand = [
-          "install -d -m 0750 /opt/opspilot",
-          "cat > /opt/opspilot/deploy.sh <<'OPSPILOT_DEPLOY_SCRIPT'\n${templatefile("${path.module}/../../../deploy/host-deploy.sh.tftpl", {
+          "install -d -m 0750 /opt/goliveboard",
+          "cat > /opt/goliveboard/deploy.sh <<'GOLIVEBOARD_DEPLOY_SCRIPT'\n${templatefile("${path.module}/../../../deploy/host-deploy.sh.tftpl", {
             document_name   = local.document
             releases_bucket = module.storage.releases_bucket
             region          = var.region
             registry        = local.registry
             parameter_path  = local.path
-          })}\nOPSPILOT_DEPLOY_SCRIPT",
-          "chmod 0700 /opt/opspilot/deploy.sh",
-          "ACTION='{{ Action }}' SHA='{{ Sha }}' /opt/opspilot/deploy.sh",
+          })}\nGOLIVEBOARD_DEPLOY_SCRIPT",
+          "chmod 0700 /opt/goliveboard/deploy.sh",
+          "ACTION='{{ Action }}' SHA='{{ Sha }}' /opt/goliveboard/deploy.sh",
         ]
       }
     }]

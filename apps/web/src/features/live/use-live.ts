@@ -10,7 +10,7 @@ import type {
   QuestionList,
   QuestionsEvent,
   RealtimeChannel,
-} from "@opspilot/contracts";
+} from "@goliveboard/contracts";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {

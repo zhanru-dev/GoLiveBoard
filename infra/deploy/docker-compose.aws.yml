@@ -27,7 +27,7 @@ x-api: &api
     VALKEY_URL: redis://valkey:6379
     SENTRY_ENVIRONMENT: ${SENTRY_ENVIRONMENT:-demo}
   volumes:
-    - ${RDS_CA:?the database CA bundle}:/etc/opspilot/rds-ca.pem:ro
+    - ${RDS_CA:?the database CA bundle}:/etc/goliveboard/rds-ca.pem:ro
 
 services:
   proxy:

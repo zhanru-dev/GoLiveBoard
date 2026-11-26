@@ -1,4 +1,4 @@
-import type { LiveOps } from "@opspilot/contracts";
+import type { LiveOps } from "@goliveboard/contracts";
 
 /** An operations room in the middle of an event. */
 export const INCIDENT = {

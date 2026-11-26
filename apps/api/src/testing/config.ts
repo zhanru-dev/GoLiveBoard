@@ -17,7 +17,7 @@ export const TEST_ENV: Readonly<Record<string, string>> = {
   APP_ORIGIN: TEST_ORIGIN,
   JWT_SECRET: "test-signing-key-that-is-long-enough",
   SMTP_URL: "smtp://127.0.0.1:1",
-  MAIL_FROM: "OpsPilot <no-reply@opspilot.test>",
+  MAIL_FROM: "GoLiveBoard <no-reply@goliveboard.test>",
   // One per test file (each file loads this module afresh): the apps of a
   // file share real-time traffic, files running side by side do not.
   REALTIME_CHANNEL_PREFIX: `test-${randomUUID().slice(0, 8)}`,

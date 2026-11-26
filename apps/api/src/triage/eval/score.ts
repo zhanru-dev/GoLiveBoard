@@ -1,4 +1,4 @@
-import type { TriageSuggestions } from "@opspilot/contracts";
+import type { TriageSuggestions } from "@goliveboard/contracts";
 
 /** Every unordered pair of keys that share a group. */
 function pairsOf(groups: readonly (readonly string[])[]): Set<string> {

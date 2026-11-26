@@ -21,12 +21,12 @@ vi.mock("@sentry/node", async (importOriginal) => ({
 }));
 
 const ENV = {
-  DATABASE_URL: "postgres://opspilot:secret@127.0.0.1:5443/opspilot",
+  DATABASE_URL: "postgres://goliveboard:secret@127.0.0.1:5443/goliveboard",
   VALKEY_URL: "redis://127.0.0.1:6392",
   APP_ORIGIN: "http://localhost:3300",
   JWT_SECRET: "a".repeat(32),
   SMTP_URL: "smtp://127.0.0.1:1036",
-  MAIL_FROM: "OpsPilot <no-reply@opspilot.test>",
+  MAIL_FROM: "GoLiveBoard <no-reply@goliveboard.test>",
 };
 
 describe("initErrorReporting", () => {
@@ -134,9 +134,9 @@ describe("scrubEvent", () => {
       type: undefined,
       request: {
         method: "POST",
-        url: "https://opspilot.example/api/v1/auth/password-reset/confirm?token=secret",
-        headers: { cookie: "__Host-opspilot_access=jwt", "user-agent": "x" },
-        cookies: { "__Host-opspilot_access": "jwt" },
+        url: "https://goliveboard.example/api/v1/auth/password-reset/confirm?token=secret",
+        headers: { cookie: "__Host-goliveboard_access=jwt", "user-agent": "x" },
+        cookies: { "__Host-goliveboard_access": "jwt" },
         data: { password: "hunter2" },
         query_string: "token=secret",
       },
@@ -144,7 +144,7 @@ describe("scrubEvent", () => {
 
     expect(scrubEvent(event).request).toEqual({
       method: "POST",
-      url: "https://opspilot.example/api/v1/auth/password-reset/confirm",
+      url: "https://goliveboard.example/api/v1/auth/password-reset/confirm",
     });
   });
 

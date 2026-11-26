@@ -1,5 +1,5 @@
 import { Inject, Injectable } from "@nestjs/common";
-import type { AttendeeMe, DemoInbox } from "@opspilot/contracts";
+import type { AttendeeMe, DemoInbox } from "@goliveboard/contracts";
 
 import { hashToken } from "../auth/tokens.js";
 import { APP_CONFIG, type AppConfig } from "../config/app-config.js";

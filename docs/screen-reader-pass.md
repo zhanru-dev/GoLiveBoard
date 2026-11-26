@@ -19,7 +19,7 @@ What it cannot check is **how the pages sound**. That needs a person, and is due
 | Headings list          | <kbd>VO</kbd>+<kbd>U</kbd>, then headings                                          | <kbd>Insert</kbd>+<kbd>F7</kbd>             |
 | Next heading, landmark | <kbd>VO</kbd>+<kbd>Cmd</kbd>+<kbd>H</kbd>; rotor for landmarks                     | <kbd>H</kbd>; <kbd>D</kbd>                  |
 
-Use the production-like stack (`npm run stack:up`, <https://opspilot.localhost:3443>) or the demo environment. You need two browser profiles: one for **staff** (an Owner), one for an **attendee**.
+Use the production-like stack (`npm run stack:up`, <https://goliveboard.localhost:3443>) or the demo environment. You need two browser profiles: one for **staff** (an Owner), one for an **attendee**.
 
 **How to listen:**
 
@@ -33,7 +33,7 @@ Each step lists what should be announced; the third column is for what you heard
 
 | #   | Step                                         | What should be announced                                                                                                                                                                                                             | Heard / problem |
 | --- | -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------- |
-| 1   | Open the sign-in page                        | Page title "Sign in · OpsPilot"; a heading; the fields "Email address" and "Password" by name; the button "Sign in"                                                                                                                  |                 |
+| 1   | Open the sign-in page                        | Page title "Sign in · GoLiveBoard"; a heading; the fields "Email address" and "Password" by name; the button "Sign in"                                                                                                               |                 |
 | 2   | Sign in with a wrong password                | The error, at once, without moving focus (it is an alert)                                                                                                                                                                            |                 |
 | 3   | Sign up, then land on Events                 | The new page's title; "Skip to content" as the first stop; the "Events" heading                                                                                                                                                      |                 |
 | 4   | Use "Skip to content"                        | Focus on the main content, its heading next                                                                                                                                                                                          |                 |

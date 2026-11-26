@@ -17,7 +17,7 @@ const NAME_MAX_LENGTH = 100;
 /**
  * An address someone can receive email at. The `.invalid` top-level domain is
  * reserved (RFC 2606) and never delivers, so it is refused; the demo
- * workspace's people use it (demo.opspilot.invalid), which also means nobody
+ * workspace's people use it (demo.goliveboard.invalid), which also means nobody
  * can register, invite or reset the password of a demo account.
  */
 export const Email = z

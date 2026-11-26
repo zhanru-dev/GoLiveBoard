@@ -1,4 +1,4 @@
-import type { RealtimeChannel } from "@opspilot/contracts";
+import type { RealtimeChannel } from "@goliveboard/contracts";
 
 /**
  * What a recheck is about: every connection whose access could depend on

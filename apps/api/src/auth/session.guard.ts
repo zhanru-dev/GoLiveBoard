@@ -4,7 +4,7 @@ import {
   Injectable,
 } from "@nestjs/common";
 import { Reflector } from "@nestjs/core";
-import type { Role } from "@opspilot/contracts";
+import type { Role } from "@goliveboard/contracts";
 import { InjectPinoLogger, PinoLogger } from "nestjs-pino";
 
 import { DomainError } from "../shared/domain/domain-error.js";

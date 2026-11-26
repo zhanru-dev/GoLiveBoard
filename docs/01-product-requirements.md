@@ -8,11 +8,11 @@ Operations teams running high-stakes online events — product launches, custome
 - **During the event**, problems surface late: a dead stream, a flood of duplicate questions, an attendee who should not be there.
 - **Afterwards**, nobody can reconstruct who decided what, or show stakeholders how the event went.
 
-OpsPilot gives the team one place to prepare, admit, run and record an event, and it refuses to go live while something critical is missing.
+GoLiveBoard gives the team one place to prepare, admit, run and record an event, and it refuses to go live while something critical is missing.
 
 ## 2. Users and roles
 
-| Persona                        | Role in OpsPilot                    | What they need                                                                  |
+| Persona                        | Role in GoLiveBoard                 | What they need                                                                  |
 | ------------------------------ | ----------------------------------- | ------------------------------------------------------------------------------- |
 | Head of events at the customer | **Owner**                           | Set up the workspace, manage the team, everything a Manager can do              |
 | Operations manager             | **Manager**                         | Prepare events, decide when to go live, moderate chat and Q&A, handle incidents |
@@ -135,7 +135,7 @@ Each requirement has acceptance criteria written so they can become automated te
 - Billing, subscriptions and self-service payment.
 - Single sign-on (SAML, OIDC) for staff.
 - Native mobile apps.
-- Hosting, recording or transcoding video — OpsPilot works with the customer's streaming provider.
+- Hosting, recording or transcoding video — GoLiveBoard works with the customer's streaming provider.
 - Polls, breakout rooms and networking features.
 - User interface languages other than English.
 

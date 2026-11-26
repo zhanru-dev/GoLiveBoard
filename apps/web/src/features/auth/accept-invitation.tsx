@@ -6,7 +6,7 @@ import {
   PASSWORD_MIN_LENGTH,
   Password,
   PersonName,
-} from "@opspilot/contracts";
+} from "@goliveboard/contracts";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { useState } from "react";

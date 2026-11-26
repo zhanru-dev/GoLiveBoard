@@ -5,7 +5,7 @@ import {
   CreateWebhookEndpointRequest,
   WebhookEndpointCreated,
   WebhookEventType,
-} from "@opspilot/contracts";
+} from "@goliveboard/contracts";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
@@ -76,7 +76,7 @@ export function EndpointForm({
       <FormField
         label="Receiver URL"
         type="url"
-        placeholder="https://example.com/webhooks/opspilot"
+        placeholder="https://example.com/webhooks/goliveboard"
         hint="https only, on the public internet."
         error={errors.url?.message}
         {...register("url")}

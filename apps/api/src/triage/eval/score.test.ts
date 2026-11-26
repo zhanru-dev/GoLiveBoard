@@ -1,4 +1,4 @@
-import type { TriageSuggestions } from "@opspilot/contracts";
+import type { TriageSuggestions } from "@goliveboard/contracts";
 import { describe, expect, it } from "vitest";
 
 import { scoreCase } from "./score.js";

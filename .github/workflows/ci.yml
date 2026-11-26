@@ -169,7 +169,7 @@ jobs:
       # and Trivy runs once a fix exists.
       - name: Scan the images (Trivy)
         run: |
-          for image in opspilot-api:local opspilot-web:local; do
+          for image in goliveboard-api:local goliveboard-web:local; do
             docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
               "$TRIVY_IMAGE" image --no-progress --scanners vuln,secret \
               --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 "$image"
@@ -187,7 +187,7 @@ jobs:
       - name: Lighthouse on the public event page
         if: matrix.platform == 'linux/amd64'
         run: |
-          site=https://opspilot.localhost:3443
+          site=https://goliveboard.localhost:3443
           jar="$(mktemp)"
           curl -sSfk -c "$jar" -X POST -H "Origin: $site" "$site/api/v1/auth/demo"
           slug="$(curl -sSfk -b "$jar" "$site/api/v1/events?q=Autumn" | jq -r '.items[0].slug')"

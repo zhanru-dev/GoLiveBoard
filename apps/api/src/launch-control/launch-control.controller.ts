@@ -22,7 +22,7 @@ import {
   type RunbookTask,
   TransitionRequest,
   UpdateRunbookTaskRequest,
-} from "@opspilot/contracts";
+} from "@goliveboard/contracts";
 import type { Request, Response } from "express";
 
 import { type Actor, CurrentActor, RequireRole } from "../auth/actor.js";

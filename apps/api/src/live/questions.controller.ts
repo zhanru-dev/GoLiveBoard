@@ -18,7 +18,7 @@ import {
   ModerateQuestionRequest,
   type Question,
   type QuestionList,
-} from "@opspilot/contracts";
+} from "@goliveboard/contracts";
 import type { Request, Response } from "express";
 
 import {

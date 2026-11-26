@@ -81,10 +81,10 @@ export class WebhookSender {
     return inSpan(
       "webhook.send",
       {
-        "opspilot.webhook.delivery_id": delivery.id,
-        "opspilot.webhook.endpoint_id": delivery.endpoint_id,
-        "opspilot.webhook.event_type": delivery.event_type,
-        "opspilot.webhook.attempt": delivery.attempts + 1,
+        "goliveboard.webhook.delivery_id": delivery.id,
+        "goliveboard.webhook.endpoint_id": delivery.endpoint_id,
+        "goliveboard.webhook.event_type": delivery.event_type,
+        "goliveboard.webhook.attempt": delivery.attempts + 1,
       },
       () => this.attempt(delivery),
     );
@@ -122,8 +122,8 @@ export class WebhookSender {
       }
     }
     describeSpan({
-      "opspilot.webhook.status_code": statusCode ?? 0,
-      "opspilot.webhook.delivered": error === null,
+      "goliveboard.webhook.status_code": statusCode ?? 0,
+      "goliveboard.webhook.delivered": error === null,
     });
     countWebhookAttempt(delivery.endpoint_id, error === null);
     await this.record(delivery, {
@@ -180,9 +180,9 @@ export class WebhookSender {
       body,
       headers: {
         "content-type": "application/json",
-        "opspilot-event-id": delivery.event_id,
-        "opspilot-event-type": delivery.event_type,
-        "opspilot-signature": signatureHeader(secret, timestamp, body),
+        "goliveboard-event-id": delivery.event_id,
+        "goliveboard-event-type": delivery.event_type,
+        "goliveboard-signature": signatureHeader(secret, timestamp, body),
       },
     };
   }

@@ -1,4 +1,4 @@
-import type { BrowserTelemetryRequest } from "@opspilot/contracts";
+import type { BrowserTelemetryRequest } from "@goliveboard/contracts";
 import { isIPv6 } from "node:net";
 
 import { Injectable } from "@nestjs/common";

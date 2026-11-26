@@ -1,4 +1,4 @@
-import { BrowserRoute, BrowserTelemetryRequest } from "@opspilot/contracts";
+import { BrowserRoute, BrowserTelemetryRequest } from "@goliveboard/contracts";
 import { describe, expect, it, vi } from "vitest";
 
 import {

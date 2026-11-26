@@ -1,4 +1,4 @@
-import type { Question } from "@opspilot/contracts";
+import type { Question } from "@goliveboard/contracts";
 import { describe, expect, it } from "vitest";
 
 import { actionsFor } from "./live-section";

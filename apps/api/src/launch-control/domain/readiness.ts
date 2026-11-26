@@ -6,7 +6,7 @@ import type {
   ReadinessCriterion,
   ReadinessSection,
   TaskStatus,
-} from "@opspilot/contracts";
+} from "@goliveboard/contracts";
 
 import { timeAgo } from "./relative-time.js";
 

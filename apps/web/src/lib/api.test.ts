@@ -177,7 +177,7 @@ describe("api", () => {
 
     await expect(refreshSession()).resolves.toBe(true);
     expect(request).toHaveBeenCalledWith(
-      "opspilot:refresh-session",
+      "goliveboard:refresh-session",
       expect.any(Function),
     );
   });

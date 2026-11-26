@@ -3,7 +3,7 @@ import { defineConfig, devices } from "@playwright/test";
 import { E2E_TARGET, target } from "./e2e/target.js";
 
 /**
- * Browser tests, through the proxy exactly as a browser uses OpsPilot.
+ * Browser tests, through the proxy exactly as a browser uses GoLiveBoard.
  *
  * - `npm run test:e2e`: against production builds on this machine. Before
  *   running: `npm run services:up`, `npm run db:deploy` and `npm run build`.
@@ -42,13 +42,13 @@ export default defineConfig({
       ? []
       : [
           {
-            command: "npm run start -w @opspilot/api",
+            command: "npm run start -w @goliveboard/api",
             url: "http://127.0.0.1:4301/api/v1/health/ready",
             reuseExistingServer: !process.env.CI,
             stdout: "ignore",
           },
           {
-            command: "npm run start -w @opspilot/web",
+            command: "npm run start -w @goliveboard/web",
             url: "http://127.0.0.1:3301",
             reuseExistingServer: !process.env.CI,
             stdout: "ignore",

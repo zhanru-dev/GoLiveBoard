@@ -18,13 +18,13 @@ set -euo pipefail
 OUT=$(cd "${1:?output directory}" && pwd)
 WHICH=${2:-all}
 ZAP=zaproxy/zap-stable:2.17.0@sha256:9624669db72f54d86c4b46a7064518bd9bf79d8c61a4c31befa9923489f328af
-SITE=https://opspilot.localhost:3443
+SITE=https://goliveboard.localhost:3443
 PROXY=$(docker compose -f docker-compose.prod.yml ps -q proxy)
 NETWORK=$(docker inspect -f '{{range $name, $_ := .NetworkSettings.Networks}}{{$name}}{{end}}' "$PROXY")
 PROXY_IP=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' "$PROXY")
 # The scanner reaches the site's names at the proxy, as a browser would.
 RUN=(docker run --rm --network "$NETWORK"
-  --add-host "opspilot.localhost:$PROXY_IP" --add-host "storage.opspilot.localhost:$PROXY_IP"
+  --add-host "goliveboard.localhost:$PROXY_IP" --add-host "storage.goliveboard.localhost:$PROXY_IP"
   -v "$OUT:/zap/wrk:rw" "$ZAP")
 chmod 777 "$OUT"
 
@@ -36,7 +36,7 @@ session_cookie() {
     -d "{\"name\":\"Zap Owner\",\"email\":\"$email\",\"password\":\"correct horse battery staple\"}" "$SITE/api/v1/auth/sign-up"
   curl -sk -o /dev/null -c "$jar" -X POST -H "Origin: $SITE" -H 'Content-Type: application/json' \
     -d "{\"email\":\"$email\",\"password\":\"correct horse battery staple\"}" "$SITE/api/v1/auth/sign-in"
-  awk '$6 ~ /opspilot_/ {printf "%s=%s; ", $6, $7}' "$jar"
+  awk '$6 ~ /goliveboard_/ {printf "%s=%s; ", $6, $7}' "$jar"
   rm -f "$jar"
 }
 

@@ -7,12 +7,12 @@ import type { ErrorReporter } from "./error-reporting.js";
 import { createLogger } from "./logger.js";
 
 const CONFIG = loadConfig({
-  DATABASE_URL: "postgres://opspilot:secret@127.0.0.1:5443/opspilot",
+  DATABASE_URL: "postgres://goliveboard:secret@127.0.0.1:5443/goliveboard",
   VALKEY_URL: "redis://127.0.0.1:6392",
   APP_ORIGIN: "http://localhost:3300",
   JWT_SECRET: "a".repeat(32),
   SMTP_URL: "smtp://127.0.0.1:1036",
-  MAIL_FROM: "OpsPilot <no-reply@opspilot.test>",
+  MAIL_FROM: "GoLiveBoard <no-reply@goliveboard.test>",
 });
 
 /** A logger writing into an array, with a spy for reported errors. */

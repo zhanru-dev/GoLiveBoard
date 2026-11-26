@@ -7,7 +7,7 @@ import {
   Incident,
   Readiness,
   StreamCheckPage,
-} from "@opspilot/contracts";
+} from "@goliveboard/contracts";
 import { type Queue } from "bullmq";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { inject } from "vitest";
@@ -131,17 +131,17 @@ describe("stream checks and incidents (FR-ST-2)", () => {
 
       const span = captured.spans().find(({ name }) => name === "stream.check");
       expect(span?.attributes).toMatchObject({
-        "opspilot.event_id": event.id,
-        "opspilot.stream.healthy": false,
+        "goliveboard.event_id": event.id,
+        "goliveboard.stream.healthy": false,
       });
-      expect(span?.attributes["opspilot.stream.latency_ms"]).toBeTypeOf(
+      expect(span?.attributes["goliveboard.stream.latency_ms"]).toBeTypeOf(
         "number",
       );
       expect(await counted.points(METRICS.streamChecks)).toMatchObject([
         {
           attributes: {
-            "opspilot.event_id": event.id,
-            "opspilot.stream.healthy": false,
+            "goliveboard.event_id": event.id,
+            "goliveboard.stream.healthy": false,
           },
           value: 1,
         },

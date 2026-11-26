@@ -1,6 +1,6 @@
 "use client";
 
-import type { EventStatus } from "@opspilot/contracts";
+import type { EventStatus } from "@goliveboard/contracts";
 import { type SubmitEvent, useState } from "react";
 
 import { FormAlert } from "@/components/form-alert";

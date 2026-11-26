@@ -75,7 +75,7 @@ export const ERROR_DEFINITIONS = {
   },
   ORIGIN_FORBIDDEN: {
     status: 403,
-    title: "The request did not come from the OpsPilot web app",
+    title: "The request did not come from the GoLiveBoard web app",
   },
   DEMO_RESTRICTED: {
     status: 403,

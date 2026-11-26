@@ -52,8 +52,8 @@ resource "aws_db_instance" "this" {
   engine_version = var.engine_major_version
   instance_class = var.instance_class
 
-  db_name  = "opspilot"
-  username = "opspilot"
+  db_name  = "goliveboard"
+  username = "goliveboard"
   password = var.password
 
   allocated_storage     = 20
