@@ -23,6 +23,8 @@ import {
 import { createEvent } from "../testing/events.js";
 import { CapturingMailer } from "../testing/fakes.js";
 import { createTestApp, TEST_ORIGIN } from "../testing/test-app.js";
+import { TestStream } from "../testing/test-stream.js";
+import type { SafeHttpOptions } from "../net/safe-http.js";
 import { DEMO_PEOPLE, DEMO_WORKSPACE } from "./demo-accounts.js";
 import { DemoSeeder } from "./demo-seeder.js";
 import {
@@ -69,9 +71,15 @@ let addressCounter = 0;
 /** Each test its own client address, so rate limits never meet. */
 const newAddress = () => `198.51.100.${String((addressCounter += 1))}`;
 
-async function startApp(database: TestDatabase, demoMode: boolean) {
+async function startApp(
+  database: TestDatabase,
+  demoMode: boolean,
+  extra: { env?: Record<string, string>; safeHttp?: SafeHttpOptions } = {},
+) {
   return createTestApp({
+    safeHttp: extra.safeHttp,
     env: {
+      ...extra.env,
       DATABASE_URL: database.url,
       VALKEY_URL: inject("valkeyUrl"),
       DEMO_MODE: String(demoMode),
@@ -889,5 +897,71 @@ describe("demo mode switched off", () => {
       "SELECT count(*)::int AS count FROM workspaces",
     );
     expect(workspaces[0]?.count).toBe(0);
+  });
+});
+
+describe("demo mode with a demo test stream (DEMO_STREAM_URL)", () => {
+  let database: TestDatabase;
+  let app: NestExpressApplication;
+  let api: ApiClient;
+  let stream: TestStream;
+
+  beforeAll(async () => {
+    database = await createTestDatabase();
+    stream = await TestStream.start();
+    app = await startApp(database, true, {
+      env: { DEMO_STREAM_URL: stream.url() },
+      safeHttp: stream.clientOptions(),
+    });
+    api = new ApiClient(app, newAddress());
+  });
+
+  afterAll(async () => {
+    await app.close();
+    await stream.stop();
+    await database.drop();
+  });
+
+  async function launchEvent(visitor: TestSession) {
+    await app.get(DemoSeeder).reset();
+    return EventPage.parse((await api.get(visitor, "/events?q=Autumn")).body)
+      .items[0];
+  }
+
+  it("lets the demo use its test stream, so a demo event can go live", async () => {
+    const visitor = await demoSession(app);
+    const launch = await launchEvent(visitor);
+
+    const response = await api.send(
+      visitor,
+      "put",
+      `/events/${launch?.id ?? ""}/stream`,
+      { url: stream.url() },
+    );
+
+    expect(response.status, response.text).toBe(200);
+    const rows = await database.query<{ url: string }>(
+      "SELECT stream_url AS url FROM events WHERE id = $1",
+      [launch?.id],
+    );
+    expect(rows[0]?.url).toBe(stream.url());
+  });
+
+  it("still refuses any other address, even on the same host", async () => {
+    const visitor = await demoSession(app);
+    const launch = await launchEvent(visitor);
+
+    const response = await api.send(
+      visitor,
+      "put",
+      `/events/${launch?.id ?? ""}/stream`,
+      { url: stream.url("/elsewhere.m3u8") },
+    );
+
+    expect(response.status).toBe(403);
+    expect(ProblemDetails.parse(response.body)).toMatchObject({
+      code: "DEMO_RESTRICTED",
+      detail: expect.stringContaining("only the demo test stream") as string,
+    });
   });
 });

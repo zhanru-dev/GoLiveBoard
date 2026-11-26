@@ -31,7 +31,7 @@ describe("loadConfig", () => {
         smtpUrl: REQUIRED.SMTP_URL,
         from: "GoLiveBoard <no-reply@goliveboard.test>",
       },
-      demo: { enabled: false },
+      demo: { enabled: false, streamUrl: undefined },
       signUp: { codes: undefined },
       triage: {
         provider: "none",
@@ -200,6 +200,20 @@ describe("loadConfig", () => {
     expect(() =>
       loadConfig({ ...REQUIRED, SIGN_UP_CODES: "acme:a-code" }),
     ).toThrow(/SIGN_UP_CODES.*label:sha256/s);
+  });
+
+  it("takes one https stream for the demo, and nothing else", () => {
+    const url = "https://test-streams.example.com/demo/index.m3u8";
+
+    expect(
+      loadConfig({ ...REQUIRED, DEMO_STREAM_URL: url }).demo.streamUrl,
+    ).toBe(url);
+    expect(() =>
+      loadConfig({
+        ...REQUIRED,
+        DEMO_STREAM_URL: "http://plain.example.com/a.m3u8",
+      }),
+    ).toThrow(/DEMO_STREAM_URL/);
   });
 
   it("requires the connection strings", () => {

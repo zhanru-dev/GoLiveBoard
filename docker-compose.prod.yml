@@ -41,8 +41,9 @@ x-app-environment: &app-environment
   S3_FORCE_PATH_STYLE: "true"
   S3_CREATE_BUCKET: "true"
   # The demo: one-click sign-in and the nightly reset (FR-AUTH-5), as in the
-  # AWS demo environment.
+  # AWS demo environment, and the one stream its events may use.
   DEMO_MODE: "true"
+  DEMO_STREAM_URL: &demo-stream https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8
   # AI question triage without a model or a key: identical questions are
   # grouped. Set STACK_AI_PROVIDER=anthropic and ANTHROPIC_API_KEY for Claude.
   AI_PROVIDER: ${STACK_AI_PROVIDER:-offline}
@@ -187,8 +188,9 @@ services:
       SENTRY_ENVIRONMENT: stack
       SENTRY_RELEASE: ${STACK_RELEASE:-local}
       OTEL_EXPORTER_OTLP_ENDPOINT: http://lgtm:4318
-      # Shows the one-click demo sign-in.
+      # Shows the one-click demo sign-in, and the demo's test stream button.
       DEMO_MODE: "true"
+      DEMO_STREAM_URL: *demo-stream
     tmpfs:
       - /tmp
       # Next.js caches optimised images and fetches here.

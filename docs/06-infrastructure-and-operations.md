@@ -254,6 +254,7 @@ The demo environment runs with `DEMO_MODE=true`:
 - **Webhooks** are not part of the demo: they are managed by Owners, and visitors are the demo's Manager, so the Integrations screen is not offered to them (and the API refuses them). This keeps the demo from sending requests to addresses visitors choose.
 - **AI triage** has a daily budget: 30 runs or $1, whichever comes first, per UK calendar day; when it is spent, the panel says so and Q&A carries on normally. Real workspaces have none unless `TRIAGE_DAILY_BUDGET_USD` is set.
 - **Nightly reset** at 03:00 UK time restores the seed data; real workspaces are never touched.
+- **A test stream**: visitors cannot enter a stream URL (stream checks fetch whatever address is entered), except the deployment's own public test stream (`DEMO_STREAM_URL`, compared exactly): Launch Control offers it as one button, so a demo event can become Ready and go live.
 - **Sign-up by invitation**: anyone can try the demo workspace, but creating a workspace of one's own needs an invite code (`SIGN_UP_CODES`, digests only; [runbook](runbooks/issue-an-invite-code.md)). The web server is only told whether a code is needed (`SIGN_UP_CODE_REQUIRED`), never the codes.
 
 **What runs today** (milestone 4):

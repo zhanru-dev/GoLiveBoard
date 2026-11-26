@@ -74,6 +74,7 @@ Each step creates billed resources; the demo's budget is set in step 3.
    - `ANTHROPIC_API_KEY` (SecureString), if `ai_provider = "anthropic"`;
    - `SENTRY_DSN`;
    - `OTEL_EXPORTER_OTLP_ENDPOINT`, and `OTEL_EXPORTER_OTLP_HEADERS` (SecureString), for Grafana Cloud;
+   - `DEMO_STREAM_URL` (String), the public test stream the demo may use, for example `https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8`; without it, demo events cannot go live;
    - `SIGN_UP_CODES` (SecureString), to make sign-up by invitation only: digests of invite codes, never the codes ([Issue or withdraw an invite code](../../docs/runbooks/issue-an-invite-code.md)). Without it, anyone can create a workspace.
 5. **GitHub:**
    - Create the environment `demo`, limited to the `main` branch.

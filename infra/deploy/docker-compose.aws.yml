@@ -143,6 +143,8 @@ services:
       # Policy allows that origin (and only it) for images and uploads.
       S3_PUBLIC_ENDPOINT: https://${S3_BUCKET}.s3.${S3_REGION}.amazonaws.com
       DEMO_MODE: ${DEMO_MODE:-false}
+      # The one stream the demo may use; public, not a secret.
+      DEMO_STREAM_URL: ${DEMO_STREAM_URL:-}
       # "true" when the API has invite codes, so the sign-up form asks for
       # one; the codes themselves stay with the API.
       SIGN_UP_CODE_REQUIRED: ${SIGN_UP_CODES:+true}

@@ -14,6 +14,7 @@ import { errorMessage } from "@/lib/errors";
 import { formatInZone } from "@/lib/time";
 
 import { eventKeys } from "../events/event-keys";
+import { useMe } from "../shell/me-context";
 import { Section } from "./section";
 import { LIVE_REFRESH_MS, type LaunchControl } from "./use-launch-control";
 
@@ -24,7 +25,13 @@ const RECENT_CHECKS = 5;
 export function StreamSection({
   control,
   event,
-}: Readonly<{ control: LaunchControl; event: EventDetail }>) {
+  demoStreamUrl,
+}: Readonly<{
+  control: LaunchControl;
+  event: EventDetail;
+  demoStreamUrl?: string;
+}>) {
+  const { isDemo } = useMe().activeWorkspace;
   return (
     <Section
       id="stream"
@@ -32,7 +39,12 @@ export function StreamSection({
       description="The HLS link from your streaming provider. GoLiveBoard checks it every 30 seconds; while it fails, the event cannot go live, and once live a failure opens an incident."
     >
       {control.canEdit ? (
-        <StreamUrlForm key={event.streamUrl} control={control} event={event} />
+        <StreamUrlForm
+          key={event.streamUrl}
+          control={control}
+          event={event}
+          demoStreamUrl={isDemo ? (demoStreamUrl ?? null) : undefined}
+        />
       ) : (
         <p>{event.streamUrl ?? "No stream URL has been set."}</p>
       )}
@@ -41,11 +53,21 @@ export function StreamSection({
   );
 }
 
+/**
+ * In the demo (`demoStreamUrl` not undefined) nobody may enter an address:
+ * stream checks would send requests wherever strangers point them. The
+ * deployment's test stream, when it has one, is one button away instead.
+ */
 function StreamUrlForm({
   control,
   event,
-}: Readonly<{ control: LaunchControl; event: EventDetail }>) {
-  const [url, setUrl] = useState(event.streamUrl ?? "");
+  demoStreamUrl,
+}: Readonly<{
+  control: LaunchControl;
+  event: EventDetail;
+  demoStreamUrl?: string | null;
+}>) {
+  const [url, setUrl] = useState(event.streamUrl ?? demoStreamUrl ?? "");
   const [error, setError] = useState("");
   const save = useMutation({
     mutationFn: () =>
@@ -87,20 +109,32 @@ function StreamUrlForm({
   return (
     <form method="post" onSubmit={submit} noValidate className="grid gap-3">
       <FormAlert message={error} />
-      <FormField
-        label="HLS playback URL"
-        type="url"
-        placeholder="https://stream.example.com/live/index.m3u8"
-        hint="From your streaming provider (Mux, AWS IVS, Cloudflare Stream…)."
-        value={url}
-        onChange={(changeEvent) => {
-          setUrl(changeEvent.target.value);
-        }}
-      />
+      {demoStreamUrl === undefined ? (
+        <FormField
+          label="HLS playback URL"
+          type="url"
+          placeholder="https://stream.example.com/live/index.m3u8"
+          hint="From your streaming provider (Mux, AWS IVS, Cloudflare Stream…)."
+          value={url}
+          onChange={(changeEvent) => {
+            setUrl(changeEvent.target.value);
+          }}
+        />
+      ) : (
+        <p className="text-sm text-muted-foreground">
+          {demoStreamUrl === null
+            ? "Stream checks are switched off in the demo, because they send requests to the address entered."
+            : "In the demo, stream checks use a public test stream, so the event can still become ready and go live."}
+        </p>
+      )}
       <div className="flex gap-2">
-        <Button type="submit" disabled={save.isPending}>
-          Save stream URL
-        </Button>
+        {demoStreamUrl === null ? null : (
+          <Button type="submit" disabled={save.isPending}>
+            {demoStreamUrl === undefined
+              ? "Save stream URL"
+              : "Use the demo test stream"}
+          </Button>
+        )}
         {event.streamUrl === null ? null : (
           <Button
             type="button"
