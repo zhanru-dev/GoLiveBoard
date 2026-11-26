@@ -95,3 +95,28 @@ run "plan_writes_only_the_state_lock" {
     error_message = "The plan role may write only lock files, never the state."
   }
 }
+
+# Found by the first real deploy: this repository's tokens carry immutable
+# subjects, with the owner's and the repository's IDs.
+run "both_roles_trust_an_immutable_subject_when_given_one" {
+  command = plan
+
+  variables {
+    subject_prefix = "repo:owner@1001/repo@2002"
+  }
+
+  assert {
+    condition = toset(one([
+      for c in data.aws_iam_policy_document.deploy_trust.statement[0].condition : c.values
+      if c.variable == "token.actions.githubusercontent.com:sub"
+    ])) == toset(["repo:owner@1001/repo@2002:environment:demo"])
+    error_message = "The deploy role must trust the immutable subject of the demo environment."
+  }
+  assert {
+    condition = toset(one([
+      for c in data.aws_iam_policy_document.plan_trust.statement[0].condition : c.values
+      if c.variable == "token.actions.githubusercontent.com:sub"
+    ])) == toset(["repo:owner@1001/repo@2002:pull_request", "repo:owner@1001/repo@2002:ref:refs/heads/main"])
+    error_message = "The plan role must trust the immutable subjects of pull requests and main."
+  }
+}

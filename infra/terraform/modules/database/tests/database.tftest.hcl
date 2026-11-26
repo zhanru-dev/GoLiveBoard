@@ -54,3 +54,13 @@ run "connection_logging_uses_a_value_postgresql_18_accepts" {
     error_message = "PostgreSQL 18 takes a list of connection stages for log_connections, not 1 or 0."
   }
 }
+
+# Found by the second real plan: without this, every plan shows a change.
+run "force_ssl_is_applied_on_reboot_as_rds_records_it" {
+  command = plan
+
+  assert {
+    condition     = one([for p in aws_db_parameter_group.this.parameter : p.apply_method if p.name == "rds.force_ssl"]) == "pending-reboot"
+    error_message = "rds.force_ssl is static: RDS records it as pending-reboot, and so must the configuration."
+  }
+}

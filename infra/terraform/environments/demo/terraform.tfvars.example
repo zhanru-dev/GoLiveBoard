@@ -6,6 +6,9 @@ bucket_prefix            = "goliveboard-demo-example"
 state_bucket             = "goliveboard-terraform-state-example"
 github_oidc_provider_arn = "arn:aws:iam::123456789012:oidc-provider/token.actions.githubusercontent.com"
 github_repository        = "owner/GoLiveBoard"
+# If the repository's OIDC tokens use immutable subjects, their prefix, from:
+#   gh api repos/OWNER/GoLiveBoard/actions/oidc/customization/sub  (sub_claim_prefix)
+# github_oidc_subject_prefix = "repo:owner@123/GoLiveBoard@456"
 alert_email              = "ops@example.com"
 monthly_budget_usd       = 50
 ai_provider              = "offline"

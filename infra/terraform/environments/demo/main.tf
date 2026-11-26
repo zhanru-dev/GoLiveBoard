@@ -91,6 +91,7 @@ module "github_oidc" {
   name                 = local.name
   oidc_provider_arn    = var.github_oidc_provider_arn
   repository           = var.github_repository
+  subject_prefix       = var.github_oidc_subject_prefix
   repository_arns      = module.registry.repository_arns
   releases_bucket_arn  = module.storage.releases_bucket_arn
   deploy_document_name = local.document

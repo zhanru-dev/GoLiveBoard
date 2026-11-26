@@ -60,6 +60,7 @@ Each step creates billed resources; the demo's budget is set in step 3.
 
 3. **The environment:**
    - Copy `backend.hcl.example` to `backend.hcl` and `terraform.tfvars.example` to `terraform.tfvars`, and fill them in. Both are git-ignored.
+   - Check how the repository's OIDC tokens name it: `gh api repos/OWNER/GoLiveBoard/actions/oidc/customization/sub`. If `use_immutable_subject` is true, set `github_oidc_subject_prefix` to its `sub_claim_prefix`. Without it, the deploy fails with `Not authorized to perform sts:AssumeRoleWithWebIdentity`.
    - Then run:
 
      ```bash
