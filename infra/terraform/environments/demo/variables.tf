@@ -54,6 +54,12 @@ variable "monthly_budget_usd" {
   default = 50
 }
 
+variable "stop_spending_at_usd" {
+  description = "Actual spend in a month at which AWS Budgets stops the host and the database (docs/runbooks/cost-emergency.md). Default: twice the budget."
+  type        = number
+  default     = null
+}
+
 variable "instance_type" {
   type    = string
   default = "t4g.small"

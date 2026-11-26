@@ -100,10 +100,14 @@ module "github_oidc" {
 }
 
 module "budgets" {
-  source      = "../../modules/budgets"
-  name        = local.name
-  monthly_usd = var.monthly_budget_usd
-  alert_email = var.alert_email
+  source           = "../../modules/budgets"
+  name             = local.name
+  monthly_usd      = var.monthly_budget_usd
+  alert_email      = var.alert_email
+  region           = var.region
+  stop_at_usd      = coalesce(var.stop_spending_at_usd, var.monthly_budget_usd * 2)
+  ec2_instance_ids = [module.compute.instance_id]
+  rds_instance_ids = [module.database.identifier]
 }
 
 # The deploy command (docs/06, section 4), run on the host by the pipeline.
