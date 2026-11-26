@@ -36,9 +36,10 @@ resource "aws_db_parameter_group" "this" {
     name  = "log_min_duration_statement"
     value = "1000"
   }
+  # PostgreSQL 18 made this a list of connection stages; "1" is refused.
   parameter {
     name  = "log_connections"
-    value = "1"
+    value = "all"
   }
   parameter {
     name  = "log_disconnections"

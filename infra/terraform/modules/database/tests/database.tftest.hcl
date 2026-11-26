@@ -41,3 +41,16 @@ run "only_the_host_connects_and_only_over_tls" {
     error_message = "Connections without TLS must be refused."
   }
 }
+
+# Found by the first real apply, which the mocked provider cannot catch.
+run "connection_logging_uses_a_value_postgresql_18_accepts" {
+  command = plan
+
+  assert {
+    condition = alltrue([
+      for stage in split(",", one([for p in aws_db_parameter_group.this.parameter : p.value if p.name == "log_connections"])) :
+      contains(["receipt", "authentication", "authorization", "setup_durations", "all"], trimspace(stage))
+    ])
+    error_message = "PostgreSQL 18 takes a list of connection stages for log_connections, not 1 or 0."
+  }
+}

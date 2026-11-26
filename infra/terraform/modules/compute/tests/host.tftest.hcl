@@ -83,3 +83,21 @@ run "the_host_installs_the_watchdog_and_runs_it_every_30_seconds" {
     error_message = "The watchdog's timer must be enabled, every 30 seconds."
   }
 }
+
+# Found by the first real apply: AWS refuses other characters, and the mocked
+# provider does not.
+run "security_group_descriptions_use_only_characters_aws_accepts" {
+  command = plan
+
+  assert {
+    condition = alltrue([
+      for description in [
+        aws_security_group.this.description,
+        aws_vpc_security_group_ingress_rule.https.description,
+        aws_vpc_security_group_ingress_rule.http.description,
+        aws_vpc_security_group_egress_rule.all.description,
+      ] : can(regex("^[a-zA-Z0-9. _:/()#,@\\[\\]+=&;{}!$*-]{0,255}$", description))
+    ])
+    error_message = "Security group descriptions may use only a-z, A-Z, 0-9, spaces and ._-:/()#,@[]+=&;{}!$*"
+  }
+}
