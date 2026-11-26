@@ -11,4 +11,7 @@ github_repository        = "owner/GoLiveBoard"
 # github_oidc_subject_prefix = "repo:owner@123/GoLiveBoard@456"
 alert_email              = "ops@example.com"
 monthly_budget_usd       = 50
+# Optional: actual spend at which the host and database are stopped.
+# Default: twice the budget.
+# stop_spending_at_usd   = 100
 ai_provider              = "offline"

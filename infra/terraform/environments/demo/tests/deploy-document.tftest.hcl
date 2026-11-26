@@ -8,6 +8,9 @@ mock_provider "aws" {
   mock_data "aws_region" {
     defaults = { region = "eu-west-2" }
   }
+  mock_data "aws_partition" {
+    defaults = { partition = "aws" }
+  }
   mock_data "aws_ssm_parameter" {
     defaults = { value = "ami-0123456789abcdef0" }
   }
