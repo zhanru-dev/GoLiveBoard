@@ -20,6 +20,8 @@ describe("searchFeatures", () => {
       ),
     ).toEqual(["Stream checks", "Incidents"]);
     expect(searchFeatures("nothing-like-this")).toEqual([]);
+    // Every word, not any: two features each match one of these words.
+    expect(searchFeatures("webhook erase")).toEqual([]);
   });
 });
 

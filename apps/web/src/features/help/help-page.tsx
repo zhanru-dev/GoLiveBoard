@@ -75,8 +75,8 @@ export function HelpPage() {
                   <p className="text-sm leading-relaxed text-muted-foreground">
                     {feature.what}
                   </p>
-                  <p className="text-xs font-semibold text-primary">
-                    {feature.where}
+                  <p className="text-xs font-medium text-subtle-foreground">
+                    Where: {feature.where}
                   </p>
                 </li>
               ))}
