@@ -55,11 +55,16 @@ export class ApiClient {
     };
   }
 
-  signUp(email: string, password = TEST_PASSWORD, name = "Ada Lovelace") {
+  signUp(
+    email: string,
+    password = TEST_PASSWORD,
+    name = "Ada Lovelace",
+    inviteCode?: string,
+  ) {
     return this.http()
       .post("/api/v1/auth/sign-up")
       .set("Origin", TEST_ORIGIN)
-      .send({ name, email, password });
+      .send({ name, email, password, inviteCode });
   }
 
   signIn(email: string, password = TEST_PASSWORD) {

@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { parseSignUpCodes } from "../auth/sign-up-codes.js";
+
 const LOG_LEVELS = [
   "fatal",
   "error",
@@ -155,6 +157,24 @@ const AppConfigSchema = z
      */
     DEMO_MODE: Flag,
     /**
+     * Invite codes for sign-up (FR-WS-1), as `label:sha256,…`: the digests
+     * of the codes, never the codes. Unset, anyone may sign up; set, sign-up
+     * needs one of them (docs/runbooks/issue-an-invite-code.md).
+     */
+    SIGN_UP_CODES: optional(
+      z.string().transform((value, context) => {
+        try {
+          return parseSignUpCodes(value);
+        } catch (error) {
+          context.addIssue({
+            code: "custom",
+            message: error instanceof Error ? error.message : String(error),
+          });
+          return z.NEVER;
+        }
+      }),
+    ),
+    /**
      * AI question triage (FR-RN-6, ADR-0012). `none`: suggestions are
      * unavailable and Q&A works as ever. `anthropic`: Claude, with
      * ANTHROPIC_API_KEY. `offline`: groups questions whose words are the
@@ -249,6 +269,7 @@ const AppConfigSchema = z
             smtpUrl: env.SMTP_URL ?? "",
           },
     demo: { enabled: env.DEMO_MODE },
+    signUp: { codes: env.SIGN_UP_CODES },
     triage: {
       provider: env.AI_PROVIDER,
       apiKey: env.ANTHROPIC_API_KEY,
