@@ -3,39 +3,59 @@
 @import "shadcn/tailwind.css";
 
 /*
- * Design tokens (shadcn/ui, neutral). Components use the Tailwind names
- * (bg-background, text-muted-foreground, …), never raw colours, so a theme
- * change happens here only. Text tokens keep a contrast ratio of at least
- * 4.5:1 against the surfaces they are used on (WCAG 2.2 AA); tokens.test.ts
- * checks it.
+ * Design tokens: the "control room" direction (docs/design/ui-direction.md).
+ * Components use the Tailwind names (bg-background, text-success, …), never
+ * raw colours, so a theme change happens here only. Each colour has one job:
+ * signal blue for actions; green, amber and red for status only; broadcast
+ * red only while an event is LIVE. Text tokens keep a contrast ratio of at
+ * least 4.5:1 against the surfaces they are used on (WCAG 2.2 AA);
+ * tokens.test.ts checks every pair.
  */
 :root {
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.47 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
+  --background: #ffffff;
+  --foreground: #0f172a;
+  --card: #ffffff;
+  --card-foreground: #0f172a;
+  --popover: #ffffff;
+  --popover-foreground: #0f172a;
+  --primary: #2447d6;
+  --primary-foreground: #ffffff;
+  --secondary: #f1f5f9;
+  --secondary-foreground: #0f172a;
+  --muted: #f8fafc;
+  --muted-foreground: #475569;
+  /* Secondary text: the lightest grey allowed for words. */
+  --subtle-foreground: #64748b;
+  --accent: #eef2ff;
+  --accent-foreground: #1e3a8a;
+  --destructive: #b91c1c;
+  --border: #e2e8f0;
   /* What identifies a field, and the focus ring, at 3:1 or more against
      the background (WCAG 1.4.11); the ring is used half opaque. */
-  --input: oklch(0.6 0 0);
-  --ring: oklch(0.145 0 0);
+  --input: #64748b;
+  --ring: #0f172a;
+  /* Status: text on its soft background. */
+  --success: #166534;
+  --success-soft: #dcfce7;
+  --warning: #92400e;
+  --warning-soft: #fef3c7;
+  --danger: #991b1b;
+  --danger-soft: #fee2e2;
+  --live: #e11d48;
+  --live-foreground: #ffffff;
+  /* The dark surfaces: the ops room, the sign-in panel. */
+  --ink: #0a0f1c;
+  --ink-panel: #111827;
+  --ink-border: #1f2a44;
+  --ink-foreground: #e2e8f0;
+  --ink-muted: #94a3b8;
   --radius: 0.625rem;
 }
 
 @theme inline {
   --font-sans: var(--font-sans);
   --font-heading: var(--font-sans);
+  --font-mono: var(--font-mono);
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
@@ -54,6 +74,20 @@
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
+  --color-subtle-foreground: var(--subtle-foreground);
+  --color-success: var(--success);
+  --color-success-soft: var(--success-soft);
+  --color-warning: var(--warning);
+  --color-warning-soft: var(--warning-soft);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+  --color-live: var(--live);
+  --color-live-foreground: var(--live-foreground);
+  --color-ink: var(--ink);
+  --color-ink-panel: var(--ink-panel);
+  --color-ink-border: var(--ink-border);
+  --color-ink-foreground: var(--ink-foreground);
+  --color-ink-muted: var(--ink-muted);
   --radius-sm: calc(var(--radius) * 0.6);
   --radius-md: calc(var(--radius) * 0.8);
   --radius-lg: var(--radius);
@@ -67,4 +101,10 @@
   body {
     @apply bg-background text-foreground font-sans antialiased;
   }
+}
+
+/* Figures (scores, counts, times) line up: monospace, tabular digits. */
+@utility figures {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
 }
