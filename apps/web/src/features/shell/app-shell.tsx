@@ -72,6 +72,7 @@ export function AppShell({
     ...(me.activeWorkspace.role === "OWNER"
       ? [{ href: "/settings/integrations", label: "Integrations" }]
       : []),
+    { href: "/help", label: "Help and features" },
   ];
 
   return (

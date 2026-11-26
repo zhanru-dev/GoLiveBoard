@@ -2,6 +2,7 @@
 
 import type { LiveOps, LiveOpsMoment } from "@goliveboard/contracts";
 import Link from "next/link";
+import { useEffect } from "react";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -16,6 +17,8 @@ import { timeInZone } from "@/lib/time";
 
 import { MinuteChart } from "../charts/minute-chart";
 import { EventTabs } from "../events/event-tabs";
+import { remember } from "../onboarding/visits";
+import { useMe } from "../shell/me-context";
 import { EventStatusBadge, STATUS_LABELS } from "../events/event-status";
 import { type Connection, useLiveOps } from "./use-live-ops";
 import { ErrorBoundary } from "@/components/error-boundary";
@@ -30,6 +33,11 @@ const CONNECTION_TEXT: Record<Connection, string> = {
 /** FR-RN-7: the live state of an event, for every role. */
 export function OpsRoomPage({ eventId }: Readonly<{ eventId: string }>) {
   const { room, connection, retry } = useLiveOps(eventId);
+  const { workspaceId } = useMe().activeWorkspace;
+  // For the getting-started checklist: this browser has seen an ops room.
+  useEffect(() => {
+    remember(workspaceId, "ops-room");
+  }, [workspaceId]);
   return (
     // The control room is dark (docs/design/ui-direction.md): `.ink` turns
     // every component inside it dark.

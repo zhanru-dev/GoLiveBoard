@@ -5,6 +5,7 @@ import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
 
+import { GettingStarted } from "../onboarding/getting-started";
 import { useMe } from "../shell/me-context";
 import { EventFilters } from "./event-filters";
 import type { EventListFilters } from "./event-list-filters";
@@ -24,6 +25,7 @@ export function EventsPage() {
           </Button>
         )}
       </div>
+      <GettingStarted />
       <EventFilters onChange={setFilters} />
       <EventsTable filters={filters} />
     </div>
