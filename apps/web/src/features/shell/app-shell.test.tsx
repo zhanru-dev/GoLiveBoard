@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 
 import { OWNER, renderScreen } from "@/testing/render";
 
-import { AppShell } from "./app-shell";
+import { AppShell, isCurrent } from "./app-shell";
 
 describe("AppShell", () => {
   it("warns that the demo workspace is shared and reset every night", () => {
@@ -55,5 +55,12 @@ describe("AppShell", () => {
     expect(
       within(main()).getByRole("link", { name: "Audit trail" }),
     ).toHaveAttribute("href", "/audit");
+  });
+
+  it("marks the link of the page shown, and of pages below it, but not of look-alikes", () => {
+    expect(isCurrent("/events", "/events")).toBe(true);
+    expect(isCurrent("/events/0195f0a0/ops", "/events")).toBe(true);
+    expect(isCurrent("/eventsx", "/events")).toBe(false);
+    expect(isCurrent("/settings/integrations", "/settings/team")).toBe(false);
   });
 });

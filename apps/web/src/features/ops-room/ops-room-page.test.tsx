@@ -52,6 +52,19 @@ describe("OpsRoomPage", () => {
     expect(FakeEventSource.last().init).toEqual({ withCredentials: true });
   });
 
+  it("says the event is on air only while it is live", () => {
+    const source = show();
+
+    expect(screen.getByText("ON AIR")).toBeInTheDocument();
+    act(() => {
+      source.emit("snapshot", {
+        ...ROOM,
+        event: { ...ROOM.event, status: "COMPLETED" },
+      });
+    });
+    expect(screen.queryByText("ON AIR")).toBeNull();
+  });
+
   it("shows the room from the snapshot", () => {
     show();
 
