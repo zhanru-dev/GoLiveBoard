@@ -21,6 +21,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { api } from "@/lib/api";
 
+import { DemoGuide } from "../onboarding/demo-guide";
 import { MeProvider } from "./me-context";
 
 export function AppShell({
@@ -199,19 +200,24 @@ export function AppShell({
               time.
             </p>
           ) : null}
-          {/* Keyed by workspace: nothing from the previous one survives a switch. */}
-          <main
-            id="content"
-            tabIndex={-1}
-            key={me.activeWorkspace.workspaceId}
-            className="mx-auto w-full max-w-6xl px-4 py-8 sm:px-8"
-          >
-            {switching || refreshing ? (
-              <p role="status">Switching workspace…</p>
-            ) : (
-              children
-            )}
-          </main>
+          {/* The demo's guide beside the page on wide screens, above it
+              on narrow ones. */}
+          <div className="flex-1 xl:grid xl:grid-cols-[minmax(0,1fr)_21rem]">
+            {me.activeWorkspace.isDemo ? <DemoGuide /> : null}
+            {/* Keyed by workspace: nothing from the previous one survives a switch. */}
+            <main
+              id="content"
+              tabIndex={-1}
+              key={me.activeWorkspace.workspaceId}
+              className="mx-auto w-full max-w-6xl px-4 py-8 sm:px-8 xl:col-start-1 xl:row-start-1"
+            >
+              {switching || refreshing ? (
+                <p role="status">Switching workspace…</p>
+              ) : (
+                children
+              )}
+            </main>
+          </div>
         </div>
       </div>
     </MeProvider>

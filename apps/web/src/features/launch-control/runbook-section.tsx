@@ -14,6 +14,7 @@ import { errorMessage } from "@/lib/errors";
 import { formatInZone } from "@/lib/time";
 
 import { eventKeys } from "../events/event-keys";
+import { remember } from "../onboarding/visits";
 import { AddTaskForm } from "./add-task-form";
 import { Section } from "./section";
 import { TaskEditor } from "./task-editor";
@@ -61,6 +62,12 @@ export function RunbookSection({
             : candidate,
         ),
       );
+    },
+    onSuccess: (task) => {
+      if (task.status === "DONE") {
+        // For the demo guide: a task has been ticked here.
+        remember(workspaceId, "task-done");
+      }
     },
     onError,
     onSettled: () => control.refresh(),
