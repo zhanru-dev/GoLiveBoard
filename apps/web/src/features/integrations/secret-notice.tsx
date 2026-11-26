@@ -19,7 +19,7 @@ export function SecretNotice({
       <AlertDescription className="grid gap-3">
         <p>
           It is shown only this once. Your receiver uses it to check the
-          OpsPilot-Signature header of every webhook.
+          GoLiveBoard-Signature header of every webhook.
         </p>
         <code className="rounded bg-muted px-2 py-1 font-mono text-sm break-all">
           {secret}

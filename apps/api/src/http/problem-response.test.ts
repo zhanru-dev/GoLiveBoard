@@ -4,7 +4,7 @@ import {
   HttpException,
   NotFoundException,
 } from "@nestjs/common";
-import { ProblemDetails } from "@opspilot/contracts";
+import { ProblemDetails } from "@goliveboard/contracts";
 import { describe, expect, it } from "vitest";
 
 import { DomainError } from "../shared/domain/domain-error.js";
@@ -175,7 +175,7 @@ describe("toProblemResponse", () => {
 
   it("hides the message of unexpected errors", () => {
     const response = toProblemResponse(
-      new Error("password authentication failed for user opspilot"),
+      new Error("password authentication failed for user goliveboard"),
       REQUEST_ID,
     );
 

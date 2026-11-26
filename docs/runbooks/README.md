@@ -20,6 +20,6 @@ Each runbook has two sections: **locally**, on the production-like stack (`npm r
 
 **Where to look:**
 
-- Grafana is at http://127.0.0.1:3037 on the stack (Grafana Cloud in AWS), with the **OpsPilot overview** dashboard.
+- Grafana is at http://127.0.0.1:3037 on the stack (Grafana Cloud in AWS), with the **GoLiveBoard overview** dashboard.
 - Traces are in Tempo: search by `trace_id` from any log line.
 - Logs: `docker compose -f docker-compose.prod.yml logs <service>` locally, Loki in AWS.

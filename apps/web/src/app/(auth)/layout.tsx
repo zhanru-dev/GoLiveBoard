@@ -9,7 +9,7 @@ export default function AuthLayout({
   return (
     <Providers>
       <main className="mx-auto flex min-h-dvh max-w-sm flex-col justify-center gap-6 px-6">
-        <p className="text-xl font-semibold">OpsPilot</p>
+        <p className="text-xl font-semibold">GoLiveBoard</p>
         {children}
       </main>
     </Providers>

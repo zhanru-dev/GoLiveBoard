@@ -11,15 +11,15 @@
 #
 # Prints "previous=<sha>" before a deploy, so the pipeline knows what to roll
 # back to, and "deployed=<sha>" once the release is healthy. Each release's
-# two files stay in /opt/opspilot/releases (a few kilobytes each).
+# two files stay in /opt/goliveboard/releases (a few kilobytes each).
 set -euo pipefail
 
 ACTION="$${ACTION:?ACTION is migrate, deploy or current}"
-# OPSPILOT_ROOT is for the script's tests only; SSM never sets it.
-ROOT="$${OPSPILOT_ROOT:-/opt/opspilot}"
+# GOLIVEBOARD_ROOT is for the script's tests only; SSM never sets it.
+ROOT="$${GOLIVEBOARD_ROOT:-/opt/goliveboard}"
 REGION="${region}"
 REGISTRY="${registry}"
-export COMPOSE_PROJECT_NAME=opspilot
+export COMPOSE_PROJECT_NAME=goliveboard
 
 current_sha() {
   if [[ -L "$ROOT/current" ]]; then basename "$(readlink "$ROOT/current")"; fi
@@ -66,8 +66,8 @@ umask 022
 
 aws ecr get-login-password --region "$REGION" | docker login --username AWS --password-stdin "$REGISTRY" >/dev/null
 
-export API_IMAGE="$REGISTRY/opspilot-api:$SHA"
-export WEB_IMAGE="$REGISTRY/opspilot-web:$SHA"
+export API_IMAGE="$REGISTRY/goliveboard-api:$SHA"
+export WEB_IMAGE="$REGISTRY/goliveboard-web:$SHA"
 export RDS_CA="$ROOT/rds-ca.pem"
 cd "$RELEASE"
 

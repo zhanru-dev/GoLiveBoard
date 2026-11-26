@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 
 import type { NestExpressApplication } from "@nestjs/platform-express";
-import { AssetUpload, EventPage, ProblemDetails } from "@opspilot/contracts";
+import { AssetUpload, EventPage, ProblemDetails } from "@goliveboard/contracts";
 import type { Redis } from "ioredis";
 import request from "supertest";
 import { afterAll, beforeAll, describe, expect, inject, it } from "vitest";
@@ -649,7 +649,7 @@ describe("demo mode, what one visitor can make it do", () => {
     await app
       .get<Redis>(VALKEY_CLIENT)
       .set(
-        `opspilot:rate:${rule.name}:${address}`,
+        `goliveboard:rate:${rule.name}:${address}`,
         String(rule.limit - 1),
         "PX",
         rule.windowMs,

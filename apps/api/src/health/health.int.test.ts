@@ -1,5 +1,5 @@
 import type { NestExpressApplication } from "@nestjs/platform-express";
-import { HealthReport, LivenessReport } from "@opspilot/contracts";
+import { HealthReport, LivenessReport } from "@goliveboard/contracts";
 import request from "supertest";
 import { afterEach, describe, expect, it } from "vitest";
 

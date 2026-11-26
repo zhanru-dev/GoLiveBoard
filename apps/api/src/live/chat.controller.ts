@@ -12,7 +12,7 @@ import {
   type ChatMessage,
   type ChatPage,
   ChatPageQuery,
-} from "@opspilot/contracts";
+} from "@goliveboard/contracts";
 
 import {
   type AttendeeActor,

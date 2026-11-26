@@ -1,5 +1,5 @@
 import { Controller, Get, Param, ParseUUIDPipe, Res } from "@nestjs/common";
-import type { EventReport } from "@opspilot/contracts";
+import type { EventReport } from "@goliveboard/contracts";
 import type { Response } from "express";
 
 import { type Actor, CurrentActor } from "../auth/actor.js";

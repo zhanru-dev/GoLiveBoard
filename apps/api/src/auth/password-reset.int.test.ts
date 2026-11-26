@@ -1,5 +1,5 @@
 import type { NestExpressApplication } from "@nestjs/platform-express";
-import { ProblemDetails } from "@opspilot/contracts";
+import { ProblemDetails } from "@goliveboard/contracts";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import {

@@ -1,4 +1,4 @@
-import type { QuestionStatus } from "@opspilot/contracts";
+import type { QuestionStatus } from "@goliveboard/contracts";
 import { describe, expect, it } from "vitest";
 
 import {

@@ -226,11 +226,11 @@ async function startApi(env: Record<string, string>) {
 
 beforeAll(() => {
   // The processes run what was compiled: build it as CI's image would.
-  execFileSync("npm", ["run", "build", "-w", "@opspilot/contracts"], {
+  execFileSync("npm", ["run", "build", "-w", "@goliveboard/contracts"], {
     cwd: REPOSITORY_ROOT,
     stdio: "ignore",
   });
-  execFileSync("npm", ["run", "build", "-w", "@opspilot/api"], {
+  execFileSync("npm", ["run", "build", "-w", "@goliveboard/api"], {
     cwd: REPOSITORY_ROOT,
     stdio: "ignore",
   });
@@ -298,7 +298,7 @@ describe("tracing in the running API", { timeout: 60_000 }, () => {
         span.attributes["http.route"] === "/api/v1/auth/sign-in",
     );
     expect(server, api.output).toBeDefined();
-    expect(server?.service).toBe("opspilot-api");
+    expect(server?.service).toBe("goliveboard-api");
     // The trace the browser started goes on in the API.
     expect(server?.traceId).toBe(BROWSER_TRACE);
     expect(server?.parentSpanId).toBe("00f067aa0ba902b7");
@@ -414,7 +414,7 @@ describe(
         .spans()
         .find(
           (span) =>
-            span.service === "opspilot-api" &&
+            span.service === "goliveboard-api" &&
             span.attributes["http.route"] ===
               "/api/v1/events/:eventId/transitions",
         );
@@ -450,7 +450,7 @@ describe(
               .filter(
                 (span) =>
                   span.traceId === traceId &&
-                  span.service === "opspilot-worker",
+                  span.service === "goliveboard-worker",
               )
               .map(({ name }) => name),
           { timeout: 15_000 },

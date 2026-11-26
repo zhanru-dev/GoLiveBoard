@@ -5,7 +5,7 @@ import type {
   Question,
   QuestionList,
   QuestionsEventKind,
-} from "@opspilot/contracts";
+} from "@goliveboard/contracts";
 
 import { recordAudit } from "../audit/audit.js";
 import type { Actor } from "../auth/actor.js";

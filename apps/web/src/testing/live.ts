@@ -1,4 +1,4 @@
-import type { RealtimeChannel } from "@opspilot/contracts";
+import type { RealtimeChannel } from "@goliveboard/contracts";
 import { act } from "@testing-library/react";
 import { vi } from "vitest";
 

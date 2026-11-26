@@ -1,6 +1,6 @@
 "use client";
 
-import type { AttendeeMe } from "@opspilot/contracts";
+import type { AttendeeMe } from "@goliveboard/contracts";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 

@@ -2,7 +2,7 @@ import { randomBytes } from "node:crypto";
 
 import type { INestApplicationContext } from "@nestjs/common";
 import type { NestExpressApplication } from "@nestjs/platform-express";
-import { Readiness, StreamCheckPage } from "@opspilot/contracts";
+import { Readiness, StreamCheckPage } from "@goliveboard/contracts";
 import { afterAll, beforeAll, describe, expect, inject, it } from "vitest";
 
 import { ApiClient } from "../testing/api-client.js";

@@ -1,5 +1,5 @@
 import type { NestExpressApplication } from "@nestjs/platform-express";
-import { AccessPolicy, type EventDetail } from "@opspilot/contracts";
+import { AccessPolicy, type EventDetail } from "@goliveboard/contracts";
 import request from "supertest";
 
 import { ATTENDEE_COOKIE } from "../attendees/attendee-cookies.js";

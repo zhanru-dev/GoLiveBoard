@@ -1,6 +1,6 @@
 "use client";
 
-import { EventDetail } from "@opspilot/contracts";
+import { EventDetail } from "@goliveboard/contracts";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { useState } from "react";

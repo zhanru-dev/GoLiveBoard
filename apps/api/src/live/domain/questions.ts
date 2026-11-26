@@ -1,4 +1,4 @@
-import type { QuestionStatus } from "@opspilot/contracts";
+import type { QuestionStatus } from "@goliveboard/contracts";
 
 /** The pin slots (FR-RN-5): at most this many questions are pinned. */
 export const PIN_SLOTS = [1, 2, 3] as const;

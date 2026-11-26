@@ -3,7 +3,7 @@ import {
   Catch,
   type ExceptionFilter,
 } from "@nestjs/common";
-import { PROBLEM_JSON_CONTENT_TYPE } from "@opspilot/contracts";
+import { PROBLEM_JSON_CONTENT_TYPE } from "@goliveboard/contracts";
 import type { Request, Response } from "express";
 import { InjectPinoLogger, PinoLogger } from "nestjs-pino";
 

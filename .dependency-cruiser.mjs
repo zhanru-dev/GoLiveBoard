@@ -91,7 +91,7 @@ export default {
     tsConfig: { fileName: "apps/web/tsconfig.json" },
     enhancedResolveOptions: {
       exportsFields: ["exports"],
-      conditionNames: ["@opspilot/source", "import", "default"],
+      conditionNames: ["@goliveboard/source", "import", "default"],
       extensions: [".ts", ".tsx", ".js", ".mjs"],
     },
   },

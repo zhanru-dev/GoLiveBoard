@@ -1,4 +1,4 @@
-import type { EventReport } from "@opspilot/contracts";
+import type { EventReport } from "@goliveboard/contracts";
 
 /**
  * The report as CSV (FR-RC-3), in three tables separated by an empty line:

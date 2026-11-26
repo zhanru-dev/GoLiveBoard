@@ -66,7 +66,7 @@ Below, "apply" means one of these two.
 
    ```bash
    docker compose -f docker-compose.prod.yml exec postgres \
-     psql -U opspilot opspilot -c "UPDATE sessions SET revoked_at = now() WHERE revoked_at IS NULL"
+     psql -U goliveboard goliveboard -c "UPDATE sessions SET revoked_at = now() WHERE revoked_at IS NULL"
    ```
 
 **`WEBHOOK_ENCRYPTION_KEY`: receivers notice nothing.**

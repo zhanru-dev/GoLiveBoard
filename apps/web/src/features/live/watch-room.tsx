@@ -5,7 +5,7 @@ import type {
   Question,
   QuestionList,
   WatchInfo,
-} from "@opspilot/contracts";
+} from "@goliveboard/contracts";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 

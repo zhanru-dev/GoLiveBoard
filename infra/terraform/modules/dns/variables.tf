@@ -1,5 +1,5 @@
 variable "zone_name" {
-  description = "The hosted zone, e.g. example.com (or opspilot.example.com for a delegated subdomain)."
+  description = "The hosted zone, e.g. example.com (or goliveboard.example.com for a delegated subdomain)."
   type        = string
 }
 
@@ -10,7 +10,7 @@ variable "create_zone" {
 }
 
 variable "site_domain" {
-  description = "The site's name, e.g. opspilot.example.com."
+  description = "The site's name, e.g. goliveboard.example.com."
   type        = string
 }
 

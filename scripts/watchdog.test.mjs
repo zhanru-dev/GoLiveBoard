@@ -24,8 +24,8 @@ const SCRIPT = fileURLToPath(
 // API's process answers its liveness check.
 const FAKE_DOCKER = `#!/usr/bin/env bash
 case "$1" in
-  ps) for service in \${UNHEALTHY:-}; do echo "opspilot-$service-1"; done ;;
-  inspect) name="\${@: -1}"; service="\${name#opspilot-}"; echo "\${service%-1}" ;;
+  ps) for service in \${UNHEALTHY:-}; do echo "goliveboard-$service-1"; done ;;
+  inspect) name="\${@: -1}"; service="\${name#goliveboard-}"; echo "\${service%-1}" ;;
   exec) echo "docker exec \${2}" >> "$FAKE_LOG"; [[ "\${API_LIVE:-yes}" == yes ]] ;;
   restart) echo "docker restart \${@: -1}" >> "$FAKE_LOG" ;;
 esac
@@ -60,7 +60,7 @@ function setUp() {
       timeout: 20_000,
       env: {
         PATH: `${bin}:${process.env.PATH ?? ""}`,
-        OPSPILOT_ROOT: root,
+        GOLIVEBOARD_ROOT: root,
         FAKE_LOG: log,
         ...env,
       },
@@ -78,8 +78,8 @@ describe("watchdog.sh", { timeout: 30_000 }, () => {
     const { run } = setUp();
 
     expect(run({ UNHEALTHY: "web" })).toEqual([
-      "log web is unhealthy; restarting opspilot-web-1",
-      "docker restart opspilot-web-1",
+      "log web is unhealthy; restarting goliveboard-web-1",
+      "docker restart goliveboard-web-1",
     ]);
     expect(run()).toEqual([]);
   });
@@ -89,13 +89,13 @@ describe("watchdog.sh", { timeout: 30_000 }, () => {
 
     // Readiness fails (PostgreSQL is down, say), liveness answers.
     expect(run({ UNHEALTHY: "api", API_LIVE: "yes" })).toEqual([
-      "docker exec opspilot-api-1",
+      "docker exec goliveboard-api-1",
     ]);
     // Liveness fails too: the process hangs.
     expect(run({ UNHEALTHY: "api", API_LIVE: "no" })).toEqual([
-      "docker exec opspilot-api-1",
-      "log api is unhealthy; restarting opspilot-api-1",
-      "docker restart opspilot-api-1",
+      "docker exec goliveboard-api-1",
+      "log api is unhealthy; restarting goliveboard-api-1",
+      "docker restart goliveboard-api-1",
     ]);
   });
 
@@ -103,7 +103,7 @@ describe("watchdog.sh", { timeout: 30_000 }, () => {
     const { run, root } = setUp();
     for (let attempt = 0; attempt < 3; attempt++) {
       expect(run({ UNHEALTHY: "web" })).toContain(
-        "docker restart opspilot-web-1",
+        "docker restart goliveboard-web-1",
       );
     }
 
@@ -118,7 +118,7 @@ describe("watchdog.sh", { timeout: 30_000 }, () => {
       `${hourAgo}\n${hourAgo}\n${hourAgo}\n`,
     );
     expect(run({ UNHEALTHY: "web" })).toContain(
-      "docker restart opspilot-web-1",
+      "docker restart goliveboard-web-1",
     );
   });
 

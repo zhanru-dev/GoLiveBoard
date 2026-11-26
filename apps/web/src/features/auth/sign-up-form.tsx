@@ -1,7 +1,7 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { PASSWORD_MIN_LENGTH, SignUpRequest } from "@opspilot/contracts";
+import { PASSWORD_MIN_LENGTH, SignUpRequest } from "@goliveboard/contracts";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";

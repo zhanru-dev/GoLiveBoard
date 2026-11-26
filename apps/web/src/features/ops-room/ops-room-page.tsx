@@ -1,6 +1,6 @@
 "use client";
 
-import type { LiveOps, LiveOpsMoment } from "@opspilot/contracts";
+import type { LiveOps, LiveOpsMoment } from "@goliveboard/contracts";
 import Link from "next/link";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";

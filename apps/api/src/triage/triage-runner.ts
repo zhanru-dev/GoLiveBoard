@@ -46,7 +46,7 @@ export class TriageRunner {
 
   /** Runs a queued run once; a run already taken is left alone. */
   run(runId: string): Promise<void> {
-    return inSpan("triage.run", { "opspilot.triage.run_id": runId }, () =>
+    return inSpan("triage.run", { "goliveboard.triage.run_id": runId }, () =>
       this.runOnce(runId),
     );
   }
@@ -90,7 +90,7 @@ export class TriageRunner {
       );
       return;
     }
-    describeSpan({ "opspilot.triage.question_count": questions.length });
+    describeSpan({ "goliveboard.triage.question_count": questions.length });
     const prompt = promptFor(questions);
     const started = performance.now();
     const signal = AbortSignal.timeout(TRIAGE_TIMEOUT_MS);

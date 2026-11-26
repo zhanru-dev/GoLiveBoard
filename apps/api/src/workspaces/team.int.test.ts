@@ -5,7 +5,7 @@ import {
   Member,
   ProblemDetails,
   Workspace,
-} from "@opspilot/contracts";
+} from "@goliveboard/contracts";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { z } from "zod";
 

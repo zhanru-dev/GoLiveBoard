@@ -93,7 +93,7 @@ describe("the shared Valkey client while Valkey is frozen", () => {
         { timeout: 10_000, interval: 100 },
       );
       expect(await burst("after")).toBeLessThan(COMMAND_TIMEOUT_MS);
-      expect(await client.get("opspilot:rate:frozen-test:after")).toBe("3");
+      expect(await client.get("goliveboard:rate:frozen-test:after")).toBe("3");
     },
   );
 });

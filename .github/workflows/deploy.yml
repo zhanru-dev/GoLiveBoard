@@ -100,8 +100,8 @@ jobs:
           SHA: ${{ steps.commit.outputs.sha }}
         run: |
           for target in api web; do
-            image="$REGISTRY/opspilot-$target:$SHA"
-            if aws ecr describe-images --repository-name "opspilot-$target" \
+            image="$REGISTRY/goliveboard-$target:$SHA"
+            if aws ecr describe-images --repository-name "goliveboard-$target" \
                  --image-ids imageTag="$SHA" >/dev/null 2>&1; then
               echo "$image is already in ECR"
               continue

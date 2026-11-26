@@ -1,4 +1,4 @@
-import type { ChatEvent } from "@opspilot/contracts";
+import type { ChatEvent } from "@goliveboard/contracts";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { CHAT_BATCH_MS, Fanout, type RoomEmitter } from "./fanout.js";

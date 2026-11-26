@@ -16,7 +16,7 @@ import {
   SignInRequest,
   SignUpRequest,
   SwitchWorkspaceRequest,
-} from "@opspilot/contracts";
+} from "@goliveboard/contracts";
 import type { Request, Response } from "express";
 
 import { type Actor, CurrentActor, Public } from "./actor.js";

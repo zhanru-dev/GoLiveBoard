@@ -1,4 +1,4 @@
-import type { EventReport } from "@opspilot/contracts";
+import type { EventReport } from "@goliveboard/contracts";
 import { describe, expect, it } from "vitest";
 
 import { reportCsv } from "./report-csv.js";

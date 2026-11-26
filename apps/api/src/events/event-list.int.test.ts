@@ -1,5 +1,5 @@
 import type { NestExpressApplication } from "@nestjs/platform-express";
-import { EventDetail, EventPage, ProblemDetails } from "@opspilot/contracts";
+import { EventDetail, EventPage, ProblemDetails } from "@goliveboard/contracts";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { ApiClient, type TestSession } from "../testing/api-client.js";

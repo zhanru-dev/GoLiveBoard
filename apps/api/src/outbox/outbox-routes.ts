@@ -3,7 +3,7 @@ import {
   TriageRequestedPayload,
   OutboxMessageType,
   StreamCheckRequestedPayload,
-} from "@opspilot/contracts";
+} from "@goliveboard/contracts";
 
 import type { JobRequest } from "../queues/job-publisher.js";
 import {

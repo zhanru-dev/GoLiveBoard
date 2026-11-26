@@ -1,8 +1,8 @@
 {
-  "name": "@opspilot/api",
+  "name": "@goliveboard/api",
   "version": "0.0.0",
   "private": true,
-  "description": "OpsPilot HTTP API (NestJS).",
+  "description": "GoLiveBoard HTTP API (NestJS).",
   "type": "module",
   "scripts": {
     "postinstall": "prisma generate",
@@ -16,7 +16,7 @@
     "db:deploy": "prisma migrate deploy",
     "db:seed": "node --env-file-if-exists=../../.env --enable-source-maps dist/demo/seed.js",
     "db:reset": "prisma migrate reset",
-    "eval:record": "npm run build -w @opspilot/contracts && nest build && node --env-file-if-exists=../../.env --enable-source-maps dist/triage/eval/record.js && prettier --write src/triage/eval/recordings"
+    "eval:record": "npm run build -w @goliveboard/contracts && nest build && node --env-file-if-exists=../../.env --enable-source-maps dist/triage/eval/record.js && prettier --write src/triage/eval/recordings"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "1.8.0",
@@ -45,7 +45,7 @@
     "@opentelemetry/sdk-node": "0.301.1",
     "@opentelemetry/sdk-trace": "3.1.1",
     "@opentelemetry/semantic-conventions": "1.45.0",
-    "@opspilot/contracts": "0.0.0",
+    "@goliveboard/contracts": "0.0.0",
     "@prisma/adapter-pg": "^7.10.1",
     "@prisma/client": "^7.10.1",
     "@sentry/node": "^11.12.0",

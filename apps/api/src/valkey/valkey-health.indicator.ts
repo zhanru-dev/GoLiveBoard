@@ -19,7 +19,7 @@ export class ValkeyHealthIndicator implements HealthIndicator {
     const client = new Redis(this.config.valkey.url, {
       lazyConnect: true,
       // Shown by CLIENT LIST, so an operator can tell who is connected.
-      connectionName: "opspilot-api-health",
+      connectionName: "goliveboard-api-health",
       // Fail at once instead of retrying or queueing: the next check retries.
       retryStrategy: () => null,
       enableOfflineQueue: false,

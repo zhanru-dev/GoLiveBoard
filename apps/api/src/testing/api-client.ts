@@ -1,5 +1,5 @@
 import type { NestExpressApplication } from "@nestjs/platform-express";
-import { Me } from "@opspilot/contracts";
+import { Me } from "@goliveboard/contracts";
 import request from "supertest";
 
 import { ACCESS_COOKIE, REFRESH_COOKIE } from "../auth/cookies.js";

@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 
 import type { NestExpressApplication } from "@nestjs/platform-express";
-import { ChannelJoined, ChatEvent, Member } from "@opspilot/contracts";
+import { ChannelJoined, ChatEvent, Member } from "@goliveboard/contracts";
 import { Redis } from "ioredis";
 import request from "supertest";
 import { afterAll, beforeAll, describe, expect, inject, it } from "vitest";

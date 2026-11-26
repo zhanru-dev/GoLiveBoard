@@ -7,7 +7,7 @@ import {
   type LiveOpsMoment,
   type LiveOpsRates,
   type LiveOpsStreamStatus,
-} from "@opspilot/contracts";
+} from "@goliveboard/contracts";
 import { z } from "zod";
 
 import type { Actor } from "../auth/actor.js";

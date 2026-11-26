@@ -1,6 +1,6 @@
 "use client";
 
-import { EventPage } from "@opspilot/contracts";
+import { EventPage } from "@goliveboard/contracts";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import Link from "next/link";
 

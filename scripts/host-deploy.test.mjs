@@ -19,7 +19,7 @@ import { describe, expect, it } from "vitest";
 /**
  * infra/deploy/host-deploy.sh.tftpl, the script SSM runs on the AWS host
  * (docs/06, section 4), rendered as Terraform renders it, against fakes of
- * `aws`, `docker` and `curl`, in a directory standing in for /opt/opspilot.
+ * `aws`, `docker` and `curl`, in a directory standing in for /opt/goliveboard.
  */
 const TEMPLATE = fileURLToPath(
   new URL("../infra/deploy/host-deploy.sh.tftpl", import.meta.url),
@@ -30,11 +30,11 @@ const PREVIOUS = "d".repeat(40);
 /** As Terraform's templatefile: ${name} filled in, $${ left as ${. */
 function render() {
   const values = {
-    document_name: "opspilot-test-deploy",
-    releases_bucket: "opspilot-test-releases",
+    document_name: "goliveboard-test-deploy",
+    releases_bucket: "goliveboard-test-releases",
     region: "eu-west-2",
     registry: "123456789012.dkr.ecr.eu-west-2.amazonaws.com",
-    parameter_path: "/opspilot/test",
+    parameter_path: "/goliveboard/test",
   };
   return readFileSync(TEMPLATE, "utf8")
     .replace(/(?<!\$)\$\{([a-z_]+)\}/g, (_, name) => {
@@ -52,8 +52,8 @@ case "$1 $2" in
   # The last two arguments are the source and the destination.
   "s3 cp") src="\${@: -2:1}"; dest="\${@: -1}"; printf 'release file from %s\\n' "$src" > "$dest" ;;
   "ssm get-parameters-by-path")
-    printf '/opspilot/test/DATABASE_URL\\tpostgres://opspilot:pw@db:5432/opspilot\\n'
-    printf '/opspilot/test/JWT_SECRET\\tnot-a-real-secret\\n'
+    printf '/goliveboard/test/DATABASE_URL\\tpostgres://goliveboard:pw@db:5432/goliveboard\\n'
+    printf '/goliveboard/test/JWT_SECRET\\tnot-a-real-secret\\n'
     ;;
   "ecr get-login-password") sleep 1; echo "password" ;;
 esac
@@ -110,7 +110,7 @@ function host(action, env = {}, { running } = {}) {
     timeout: 20_000,
     env: {
       PATH: `${bin}:${process.env.PATH ?? ""}`,
-      OPSPILOT_ROOT: root,
+      GOLIVEBOARD_ROOT: root,
       FAKE_LOG: log,
       ACTION: action,
       SHA,
@@ -136,7 +136,7 @@ describe("host-deploy.sh", { timeout: 30_000 }, () => {
     const envFile = join(run.root, "releases", SHA, ".env");
     expect(readFileSync(envFile, "utf8")).toBe(
       [
-        "DATABASE_URL=postgres://opspilot:pw@db:5432/opspilot",
+        "DATABASE_URL=postgres://goliveboard:pw@db:5432/goliveboard",
         "JWT_SECRET=not-a-real-secret",
         `SENTRY_RELEASE=${SHA}`,
         "",
@@ -150,13 +150,15 @@ describe("host-deploy.sh", { timeout: 30_000 }, () => {
         "utf8",
       ),
     ).toBe(
-      `release file from s3://opspilot-test-releases/${SHA}/docker-compose.yml\n`,
+      `release file from s3://goliveboard-test-releases/${SHA}/docker-compose.yml\n`,
     );
     expect(
       readFileSync(join(run.root, "releases", SHA, "Caddyfile"), "utf8"),
-    ).toBe(`release file from s3://opspilot-test-releases/${SHA}/Caddyfile\n`);
+    ).toBe(
+      `release file from s3://goliveboard-test-releases/${SHA}/Caddyfile\n`,
+    );
     expect(run.calls).toContain(
-      "aws ssm get-parameters-by-path --region eu-west-2 --path /opspilot/test --recursive --with-decryption --query Parameters[].[Name,Value] --output text",
+      "aws ssm get-parameters-by-path --region eu-west-2 --path /goliveboard/test --recursive --with-decryption --query Parameters[].[Name,Value] --output text",
     );
   });
 
@@ -174,7 +176,7 @@ describe("host-deploy.sh", { timeout: 30_000 }, () => {
     expect(run.calls).toContainEqual(
       expect.stringMatching(
         new RegExp(
-          `^docker compose up -d --wait .*API_IMAGE=.*/opspilot-api:${SHA}$`,
+          `^docker compose up -d --wait .*API_IMAGE=.*/goliveboard-api:${SHA}$`,
         ),
       ),
     );
@@ -196,7 +198,7 @@ describe("host-deploy.sh", { timeout: 30_000 }, () => {
     expect(run.calls).toContainEqual(
       expect.stringMatching(
         new RegExp(
-          `^docker compose run --rm migrate API_IMAGE=.*/opspilot-api:${SHA}$`,
+          `^docker compose run --rm migrate API_IMAGE=.*/goliveboard-api:${SHA}$`,
         ),
       ),
     );

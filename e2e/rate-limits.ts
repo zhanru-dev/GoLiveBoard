@@ -24,7 +24,7 @@ export function resetRateLimits(rule = "*"): void {
       "EVAL",
       "for _, key in ipairs(redis.call('KEYS', ARGV[1])) do redis.call('DEL', key) end",
       "0",
-      `opspilot:rate:${rule}`,
+      `goliveboard:rate:${rule}`,
     ],
     { stdio: "ignore" },
   );

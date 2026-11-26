@@ -1,6 +1,6 @@
 "use client";
 
-import { Workspace } from "@opspilot/contracts";
+import { Workspace } from "@goliveboard/contracts";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -38,8 +38,8 @@ export function IntegrationsPage() {
           Integrations
         </h1>
         <p className="text-muted-foreground">
-          OpsPilot sends a signed POST to each endpoint when what it subscribes
-          to happens, and retries for about two hours.
+          GoLiveBoard sends a signed POST to each endpoint when what it
+          subscribes to happens, and retries for about two hours.
         </p>
         {secret === undefined ? null : (
           <SecretNotice

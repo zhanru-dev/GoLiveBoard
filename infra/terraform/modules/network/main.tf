@@ -75,7 +75,7 @@ resource "aws_flow_log" "rejected" {
 resource "aws_cloudwatch_log_group" "flow" {
   # checkov:skip=CKV_AWS_158: CloudWatch's own encryption is enough for rejected-packet metadata.
   # checkov:skip=CKV_AWS_338: a fortnight answers "what was knocking?"; a year costs for nothing.
-  name              = "/opspilot/${var.name}/vpc-flow-rejected"
+  name              = "/goliveboard/${var.name}/vpc-flow-rejected"
   retention_in_days = 14
 }
 

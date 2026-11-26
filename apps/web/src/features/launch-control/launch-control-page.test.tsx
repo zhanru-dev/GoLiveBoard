@@ -1,4 +1,8 @@
-import type { EventDetail, Readiness, RunbookTask } from "@opspilot/contracts";
+import type {
+  EventDetail,
+  Readiness,
+  RunbookTask,
+} from "@goliveboard/contracts";
 import { screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { http, HttpResponse } from "msw";

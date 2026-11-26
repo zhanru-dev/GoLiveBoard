@@ -4,12 +4,12 @@ import { ConfigError, loadConfig } from "./app-config.js";
 
 /** The variables without defaults; everything else is optional. */
 const REQUIRED = {
-  DATABASE_URL: "postgres://opspilot:secret@127.0.0.1:5443/opspilot",
+  DATABASE_URL: "postgres://goliveboard:secret@127.0.0.1:5443/goliveboard",
   VALKEY_URL: "redis://127.0.0.1:6392",
   APP_ORIGIN: "http://localhost:3300/",
   JWT_SECRET: "a".repeat(32),
   SMTP_URL: "smtp://127.0.0.1:1036",
-  MAIL_FROM: "OpsPilot <no-reply@opspilot.test>",
+  MAIL_FROM: "GoLiveBoard <no-reply@goliveboard.test>",
 };
 
 describe("loadConfig", () => {
@@ -17,18 +17,18 @@ describe("loadConfig", () => {
     expect(loadConfig(REQUIRED)).toEqual({
       environment: "development",
       api: { host: "127.0.0.1", port: 4301, trustProxyHops: 0 },
-      realtime: { sweepMs: 30_000, channelPrefix: "opspilot" },
+      realtime: { sweepMs: 30_000, channelPrefix: "goliveboard" },
       webhooks: { encryptionKey: undefined, previousEncryptionKey: undefined },
       log: { level: "info", format: "json" },
       database: { url: REQUIRED.DATABASE_URL },
       valkey: { url: REQUIRED.VALKEY_URL },
-      queues: { prefix: "opspilot" },
+      queues: { prefix: "goliveboard" },
       app: { origin: "http://localhost:3300" },
       auth: { jwtSecret: "a".repeat(32), jwtPreviousSecret: undefined },
       mail: {
         transport: "smtp",
         smtpUrl: REQUIRED.SMTP_URL,
-        from: "OpsPilot <no-reply@opspilot.test>",
+        from: "GoLiveBoard <no-reply@goliveboard.test>",
       },
       demo: { enabled: false },
       triage: {
@@ -47,7 +47,7 @@ describe("loadConfig", () => {
         endpoint: undefined,
         publicEndpoint: undefined,
         region: "eu-west-2",
-        bucket: "opspilot-assets",
+        bucket: "goliveboard-assets",
         credentials: undefined,
         forcePathStyle: false,
         createBucket: false,
@@ -90,14 +90,14 @@ describe("loadConfig", () => {
     const config = loadConfig({
       ...withoutSmtp,
       MAIL_TRANSPORT: "ses",
-      SES_CONFIGURATION_SET: "opspilot-demo",
+      SES_CONFIGURATION_SET: "goliveboard-demo",
     });
 
     expect(config.mail).toEqual({
       transport: "ses",
       from: REQUIRED.MAIL_FROM,
       region: "eu-west-2",
-      configurationSet: "opspilot-demo",
+      configurationSet: "goliveboard-demo",
     });
     expect(() => loadConfig(withoutSmtp)).toThrow(/SMTP_URL/);
   });
@@ -188,7 +188,7 @@ describe("loadConfig", () => {
   });
 
   it.each([
-    ["DATABASE_URL", "mysql://localhost/opspilot"],
+    ["DATABASE_URL", "mysql://localhost/goliveboard"],
     ["DATABASE_URL", "not a url"],
     ["VALKEY_URL", "http://127.0.0.1:6392"],
   ])("rejects %s=%j", (name, value) => {
@@ -201,7 +201,7 @@ describe("loadConfig", () => {
     expect(() =>
       loadConfig({
         ...REQUIRED,
-        DATABASE_URL: "postgresql://user:pw@db.internal:5432/opspilot",
+        DATABASE_URL: "postgresql://user:pw@db.internal:5432/goliveboard",
         VALKEY_URL: "rediss://cache.internal:6379",
       }),
     ).not.toThrow();

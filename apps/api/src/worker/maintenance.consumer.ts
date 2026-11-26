@@ -4,7 +4,7 @@ import {
   type OnApplicationBootstrap,
   type OnApplicationShutdown,
 } from "@nestjs/common";
-import { DemoEventsDeletedPayload } from "@opspilot/contracts";
+import { DemoEventsDeletedPayload } from "@goliveboard/contracts";
 import { type Job, type Queue, Worker } from "bullmq";
 import { InjectPinoLogger, PinoLogger } from "nestjs-pino";
 

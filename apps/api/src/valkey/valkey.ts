@@ -29,7 +29,7 @@ const QUIT_TIMEOUT_MS = 1_000;
  */
 export function createValkeyClient(config: AppConfig): Redis {
   return new Redis(config.valkey.url, {
-    connectionName: "opspilot-api",
+    connectionName: "goliveboard-api",
     enableOfflineQueue: false,
     maxRetriesPerRequest: 1,
     commandTimeout: COMMAND_TIMEOUT_MS,

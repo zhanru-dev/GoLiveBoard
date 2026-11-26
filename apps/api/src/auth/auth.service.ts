@@ -1,5 +1,5 @@
 import { Inject, Injectable } from "@nestjs/common";
-import type { SignInRequest, SignUpRequest } from "@opspilot/contracts";
+import type { SignInRequest, SignUpRequest } from "@goliveboard/contracts";
 import { InjectPinoLogger, PinoLogger } from "nestjs-pino";
 
 import { APP_CONFIG, type AppConfig } from "../config/app-config.js";

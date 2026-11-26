@@ -5,7 +5,7 @@ import {
   HoldingSlate,
   ProblemDetails,
   Readiness,
-} from "@opspilot/contracts";
+} from "@goliveboard/contracts";
 import { afterAll, beforeAll, describe, expect, inject, it } from "vitest";
 
 import { ObjectStorage } from "../storage/object-storage.js";

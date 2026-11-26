@@ -1,4 +1,4 @@
-import type { EventStatus } from "@opspilot/contracts";
+import type { EventStatus } from "@goliveboard/contracts";
 
 /**
  * What a transition needs besides being in the table. Moving to `READY` or

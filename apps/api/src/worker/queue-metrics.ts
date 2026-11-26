@@ -56,8 +56,8 @@ export class QueueMetrics implements OnApplicationShutdown {
           const counts = await queue.getJobCounts(...STATES);
           for (const state of STATES) {
             result.observe(this.jobs, counts[state] ?? 0, {
-              "opspilot.queue": name,
-              "opspilot.queue.state": state,
+              "goliveboard.queue": name,
+              "goliveboard.queue.state": state,
             });
           }
           const [oldest] = await queue.getJobs(["wait"], 0, 0, true);
@@ -66,7 +66,7 @@ export class QueueMetrics implements OnApplicationShutdown {
             oldest === undefined
               ? 0
               : Math.max(0, now - oldest.timestamp) / 1000,
-            { "opspilot.queue": name },
+            { "goliveboard.queue": name },
           );
         } catch (error) {
           // Valkey unreachable: report nothing rather than zeros.

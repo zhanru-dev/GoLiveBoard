@@ -20,7 +20,7 @@ import {
   type WebhookEndpoint,
   type WebhookEndpointCreated,
   type WebhookSecret,
-} from "@opspilot/contracts";
+} from "@goliveboard/contracts";
 import type { Response } from "express";
 
 import { type Actor, CurrentActor, RequireRole } from "../auth/actor.js";

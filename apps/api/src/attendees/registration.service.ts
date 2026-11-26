@@ -1,5 +1,5 @@
 import { Inject, Injectable } from "@nestjs/common";
-import type { PublicEvent, RegistrationRequest } from "@opspilot/contracts";
+import type { PublicEvent, RegistrationRequest } from "@goliveboard/contracts";
 
 import { generateToken, hashToken } from "../auth/tokens.js";
 import { APP_CONFIG, type AppConfig } from "../config/app-config.js";

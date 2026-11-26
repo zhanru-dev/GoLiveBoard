@@ -2,7 +2,7 @@ import type {
   QuestionStatus,
   TriageDecision,
   TriageSuggestions,
-} from "@opspilot/contracts";
+} from "@goliveboard/contracts";
 
 export interface QuestionState {
   readonly id: string;

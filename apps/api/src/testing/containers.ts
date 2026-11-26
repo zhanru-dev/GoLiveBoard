@@ -58,8 +58,8 @@ export async function startRetryingPortBinding<T>(
 
 /** S3 credentials of the test object store; only ever used in tests. */
 export const TEST_S3_CREDENTIALS = {
-  accessKeyId: "opspilot-test",
-  secretAccessKey: "opspilot-test-secret",
+  accessKeyId: "goliveboard-test",
+  secretAccessKey: "goliveboard-test-secret",
 } as const;
 const S3_PORT = 8333;
 
@@ -102,7 +102,7 @@ export function startSeaweedFs(
   const identities = {
     identities: [
       {
-        name: "opspilot-test",
+        name: "goliveboard-test",
         credentials: [
           {
             accessKey: TEST_S3_CREDENTIALS.accessKeyId,
@@ -136,7 +136,7 @@ export function startSeaweedFs(
 }
 
 /** The bucket every integration test file shares; object keys are random. */
-export const TEST_S3_BUCKET = "opspilot-test";
+export const TEST_S3_BUCKET = "goliveboard-test";
 
 /**
  * Creates the shared test bucket and writes one object to it. SeaweedFS

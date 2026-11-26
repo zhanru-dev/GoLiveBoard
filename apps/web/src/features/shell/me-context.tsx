@@ -1,6 +1,6 @@
 "use client";
 
-import type { Me } from "@opspilot/contracts";
+import type { Me } from "@goliveboard/contracts";
 import { createContext, useContext } from "react";
 
 const MeContext = createContext<Me | null>(null);

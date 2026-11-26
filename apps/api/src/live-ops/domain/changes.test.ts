@@ -1,4 +1,4 @@
-import type { Incident } from "@opspilot/contracts";
+import type { Incident } from "@goliveboard/contracts";
 import { describe, expect, it } from "vitest";
 
 import { changesBetween, type Now, toldAfter } from "./changes.js";

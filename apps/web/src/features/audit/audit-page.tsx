@@ -4,7 +4,7 @@ import {
   AuditPage as AuditPageSchema,
   type AuditEntry,
   Member,
-} from "@opspilot/contracts";
+} from "@goliveboard/contracts";
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { useSearchParams } from "next/navigation";
 import { useState } from "react";
@@ -208,7 +208,7 @@ function search(filters: Filters, eventId: string, cursor: string): string {
 function actorName(entry: AuditEntry): string {
   switch (entry.actor.kind) {
     case "SYSTEM":
-      return "OpsPilot";
+      return "GoLiveBoard";
     case "ATTENDEE":
       return "An attendee";
     case "USER":

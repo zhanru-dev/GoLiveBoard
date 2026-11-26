@@ -1,6 +1,6 @@
 "use client";
 
-import { AttendeeVerified } from "@opspilot/contracts";
+import { AttendeeVerified } from "@goliveboard/contracts";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 

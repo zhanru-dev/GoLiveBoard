@@ -3,7 +3,7 @@ import {
   AttendeeVerifiedPayload,
   EventTransitionedPayload,
   type WebhookEventType,
-} from "@opspilot/contracts";
+} from "@goliveboard/contracts";
 
 import { PRISMA } from "../database/prisma.js";
 import type { Prisma, PrismaClient } from "../generated/prisma/client.js";

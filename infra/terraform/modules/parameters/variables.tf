@@ -1,5 +1,5 @@
 variable "path" {
-  description = "Parameter Store path, e.g. /opspilot/demo."
+  description = "Parameter Store path, e.g. /goliveboard/demo."
   type        = string
 }
 
@@ -26,7 +26,7 @@ variable "database_port" {
 variable "database_ca_path" {
   description = "Where the containers find the RDS CA bundle."
   type        = string
-  default     = "/etc/opspilot/rds-ca.pem"
+  default     = "/etc/goliveboard/rds-ca.pem"
 }
 
 variable "assets_bucket" {
@@ -34,7 +34,7 @@ variable "assets_bucket" {
 }
 
 variable "mail_from" {
-  description = "e.g. OpsPilot <no-reply@opspilot.example.com>"
+  description = "e.g. GoLiveBoard <no-reply@goliveboard.example.com>"
   type        = string
 }
 

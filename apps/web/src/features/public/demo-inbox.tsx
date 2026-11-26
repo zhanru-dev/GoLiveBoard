@@ -1,6 +1,6 @@
 "use client";
 
-import { DemoInbox as DemoInboxBody } from "@opspilot/contracts";
+import { DemoInbox as DemoInboxBody } from "@goliveboard/contracts";
 import { useQuery } from "@tanstack/react-query";
 import { Fragment } from "react";
 

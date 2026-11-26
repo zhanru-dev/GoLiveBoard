@@ -1,6 +1,6 @@
 import { EventEmitter } from "node:events";
 
-import type { LiveOps } from "@opspilot/contracts";
+import type { LiveOps } from "@goliveboard/contracts";
 import type { Response } from "express";
 import type { PinoLogger } from "nestjs-pino";
 import { describe, expect, it, vi } from "vitest";

@@ -1,4 +1,4 @@
-import type { AttendeeStatus, EventStatus } from "@opspilot/contracts";
+import type { AttendeeStatus, EventStatus } from "@goliveboard/contracts";
 import { describe, expect, it } from "vitest";
 
 import {

@@ -23,7 +23,7 @@ export default async function Page({ params }: Props) {
   return (
     <>
       <header className="grid gap-1">
-        <p className="text-sm font-medium text-muted-foreground">OpsPilot</p>
+        <p className="text-sm font-medium text-muted-foreground">GoLiveBoard</p>
         <h1 className="text-2xl font-semibold tracking-tight">{info.title}</h1>
       </header>
       <WatchRoom info={info} />

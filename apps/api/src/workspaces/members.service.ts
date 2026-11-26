@@ -1,5 +1,5 @@
 import { Inject, Injectable } from "@nestjs/common";
-import type { Member, Role } from "@opspilot/contracts";
+import type { Member, Role } from "@goliveboard/contracts";
 
 import type { Actor } from "../auth/actor.js";
 import { PRISMA } from "../database/prisma.js";

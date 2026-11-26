@@ -67,7 +67,7 @@ describe("error reporting (Sentry)", () => {
   it("reports an unexpected error once, tagged with its request, and nothing personal", async () => {
     const response = await request(app.getHttpServer())
       .get("/api/v1/test-only/crash?token=one-time-secret")
-      .set("Cookie", "__Host-opspilot_access=session-secret")
+      .set("Cookie", "__Host-goliveboard_access=session-secret")
       .set("Authorization", "Bearer header-secret");
     expect(response.status).toBe(500);
     const requestId = response.headers["x-request-id"];

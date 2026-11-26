@@ -19,7 +19,7 @@ import {
   type RealtimeChannel,
   type RealtimeFailure,
   type SessionRevoked,
-} from "@opspilot/contracts";
+} from "@goliveboard/contracts";
 import { createAdapter } from "@socket.io/redis-adapter";
 import { parseCookie } from "cookie";
 import { Redis } from "ioredis";
@@ -863,7 +863,7 @@ export class RealtimeGateway
   private publisher(): Redis {
     return this.track(
       new Redis(this.config.valkey.url, {
-        connectionName: "opspilot-realtime-pub",
+        connectionName: "goliveboard-realtime-pub",
         enableOfflineQueue: false,
         maxRetriesPerRequest: 1,
       }),
@@ -877,7 +877,7 @@ export class RealtimeGateway
   private subscriber(name: string): Redis {
     return this.track(
       new Redis(this.config.valkey.url, {
-        connectionName: `opspilot-realtime-${name}`,
+        connectionName: `goliveboard-realtime-${name}`,
       }),
     );
   }

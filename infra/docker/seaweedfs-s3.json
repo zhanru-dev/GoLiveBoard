@@ -1,11 +1,11 @@
 {
   "identities": [
     {
-      "name": "opspilot-local",
+      "name": "goliveboard-local",
       "credentials": [
         {
-          "accessKey": "opspilot",
-          "secretKey": "opspilot-local-only"
+          "accessKey": "goliveboard",
+          "secretKey": "goliveboard-local-only"
         }
       ],
       "actions": ["Admin", "Read", "Write", "List", "Tagging"]

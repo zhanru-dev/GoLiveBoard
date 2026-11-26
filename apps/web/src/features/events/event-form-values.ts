@@ -4,7 +4,7 @@ import {
   EventTitle,
   EXPECTED_ATTENDANCE_MAX,
   TimeZone,
-} from "@opspilot/contracts";
+} from "@goliveboard/contracts";
 import { z } from "zod";
 
 import { resolveZonedTime, utcToZoned } from "@/lib/time";

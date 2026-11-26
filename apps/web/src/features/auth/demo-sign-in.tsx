@@ -39,7 +39,7 @@ export function DemoSignIn() {
         Just looking?
       </h2>
       <p className="text-sm text-muted-foreground">
-        Try OpsPilot in a shared demo workspace, no account needed. Anyone
+        Try GoLiveBoard in a shared demo workspace, no account needed. Anyone
         trying the demo sees what you enter, and it is reset every night.
       </p>
       <FormAlert message={error} />

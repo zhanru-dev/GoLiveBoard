@@ -17,14 +17,14 @@
 #   the new containers' health itself and rolls back if it never comes.
 set -euo pipefail
 
-# OPSPILOT_ROOT is for the script's tests only.
-ROOT="${OPSPILOT_ROOT:-/opt/opspilot}"
-PROJECT=opspilot
+# GOLIVEBOARD_ROOT is for the script's tests only.
+ROOT="${GOLIVEBOARD_ROOT:-/opt/goliveboard}"
+PROJECT=goliveboard
 MAX_RESTARTS_PER_HOUR=3
 STATE="$ROOT/watchdog"
 install -d -m 0750 "$STATE"
 
-log() { logger -t opspilot-watchdog "$*"; }
+log() { logger -t goliveboard-watchdog "$*"; }
 
 exec 9>"$ROOT/deploy.lock"
 if ! flock -n 9; then

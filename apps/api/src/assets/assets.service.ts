@@ -9,7 +9,7 @@ import {
   HOLDING_SLATE_MAX_BYTES,
   type HoldingSlate,
   ImageContentType,
-} from "@opspilot/contracts";
+} from "@goliveboard/contracts";
 
 import { recordAudit } from "../audit/audit.js";
 import type { Actor } from "../auth/actor.js";

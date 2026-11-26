@@ -1,4 +1,4 @@
-import type { ErrorCode, FieldError } from "@opspilot/contracts";
+import type { ErrorCode, FieldError } from "@goliveboard/contracts";
 
 export interface DomainErrorOptions {
   /** Explanation for this occurrence, shown to the user. Never include secrets. */

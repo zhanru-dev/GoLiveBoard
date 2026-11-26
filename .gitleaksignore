@@ -11,5 +11,5 @@ cb56b4707b0d7970a856c799422d167aaaf9f423:apps/api/src/attendees/unsubscribe-toke
 5fa8137d2514d34187fae5f273a647409c888b8a:apps/web/src/lib/server-telemetry.test.ts:generic-api-key:72
 # The first version's acceptance evidence: SHA-256 checksums of result
 # files, which the generic-api-key rule takes for keys.
-bf35f83466f291425c1712942e51c10c73cdf198:docs/acceptance/opspilot-topics-remediation-evidence/sha256.json:generic-api-key:2
-26c09341c0aa4a68c65bd59663e227605273c609:docs/acceptance/opspilot-topics-evidence/sha256.json:generic-api-key:2
+bf35f83466f291425c1712942e51c10c73cdf198:docs/acceptance/goliveboard-topics-remediation-evidence/sha256.json:generic-api-key:2
+26c09341c0aa4a68c65bd59663e227605273c609:docs/acceptance/goliveboard-topics-evidence/sha256.json:generic-api-key:2

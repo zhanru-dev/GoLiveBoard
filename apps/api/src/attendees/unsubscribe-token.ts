@@ -7,7 +7,7 @@ import { createHmac, timingSafeEqual } from "node:crypto";
  * email can produce it. The key is derived from the server secret with a
  * purpose label, so it signs nothing else.
  */
-const PURPOSE = "opspilot:reminder-unsubscribe:";
+const PURPOSE = "goliveboard:reminder-unsubscribe:";
 
 /**
  * Between the ID and the MAC. A UUID never contains it, so the first one

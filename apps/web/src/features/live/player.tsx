@@ -1,6 +1,6 @@
 "use client";
 
-import type { PublicEventStatus, WatchInfo } from "@opspilot/contracts";
+import type { PublicEventStatus, WatchInfo } from "@goliveboard/contracts";
 import { useEffect, useRef, useState } from "react";
 
 const HLS_TYPE = "application/vnd.apple.mpegurl";

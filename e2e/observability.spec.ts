@@ -40,21 +40,21 @@ test.describe("observability (NFR-7, docs/06 section 7)", () => {
 
   test("Grafana has the overview dashboard and the seven alert rules", async () => {
     const dashboards = (await (
-      await fetch(`${GRAFANA}/api/search?query=OpsPilot%20overview`)
+      await fetch(`${GRAFANA}/api/search?query=GoLiveBoard%20overview`)
     ).json()) as { uid: string }[];
     const rules = (await (
       await fetch(`${GRAFANA}/api/v1/provisioning/alert-rules`)
     ).json()) as { uid: string }[];
 
-    expect(dashboards.map(({ uid }) => uid)).toContain("opspilot-overview");
+    expect(dashboards.map(({ uid }) => uid)).toContain("goliveboard-overview");
     expect(rules.map(({ uid }) => uid).sort()).toEqual([
-      "opspilot-api-5xx",
-      "opspilot-browser-realtime-failing",
-      "opspilot-public-page-slow",
-      "opspilot-queue-age",
-      "opspilot-readiness",
-      "opspilot-webhook-endpoint-failing",
-      "opspilot-worker-silent",
+      "goliveboard-api-5xx",
+      "goliveboard-browser-realtime-failing",
+      "goliveboard-public-page-slow",
+      "goliveboard-queue-age",
+      "goliveboard-readiness",
+      "goliveboard-webhook-endpoint-failing",
+      "goliveboard-worker-silent",
     ]);
   });
 
@@ -91,7 +91,7 @@ test.describe("observability (NFR-7, docs/06 section 7)", () => {
       .toEqual(["ok", "ok", "ok", "ok", "ok", "ok", "ok"]);
 
     const dashboard = (await (
-      await fetch(`${GRAFANA}/api/dashboards/uid/opspilot-overview`)
+      await fetch(`${GRAFANA}/api/dashboards/uid/goliveboard-overview`)
     ).json()) as {
       dashboard: { panels: { targets?: { expr: string }[] }[] };
     };
@@ -130,23 +130,23 @@ test.describe("observability (NFR-7, docs/06 section 7)", () => {
     // be crossed, or one on the wrong side, fails here. The real queries are
     // checked above.
     const cases: Record<string, { breach: string; normal: string }> = {
-      "opspilot-api-5xx": { breach: "vector(0.03)", normal: "vector(0.02)" },
-      "opspilot-readiness": { breach: "vector(0)", normal: "vector(1)" },
-      "opspilot-queue-age": { breach: "vector(301)", normal: "vector(300)" },
+      "goliveboard-api-5xx": { breach: "vector(0.03)", normal: "vector(0.02)" },
+      "goliveboard-readiness": { breach: "vector(0)", normal: "vector(1)" },
+      "goliveboard-queue-age": { breach: "vector(301)", normal: "vector(300)" },
       // absent() gives 1 when the worker is silent, nothing otherwise.
-      "opspilot-worker-silent": {
+      "goliveboard-worker-silent": {
         breach: "vector(1)",
         normal: "absent(vector(1))",
       },
-      "opspilot-webhook-endpoint-failing": {
+      "goliveboard-webhook-endpoint-failing": {
         breach: "vector(11)",
         normal: "vector(10)",
       },
-      "opspilot-public-page-slow": {
+      "goliveboard-public-page-slow": {
         breach: "vector(2501)",
         normal: "vector(2500)",
       },
-      "opspilot-browser-realtime-failing": {
+      "goliveboard-browser-realtime-failing": {
         breach: "vector(11)",
         normal: "vector(10)",
       },
@@ -203,7 +203,7 @@ test.describe("observability (NFR-7, docs/06 section 7)", () => {
 
     await expect
       .poll(() => servicesOf(traceId), { timeout: 60_000 })
-      .toContain("opspilot-web");
+      .toContain("goliveboard-web");
   });
 
   test("Worker not reporting watches a metric only the worker sends", async () => {
@@ -212,7 +212,7 @@ test.describe("observability (NFR-7, docs/06 section 7)", () => {
     test.setTimeout(90_000);
     const rule = (await (
       await fetch(
-        `${GRAFANA}/api/v1/provisioning/alert-rules/opspilot-worker-silent`,
+        `${GRAFANA}/api/v1/provisioning/alert-rules/goliveboard-worker-silent`,
       )
     ).json()) as { data: { model: { expr?: string } }[] };
     const expr = rule.data.find(({ model }) => model.expr)?.model.expr ?? "";
@@ -233,7 +233,7 @@ test.describe("observability (NFR-7, docs/06 section 7)", () => {
         },
         { timeout: 60_000 },
       )
-      .toEqual(["opspilot-worker"]);
+      .toEqual(["goliveboard-worker"]);
   });
 
   test("the API's log lines reach Loki, in their trace and without personal data", async ({
@@ -255,7 +255,7 @@ test.describe("observability (NFR-7, docs/06 section 7)", () => {
 
     // The line is the message; the rest of the record (trace_id, request
     // fields) is structured metadata, filtered with "|".
-    const query = `{service_name="opspilot-api"} | trace_id="${traceId}"`;
+    const query = `{service_name="goliveboard-api"} | trace_id="${traceId}"`;
     const lines = async () => {
       const url = new URL(
         `${GRAFANA}/api/datasources/proxy/uid/loki/loki/api/v1/query_range`,
@@ -287,7 +287,7 @@ test.describe("observability (NFR-7, docs/06 section 7)", () => {
     request,
   }) => {
     test.setTimeout(120_000);
-    const query = `sum(opspilot_web_vital_duration_milliseconds_count{opspilot_web_vital="LCP",opspilot_web_route="/e/:slug"})`;
+    const query = `sum(goliveboard_web_vital_duration_milliseconds_count{goliveboard_web_vital="LCP",goliveboard_web_route="/e/:slug"})`;
     const count = async () => {
       const body = (await (
         await fetch(
@@ -354,6 +354,6 @@ test.describe("observability (NFR-7, docs/06 section 7)", () => {
 
     await expect
       .poll(() => servicesOf(traceId ?? ""), { timeout: 60_000 })
-      .toEqual(["opspilot-api", "opspilot-worker"]);
+      .toEqual(["goliveboard-api", "goliveboard-worker"]);
   });
 });

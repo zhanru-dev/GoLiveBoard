@@ -9,7 +9,7 @@ import {
   type QuestionsEvent,
   TriageRun,
   TriageRunStarted,
-} from "@opspilot/contracts";
+} from "@goliveboard/contracts";
 import { afterAll, beforeAll, describe, expect, inject, it } from "vitest";
 
 import { ATTENDEE_COOKIE } from "../attendees/attendee-cookies.js";
@@ -593,8 +593,8 @@ describe("AI question triage (FR-RN-6, ADR-0012)", { timeout: 60_000 }, () => {
 
       const span = captured.spans().find(({ name }) => name === "triage.run");
       expect(span?.attributes).toEqual({
-        "opspilot.triage.run_id": run.id,
-        "opspilot.triage.question_count": 2,
+        "goliveboard.triage.run_id": run.id,
+        "goliveboard.triage.question_count": 2,
       });
     } finally {
       await captured.stop();

@@ -1,4 +1,4 @@
-import type { EventStatus } from "@opspilot/contracts";
+import type { EventStatus } from "@goliveboard/contracts";
 
 /**
  * When an event's chat and Q&A take new messages, questions and votes: from

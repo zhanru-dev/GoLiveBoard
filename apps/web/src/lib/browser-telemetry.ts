@@ -4,7 +4,7 @@ import type {
   BrowserRealtimeFailure,
   BrowserRoute,
   BrowserTelemetryRequest,
-} from "@opspilot/contracts";
+} from "@goliveboard/contracts";
 
 /*
  * Measurements from real visits (docs/06, section 7): Core Web Vitals, at

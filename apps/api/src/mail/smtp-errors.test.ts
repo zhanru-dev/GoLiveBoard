@@ -64,7 +64,7 @@ describe("mail delivery errors (NFR-2)", () => {
   it("keeps the recipient out of what a refused message throws", async () => {
     const mailer = new SmtpMailer({
       smtpUrl: `smtp://127.0.0.1:${String(port)}`,
-      from: "OpsPilot <no-reply@opspilot.example>",
+      from: "GoLiveBoard <no-reply@goliveboard.example>",
     });
 
     const error: unknown = await mailer

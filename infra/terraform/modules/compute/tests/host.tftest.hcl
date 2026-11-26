@@ -11,15 +11,15 @@ mock_provider "aws" {
 }
 
 variables {
-  name                 = "opspilot-test"
+  name                 = "goliveboard-test"
   vpc_id               = "vpc-0123456789abcdef0"
   subnet_id            = "subnet-0123456789abcdef0"
-  repository_arns      = ["arn:aws:ecr:eu-west-2:123456789012:repository/opspilot-api"]
-  parameter_path       = "/opspilot/test"
+  repository_arns      = ["arn:aws:ecr:eu-west-2:123456789012:repository/goliveboard-api"]
+  parameter_path       = "/goliveboard/test"
   assets_bucket_arn    = "arn:aws:s3:::assets"
   releases_bucket_arn  = "arn:aws:s3:::releases"
   ses_arns             = ["arn:aws:ses:eu-west-2:123456789012:identity/example.com"]
-  deploy_document_name = "opspilot-test-deploy"
+  deploy_document_name = "goliveboard-test-deploy"
 }
 
 run "the_host_requires_imdsv2_and_containers_cannot_reach_its_credentials" {
@@ -58,8 +58,8 @@ run "the_host_reads_only_its_own_configuration" {
     condition = toset(one([
       for s in jsondecode(aws_iam_role_policy.host.policy).Statement : s.Resource if s.Sid == "ReadConfiguration"
       ])) == toset([
-      "arn:aws:ssm:eu-west-2:123456789012:parameter/opspilot/test",
-      "arn:aws:ssm:eu-west-2:123456789012:parameter/opspilot/test/*",
+      "arn:aws:ssm:eu-west-2:123456789012:parameter/goliveboard/test",
+      "arn:aws:ssm:eu-west-2:123456789012:parameter/goliveboard/test/*",
     ])
     error_message = "The host may read its own parameter path only."
   }
@@ -79,7 +79,7 @@ run "the_host_installs_the_watchdog_and_runs_it_every_30_seconds" {
     error_message = "The first boot must install watchdog.sh as it is."
   }
   assert {
-    condition     = strcontains(aws_instance.host.user_data, "OnUnitActiveSec=30s") && strcontains(aws_instance.host.user_data, "systemctl enable --now opspilot-watchdog.timer")
+    condition     = strcontains(aws_instance.host.user_data, "OnUnitActiveSec=30s") && strcontains(aws_instance.host.user_data, "systemctl enable --now goliveboard-watchdog.timer")
     error_message = "The watchdog's timer must be enabled, every 30 seconds."
   }
 }

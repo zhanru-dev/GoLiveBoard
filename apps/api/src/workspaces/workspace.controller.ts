@@ -19,7 +19,7 @@ import {
   UpdateMemberRequest,
   UpdateWorkspaceRequest,
   type Workspace,
-} from "@opspilot/contracts";
+} from "@goliveboard/contracts";
 
 import {
   type Actor,

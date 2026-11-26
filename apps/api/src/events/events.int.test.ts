@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 
 import type { NestExpressApplication } from "@nestjs/platform-express";
-import { EventDetail, ProblemDetails } from "@opspilot/contracts";
+import { EventDetail, ProblemDetails } from "@goliveboard/contracts";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import {

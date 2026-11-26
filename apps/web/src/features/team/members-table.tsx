@@ -1,6 +1,6 @@
 "use client";
 
-import { Member, type Role } from "@opspilot/contracts";
+import { Member, type Role } from "@goliveboard/contracts";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { z } from "zod";

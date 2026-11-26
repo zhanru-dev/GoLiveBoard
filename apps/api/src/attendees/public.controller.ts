@@ -18,7 +18,7 @@ import {
   type PublicEvent,
   RegistrationRequest,
   UnsubscribeRequest,
-} from "@opspilot/contracts";
+} from "@goliveboard/contracts";
 import type { Request, Response } from "express";
 
 import { Public } from "../auth/actor.js";

@@ -150,7 +150,7 @@ test("keeps a new session in secure, HTTP-only cookies", async ({
   ).toEqual(
     expect.arrayContaining([
       {
-        name: "__Host-opspilot_access",
+        name: "__Host-goliveboard_access",
         path: "/",
         secure: true,
         httpOnly: true,
@@ -158,7 +158,7 @@ test("keeps a new session in secure, HTTP-only cookies", async ({
         domain: site.hostname,
       },
       {
-        name: "__Secure-opspilot_refresh",
+        name: "__Secure-goliveboard_refresh",
         path: "/api/v1/auth",
         secure: true,
         httpOnly: true,

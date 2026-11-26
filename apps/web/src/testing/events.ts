@@ -1,4 +1,4 @@
-import type { EventDetail, Readiness } from "@opspilot/contracts";
+import type { EventDetail, Readiness } from "@goliveboard/contracts";
 
 import { OWNER } from "./render";
 

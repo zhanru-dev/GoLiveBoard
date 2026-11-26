@@ -1,4 +1,4 @@
-import type { ImageContentType } from "@opspilot/contracts";
+import type { ImageContentType } from "@goliveboard/contracts";
 
 /** How many leading bytes detectImageType needs. */
 export const SIGNATURE_BYTES = 12;

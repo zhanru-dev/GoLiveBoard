@@ -37,7 +37,7 @@ export async function postPublic(
       body: body === undefined ? undefined : JSON.stringify(body),
     });
   } catch {
-    return failure(0, "Could not reach OpsPilot. Check your connection.");
+    return failure(0, "Could not reach GoLiveBoard. Check your connection.");
   }
   if (response.ok) {
     return { ok: true };
@@ -120,7 +120,7 @@ export async function requestPublic<T>(
     return {
       ok: false,
       status: 0,
-      message: "Could not reach OpsPilot. Check your connection.",
+      message: "Could not reach GoLiveBoard. Check your connection.",
     };
   }
   const body: unknown = await response.json().catch(() => null);

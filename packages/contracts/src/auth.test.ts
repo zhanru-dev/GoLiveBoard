@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { Email, Password, SignInRequest, SignUpRequest } from "./auth.js";
 
 describe("Email", () => {
-  it.each(["manager@demo.opspilot.invalid", "someone@EXAMPLE.INVALID"])(
+  it.each(["manager@demo.goliveboard.invalid", "someone@EXAMPLE.INVALID"])(
     "refuses %j, an address that can never receive email",
     (email) => {
       expect(Email.safeParse(email).success).toBe(false);

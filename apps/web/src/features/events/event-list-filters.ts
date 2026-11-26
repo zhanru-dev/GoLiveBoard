@@ -1,4 +1,4 @@
-import type { EventStatus } from "@opspilot/contracts";
+import type { EventStatus } from "@goliveboard/contracts";
 
 /** The list's search and filters (FR-EV-3). */
 export interface EventListFilters {

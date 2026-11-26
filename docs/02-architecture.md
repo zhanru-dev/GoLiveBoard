@@ -2,7 +2,7 @@
 
 ## 1. Overview
 
-OpsPilot is a **modular monolith**: one TypeScript codebase for the backend, deployed as two processes (an HTTP/real-time API and a background worker), plus a Next.js web application. A reverse proxy serves everything from **one origin**, so the browser never makes cross-origin requests and cookies stay simple.
+GoLiveBoard is a **modular monolith**: one TypeScript codebase for the backend, deployed as two processes (an HTTP/real-time API and a background worker), plus a Next.js web application. A reverse proxy serves everything from **one origin**, so the browser never makes cross-origin requests and cookies stay simple.
 
 The design favours a small number of well-understood moving parts. Each one is there because a requirement needs it; the reasons are recorded in the [ADRs](adr/README.md).
 
@@ -12,7 +12,7 @@ The design favours a small number of well-understood moving parts. Each one is t
 flowchart LR
   staff["Staff<br/>(Owner, Manager, Analyst)"]
   attendee["Attendee"]
-  ops["OpsPilot"]
+  ops["GoLiveBoard"]
   stream["Customer's streaming provider<br/>(HLS playback URL)"]
   mail["Email service<br/>(Amazon SES; Mailpit locally)"]
   ai["AI model provider"]
@@ -29,7 +29,7 @@ flowchart LR
   ops -->|"errors, traces, logs"| obs
 ```
 
-Attendees' browsers fetch video **directly from the customer's provider**. OpsPilot never carries video traffic; it only checks that the stream is reachable ([ADR-0009](adr/0009-stream-provider-integration.md)).
+Attendees' browsers fetch video **directly from the customer's provider**. GoLiveBoard never carries video traffic; it only checks that the stream is reachable ([ADR-0009](adr/0009-stream-provider-integration.md)).
 
 ## 3. Containers
 
@@ -91,7 +91,7 @@ flowchart TB
 | Queues         | **BullMQ 6** on **Valkey 9**                                                       | Retries, backoff, delayed and repeatable jobs; Valkey is the open-source Redis fork that Amazon ElastiCache offers.                                                                                     |
 | Real-time      | **Socket.IO** for chat and Q&A; **server-sent events** for the operations room     | Two-way messaging where needed, simple one-way streaming where not ([ADR-0008](adr/0008-realtime-transports.md)).                                                                                       |
 | Video          | **hls.js** in the watch page                                                       | Plays the customer's HLS stream in every supported browser.                                                                                                                                             |
-| AI             | **Anthropic SDK 1.4** behind OpsPilot's `TriageModel` interface                    | Structured output validated by Zod; another provider is another implementation of the interface ([ADR-0012](adr/0012-ai-question-triage.md)).                                                           |
+| AI             | **Anthropic SDK 1.4** behind GoLiveBoard's `TriageModel` interface                 | Structured output validated by Zod; another provider is another implementation of the interface ([ADR-0012](adr/0012-ai-question-triage.md)).                                                           |
 | Email          | **Nodemailer** → Amazon SES; **Mailpit** locally                                   | Standard SMTP locally, managed sending in production.                                                                                                                                                   |
 | Object storage | **Amazon S3**; **SeaweedFS** locally                                               | MinIO's community edition is archived; SeaweedFS is an Apache-licensed S3-compatible replacement for local use.                                                                                         |
 | Testing        | **Vitest 5**, Testing Library, **Playwright**, axe-core                            | One unit-test runner for every workspace; browser tests for the golden flow and accessibility.                                                                                                          |
@@ -108,7 +108,7 @@ flowchart TB
 ## 5. Repository layout
 
 ```text
-opspilot/
+goliveboard/
 ├── apps/
 │   ├── web/                 Next.js application
 │   └── api/                 NestJS: src/main.ts (api), src/worker.ts (worker), prisma/ (schema, migrations)

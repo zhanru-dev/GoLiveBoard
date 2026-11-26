@@ -3,7 +3,7 @@ import type {
   ChatEvent,
   QuestionsEvent,
   RealtimeChannel,
-} from "@opspilot/contracts";
+} from "@goliveboard/contracts";
 
 import { channelRoom } from "./rooms.js";
 

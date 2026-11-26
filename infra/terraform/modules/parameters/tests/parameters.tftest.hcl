@@ -10,15 +10,15 @@ override_resource {
 }
 
 variables {
-  path                  = "/opspilot/test"
+  path                  = "/goliveboard/test"
   environment           = "test"
   region                = "eu-west-2"
-  site_origin           = "https://opspilot.example.com"
+  site_origin           = "https://goliveboard.example.com"
   database_address      = "db.example.internal"
   database_port         = 5432
   assets_bucket         = "assets"
-  mail_from             = "OpsPilot <no-reply@opspilot.example.com>"
-  ses_configuration_set = "opspilot-test"
+  mail_from             = "GoLiveBoard <no-reply@goliveboard.example.com>"
+  ses_configuration_set = "goliveboard-test"
 }
 
 run "every_secret_is_a_securestring" {

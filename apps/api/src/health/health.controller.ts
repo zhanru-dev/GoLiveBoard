@@ -1,5 +1,5 @@
 import { Controller, Get, Header, HttpStatus, Res } from "@nestjs/common";
-import type { HealthReport, LivenessReport } from "@opspilot/contracts";
+import type { HealthReport, LivenessReport } from "@goliveboard/contracts";
 import type { Response } from "express";
 
 import { Public } from "../auth/actor.js";

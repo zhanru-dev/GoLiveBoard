@@ -1,6 +1,6 @@
 import { Body, Controller, Get, Post, Res } from "@nestjs/common";
 import type { NestExpressApplication } from "@nestjs/platform-express";
-import { ProblemDetails } from "@opspilot/contracts";
+import { ProblemDetails } from "@goliveboard/contracts";
 import type { Response } from "express";
 import request from "supertest";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -35,7 +35,7 @@ class TestOnlyController {
 
   @Get("crash")
   crash(): never {
-    throw new Error("password authentication failed for user opspilot");
+    throw new Error("password authentication failed for user goliveboard");
   }
 
   /** Fails after part of the response has been sent, as a stream can. */

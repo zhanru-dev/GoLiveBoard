@@ -1,4 +1,4 @@
-import type { ChatMessage } from "@opspilot/contracts";
+import type { ChatMessage } from "@goliveboard/contracts";
 
 import type { Prisma } from "../generated/prisma/client.js";
 

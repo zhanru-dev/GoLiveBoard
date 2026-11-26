@@ -17,27 +17,27 @@ echo "${compose_sha256}  /usr/local/lib/docker/cli-plugins/docker-compose" | sha
 chmod 0755 /usr/local/lib/docker/cli-plugins/docker-compose
 
 # Where releases live: one directory per commit, and "current".
-install -d -m 0750 /opt/opspilot /opt/opspilot/releases
+install -d -m 0750 /opt/goliveboard /opt/goliveboard/releases
 
 # The watchdog (watchdog.sh, beside this file): restarts a container that hangs,
 # every 30 seconds. Docker itself restarts only one that exits.
-cat > /usr/local/sbin/opspilot-watchdog <<'WATCHDOG'
+cat > /usr/local/sbin/goliveboard-watchdog <<'WATCHDOG'
 ${watchdog_script}
 WATCHDOG
-chmod 0750 /usr/local/sbin/opspilot-watchdog
-cat > /etc/systemd/system/opspilot-watchdog.service <<'UNIT'
+chmod 0750 /usr/local/sbin/goliveboard-watchdog
+cat > /etc/systemd/system/goliveboard-watchdog.service <<'UNIT'
 [Unit]
-Description=Restart OpsPilot containers that hang
+Description=Restart GoLiveBoard containers that hang
 After=docker.service
 Requires=docker.service
 
 [Service]
 Type=oneshot
-ExecStart=/usr/local/sbin/opspilot-watchdog
+ExecStart=/usr/local/sbin/goliveboard-watchdog
 UNIT
-cat > /etc/systemd/system/opspilot-watchdog.timer <<'UNIT'
+cat > /etc/systemd/system/goliveboard-watchdog.timer <<'UNIT'
 [Unit]
-Description=Run the OpsPilot watchdog every 30 seconds
+Description=Run the GoLiveBoard watchdog every 30 seconds
 
 [Timer]
 OnBootSec=2min
@@ -48,4 +48,4 @@ AccuracySec=5s
 WantedBy=timers.target
 UNIT
 systemctl daemon-reload
-systemctl enable --now opspilot-watchdog.timer
+systemctl enable --now goliveboard-watchdog.timer

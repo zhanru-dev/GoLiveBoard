@@ -1,5 +1,8 @@
 import { Inject, Injectable } from "@nestjs/common";
-import type { AccessPolicy, PutAccessPolicyRequest } from "@opspilot/contracts";
+import type {
+  AccessPolicy,
+  PutAccessPolicyRequest,
+} from "@goliveboard/contracts";
 
 import { recordAudit } from "../audit/audit.js";
 import type { Actor } from "../auth/actor.js";

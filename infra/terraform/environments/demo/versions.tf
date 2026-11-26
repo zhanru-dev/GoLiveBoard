@@ -24,6 +24,6 @@ terraform {
 provider "aws" {
   region = var.region
   default_tags {
-    tags = { Project = "opspilot", Environment = var.environment, ManagedBy = "terraform" }
+    tags = { Project = "goliveboard", Environment = var.environment, ManagedBy = "terraform" }
   }
 }

@@ -1,7 +1,7 @@
 import { randomBytes } from "node:crypto";
 
 import type { NestExpressApplication } from "@nestjs/platform-express";
-import { AuditPage, ProblemDetails } from "@opspilot/contracts";
+import { AuditPage, ProblemDetails } from "@goliveboard/contracts";
 import { afterAll, beforeAll, describe, expect, inject, it } from "vitest";
 
 import { openEvent, PublicClient, registration } from "../testing/admission.js";

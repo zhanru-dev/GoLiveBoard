@@ -3,7 +3,7 @@ import {
   type RealtimeFailure,
   type WatchInfo,
   WatchHeartbeat,
-} from "@opspilot/contracts";
+} from "@goliveboard/contracts";
 
 import { AssetsService } from "../assets/assets.service.js";
 import { publicStatusOf } from "../attendees/domain/admission.js";

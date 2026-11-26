@@ -4,7 +4,7 @@ import type {
   AttendeePage,
   AttendeeQuery,
   StaffAttendee,
-} from "@opspilot/contracts";
+} from "@goliveboard/contracts";
 import { InjectPinoLogger, PinoLogger } from "nestjs-pino";
 import { z } from "zod";
 

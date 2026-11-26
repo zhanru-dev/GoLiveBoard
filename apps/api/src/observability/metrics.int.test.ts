@@ -111,11 +111,11 @@ describe("application metrics", { timeout: 60_000 }, () => {
       );
 
       const waiting = await valueOf(captured, METRICS.queueJobs, {
-        "opspilot.queue": MAINTENANCE_QUEUE,
-        "opspilot.queue.state": "wait",
+        "goliveboard.queue": MAINTENANCE_QUEUE,
+        "goliveboard.queue.state": "wait",
       });
       const oldest = await valueOf(captured, METRICS.queueOldestJobAge, {
-        "opspilot.queue": MAINTENANCE_QUEUE,
+        "goliveboard.queue": MAINTENANCE_QUEUE,
       });
       const outbox = await valueOf(captured, METRICS.outboxOldestMessageAge);
 

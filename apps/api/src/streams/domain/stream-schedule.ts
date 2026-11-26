@@ -1,4 +1,4 @@
-import type { EventStatus } from "@opspilot/contracts";
+import type { EventStatus } from "@goliveboard/contracts";
 
 /** FR-ST-2: the manifest is fetched every 30 seconds… */
 export const STREAM_CHECK_INTERVAL_MS = 30_000;

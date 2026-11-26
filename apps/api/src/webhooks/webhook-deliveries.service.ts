@@ -3,7 +3,7 @@ import type {
   WebhookDelivery,
   WebhookDeliveryPage,
   WebhookDeliveryQuery,
-} from "@opspilot/contracts";
+} from "@goliveboard/contracts";
 import { z } from "zod";
 
 import { recordAudit } from "../audit/audit.js";

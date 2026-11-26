@@ -155,7 +155,7 @@ export const RATE_LIMITS = {
   },
 } satisfies Record<string, RateLimitRule>;
 
-const KEY_PREFIX = "opspilot:rate";
+const KEY_PREFIX = "goliveboard:rate";
 
 /** Decrements a counter only if it still exists and is above zero. */
 const REFUND_SCRIPT = `

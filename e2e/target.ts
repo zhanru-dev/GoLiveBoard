@@ -5,7 +5,7 @@
  *   (`npm run start`), behind the development proxy on http://localhost:3300,
  *   with the services from docker-compose.yml.
  * - `stack`: the production images in docker-compose.prod.yml, over HTTPS on
- *   https://opspilot.localhost:3443. This is what CI tests and what ships.
+ *   https://goliveboard.localhost:3443. This is what CI tests and what ships.
  * - `deployed`: a deployed environment at `DEPLOYED_URL`; only the smoke
  *   tests in e2e/deployed.spec.ts run there (the deploy pipeline's check
  *   before it keeps a release, docs/06 section 4).
@@ -33,7 +33,7 @@ const TARGETS = {
   // The stack's ports can be moved with the same variables as its compose
   // file, so two stacks (one under review, say) can run side by side.
   stack: {
-    baseURL: `https://opspilot.localhost:${process.env.STACK_HTTPS_PORT ?? "3443"}`,
+    baseURL: `https://goliveboard.localhost:${process.env.STACK_HTTPS_PORT ?? "3443"}`,
     mailpitURL: `http://127.0.0.1:${process.env.STACK_MAILPIT_UI_PORT ?? "8037"}`,
     composeFile: "docker-compose.prod.yml",
   },

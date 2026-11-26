@@ -7,7 +7,7 @@ import type {
   WebhookEndpoint,
   WebhookEndpointCreated,
   WebhookSecret,
-} from "@opspilot/contracts";
+} from "@goliveboard/contracts";
 
 import { recordAudit } from "../audit/audit.js";
 import { auditableUrl } from "../audit/redact.js";

@@ -4,7 +4,7 @@ import {
   type TriageRequestedPayload,
   type TriageRun,
   TriageSuggestions,
-} from "@opspilot/contracts";
+} from "@goliveboard/contracts";
 
 import { recordAudit } from "../audit/audit.js";
 import { APP_CONFIG, type AppConfig } from "../config/app-config.js";

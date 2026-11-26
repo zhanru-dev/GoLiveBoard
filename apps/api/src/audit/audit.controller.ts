@@ -1,5 +1,5 @@
 import { Controller, Get, Query } from "@nestjs/common";
-import { type AuditPage, AuditQuery } from "@opspilot/contracts";
+import { type AuditPage, AuditQuery } from "@goliveboard/contracts";
 
 import { type Actor, CurrentActor } from "../auth/actor.js";
 import { AuditSearchService } from "./audit-search.service.js";

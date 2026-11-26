@@ -1,6 +1,6 @@
 "use client";
 
-import { EventDetail, Member } from "@opspilot/contracts";
+import { EventDetail, Member } from "@goliveboard/contracts";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { z } from "zod";

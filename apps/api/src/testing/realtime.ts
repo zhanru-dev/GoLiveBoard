@@ -9,7 +9,7 @@ import {
   type QuestionsEvent,
   REALTIME_PATH,
   type SessionRevoked,
-} from "@opspilot/contracts";
+} from "@goliveboard/contracts";
 import { io, type Socket } from "socket.io-client";
 
 import { TEST_ORIGIN } from "./config.js";

@@ -10,7 +10,7 @@ import {
   WebhookEndpointCreated,
   WebhookSecret,
   Workspace,
-} from "@opspilot/contracts";
+} from "@goliveboard/contracts";
 import { z } from "zod";
 import { afterAll, beforeAll, describe, expect, inject, it } from "vitest";
 

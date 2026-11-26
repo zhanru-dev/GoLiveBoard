@@ -4,7 +4,7 @@ import {
   type OnApplicationBootstrap,
   type OnApplicationShutdown,
 } from "@nestjs/common";
-import { CheckStreamJob } from "@opspilot/contracts";
+import { CheckStreamJob } from "@goliveboard/contracts";
 import { type Job, type Queue, Worker } from "bullmq";
 import { InjectPinoLogger, PinoLogger } from "nestjs-pino";
 

@@ -9,7 +9,7 @@ variable "environment" {
 }
 
 variable "site_domain" {
-  description = "The site's name, e.g. opspilot.example.com. Mail is sent from it too."
+  description = "The site's name, e.g. goliveboard.example.com. Mail is sent from it too."
   type        = string
 }
 
@@ -25,7 +25,7 @@ variable "create_zone" {
 }
 
 variable "bucket_prefix" {
-  description = "Prefix for the S3 buckets, which are named globally, e.g. opspilot-demo-<something of your own>."
+  description = "Prefix for the S3 buckets, which are named globally, e.g. goliveboard-demo-<something of your own>."
   type        = string
 }
 

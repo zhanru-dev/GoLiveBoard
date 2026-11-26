@@ -1,7 +1,7 @@
 mock_provider "aws" {}
 
 variables {
-  name                     = "opspilot-test"
+  name                     = "goliveboard-test"
   vpc_id                   = "vpc-0123456789abcdef0"
   subnet_ids               = ["subnet-0aaaaaaaaaaaaaaa0", "subnet-0bbbbbbbbbbbbbbb0"]
   client_security_group_id = "sg-0123456789abcdef0"

@@ -15,7 +15,7 @@ import {
   AttendeeQuery,
   CreateAttendeeInvitationRequest,
   type StaffAttendee,
-} from "@opspilot/contracts";
+} from "@goliveboard/contracts";
 
 import { type Actor, CurrentActor, RequireRole } from "../auth/actor.js";
 import { AudienceService } from "./audience.service.js";

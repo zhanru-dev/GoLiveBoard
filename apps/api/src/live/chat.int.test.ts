@@ -6,7 +6,7 @@ import {
   ChatPage,
   type ChatSendAck,
   ProblemDetails,
-} from "@opspilot/contracts";
+} from "@goliveboard/contracts";
 import request from "supertest";
 import { afterAll, beforeAll, describe, expect, inject, it } from "vitest";
 

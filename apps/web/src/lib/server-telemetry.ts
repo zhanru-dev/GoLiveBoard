@@ -125,7 +125,7 @@ export function serverSdkOptions(
 ): Partial<NodeSDKConfiguration> {
   return {
     resource: resourceFromAttributes({
-      [ATTR_SERVICE_NAME]: env.OTEL_SERVICE_NAME ?? "opspilot-web",
+      [ATTR_SERVICE_NAME]: env.OTEL_SERVICE_NAME ?? "goliveboard-web",
       [ATTR_SERVICE_VERSION]: env.SENTRY_RELEASE ?? "development",
       "deployment.environment.name":
         env.SENTRY_ENVIRONMENT ?? env.NODE_ENV ?? "development",

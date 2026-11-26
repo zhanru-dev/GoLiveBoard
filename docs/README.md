@@ -1,6 +1,6 @@
 # Development documentation
 
-These documents define what OpsPilot is, how it is built and how it is delivered. They are the contract for the implementation: when the code and a document disagree, one of them is wrong, and the fix goes in the same pull request.
+These documents define what GoLiveBoard is, how it is built and how it is delivered. They are the contract for the implementation: when the code and a document disagree, one of them is wrong, and the fix goes in the same pull request.
 
 ## Reading order
 

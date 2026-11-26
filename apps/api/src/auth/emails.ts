@@ -8,11 +8,11 @@ export function welcomeEmail(
 ): MailMessage {
   return {
     to,
-    subject: "Welcome to OpsPilot",
+    subject: "Welcome to GoLiveBoard",
     text: [
       `Hi ${name},`,
       "",
-      "Your OpsPilot workspace is ready. Sign in to prepare your first event:",
+      "Your GoLiveBoard workspace is ready. Sign in to prepare your first event:",
       `${appOrigin}/sign-in`,
     ].join("\n"),
   };
@@ -26,9 +26,9 @@ export function welcomeEmail(
 export function accountExistsEmail(to: string, appOrigin: string): MailMessage {
   return {
     to,
-    subject: "You already have an OpsPilot account",
+    subject: "You already have an GoLiveBoard account",
     text: [
-      "Someone, probably you, tried to sign up to OpsPilot with this email address.",
+      "Someone, probably you, tried to sign up to GoLiveBoard with this email address.",
       "You already have an account. Sign in here:",
       `${appOrigin}/sign-in`,
       "",
@@ -53,7 +53,7 @@ export function passwordResetEmail(
 ): MailMessage {
   return {
     to,
-    subject: "Reset your OpsPilot password",
+    subject: "Reset your GoLiveBoard password",
     text: [
       "Use this link to choose a new password. It works once, within 30 minutes:",
       linkWithToken(appOrigin, "/reset-password", token),
@@ -74,7 +74,7 @@ export function invitationEmail(input: {
 }): MailMessage {
   return {
     to: input.to,
-    subject: `${input.inviterName} invited you to ${input.workspaceName} on OpsPilot`,
+    subject: `${input.inviterName} invited you to ${input.workspaceName} on GoLiveBoard`,
     text: [
       `${input.inviterName} invited you to join ${input.workspaceName} as ${input.role.toLowerCase()}.`,
       "Accept within 7 days:",

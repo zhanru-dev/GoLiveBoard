@@ -8,7 +8,7 @@ import {
   Question,
   QuestionList,
   type QuestionStatus,
-} from "@opspilot/contracts";
+} from "@goliveboard/contracts";
 import { useMutation } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";

@@ -25,12 +25,12 @@
    # The network and settings come from the damaged instance: a restore
    # does not copy them, and without them RDS uses the default VPC's subnets
    # and security group, which the EC2 host cannot reach (docs/06, section 5).
-   aws rds describe-db-instances --db-instance-identifier opspilot-demo \
+   aws rds describe-db-instances --db-instance-identifier goliveboard-demo \
      --query 'DBInstances[0].[DBSubnetGroup.DBSubnetGroupName, VpcSecurityGroups[].VpcSecurityGroupId, DBParameterGroups[0].DBParameterGroupName, DBInstanceClass]'
 
    aws rds restore-db-instance-to-point-in-time \
-     --source-db-instance-identifier opspilot-demo \
-     --target-db-instance-identifier opspilot-demo-restored \
+     --source-db-instance-identifier goliveboard-demo \
+     --target-db-instance-identifier goliveboard-demo-restored \
      --restore-time <target time, UTC, e.g. 2026-11-19T01:37:10Z> \
      --db-subnet-group-name <from above> \
      --vpc-security-group-ids <from above> \
@@ -38,7 +38,7 @@
      --db-instance-class <from above> \
      --no-publicly-accessible \
      --copy-tags-to-snapshot
-   aws rds wait db-instance-available --db-instance-identifier opspilot-demo-restored
+   aws rds wait db-instance-available --db-instance-identifier goliveboard-demo-restored
    ```
    This makes a **new** instance; the damaged one stays as it was, for comparison. Terraform does not know the new instance: milestone 10's version of this runbook adds the step that brings it under Terraform (an import, or renaming it to the original identifier once the damaged one is kept as a snapshot).
 2. **Check the new instance** (see Verification).

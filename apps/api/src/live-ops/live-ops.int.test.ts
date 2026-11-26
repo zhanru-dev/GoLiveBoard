@@ -9,7 +9,7 @@ import {
   LiveOpsStreamStatus,
   Member,
   ProblemDetails,
-} from "@opspilot/contracts";
+} from "@goliveboard/contracts";
 import { afterAll, beforeAll, describe, expect, inject, it } from "vitest";
 import { z } from "zod";
 

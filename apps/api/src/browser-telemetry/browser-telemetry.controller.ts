@@ -1,4 +1,4 @@
-import { BrowserTelemetryRequest } from "@opspilot/contracts";
+import { BrowserTelemetryRequest } from "@goliveboard/contracts";
 import { Body, Controller, HttpCode, Post, Req } from "@nestjs/common";
 import type { Request } from "express";
 

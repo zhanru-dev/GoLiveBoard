@@ -31,14 +31,14 @@ describe("telemetrySettings", () => {
   it("is off without an endpoint, and names each process", () => {
     expect(telemetrySettings({}, "api")).toEqual({
       endpoint: undefined,
-      serviceName: "opspilot-api",
+      serviceName: "goliveboard-api",
       release: "development",
       environment: "development",
       metricIntervalMs: 15_000,
     });
     expect(
       telemetrySettings({ OTEL_EXPORTER_OTLP_ENDPOINT: " " }, "worker"),
-    ).toMatchObject({ endpoint: undefined, serviceName: "opspilot-worker" });
+    ).toMatchObject({ endpoint: undefined, serviceName: "goliveboard-worker" });
   });
 
   it("tags spans with the release and environment Sentry uses", () => {
@@ -53,7 +53,7 @@ describe("telemetrySettings", () => {
       ),
     ).toEqual({
       endpoint: "http://collector:4318",
-      serviceName: "opspilot-api",
+      serviceName: "goliveboard-api",
       release: "abc123",
       environment: "demo",
       metricIntervalMs: 15_000,

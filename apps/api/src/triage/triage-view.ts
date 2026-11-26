@@ -1,4 +1,4 @@
-import { TriageSuggestions, type TriageRun } from "@opspilot/contracts";
+import { TriageSuggestions, type TriageRun } from "@goliveboard/contracts";
 
 import type { Prisma } from "../generated/prisma/client.js";
 

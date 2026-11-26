@@ -4,7 +4,7 @@ import {
   AttendeePage,
   ProblemDetails,
   StaffAttendee,
-} from "@opspilot/contracts";
+} from "@goliveboard/contracts";
 import { afterAll, beforeAll, describe, expect, inject, it } from "vitest";
 
 import { openEvent, PublicClient, registration } from "../testing/admission.js";

@@ -67,7 +67,7 @@ export function telemetrySettings(
   }
   return {
     endpoint: endpoint === "" ? undefined : endpoint,
-    serviceName: env.OTEL_SERVICE_NAME ?? `opspilot-${process}`,
+    serviceName: env.OTEL_SERVICE_NAME ?? `goliveboard-${process}`,
     release: env.SENTRY_RELEASE ?? "development",
     environment: env.SENTRY_ENVIRONMENT ?? env.NODE_ENV ?? "development",
     metricIntervalMs: metricInterval(env.OTEL_METRIC_EXPORT_INTERVAL),

@@ -13,7 +13,7 @@ Reviewed on 19 November 2026 against **OWASP ASVS 5.0, level 2**, for the areas 
 
 **Out of scope:**
 
-- **V10 OAuth and OIDC:** OpsPilot is not an OAuth client or server.
+- **V10 OAuth and OIDC:** GoLiveBoard is not an OAuth client or server.
 - **V17 WebRTC:** there is none.
 - **The AWS deployment:** TLS termination at the load balancer, IAM, Parameter Store and network policy arrive in milestone 10 and are reviewed then.
 
@@ -26,7 +26,7 @@ Reviewed on 19 November 2026 against **OWASP ASVS 5.0, level 2**, for the areas 
 | F4  | Low                 | **TRACE answered with a 500.** The active scan's TRACE requests to pages crashed into Next.js's error path: a 500, an error report, and a 5xx for the error-rate alert to count. Nothing was reflected (no cross-site tracing)                                                                                                              | The proxy refuses TRACE, TRACK and CONNECT with 405 before any application sees them (`infra/docker/Caddyfile.prod`); asserted by `e2e/security.spec.ts`                                                                                  |
 | F3  | Low (documentation) | docs/04, section 7 described a generated OpenAPI document checked in CI. It does not exist yet                                                                                                                                                                                                                                              | docs/04 now says it is planned; the scan crawled the app instead of reading it                                                                                                                                                            |
 | A1  | Accepted            | **CSP `style-src 'unsafe-inline'`** (ZAP 10055)                                                                                                                                                                                                                                                                                             | `script-src` uses per-request nonces, and inline scripts are refused. Inline styles come from Next.js and Radix positioning, so a style nonce would need changes in both. The risk of injected styles (no script) is low                  |
-| A2  | Accepted            | **No Cross-Origin-Embedder-Policy** (ZAP 90004)                                                                                                                                                                                                                                                                                             | `require-corp` would refuse the customer's video stream, served from their own origin without CORP. Nothing in OpsPilot needs cross-origin isolation                                                                                      |
+| A2  | Accepted            | **No Cross-Origin-Embedder-Policy** (ZAP 90004)                                                                                                                                                                                                                                                                                             | `require-corp` would refuse the customer's video stream, served from their own origin without CORP. Nothing in GoLiveBoard needs cross-origin isolation                                                                                   |
 | A3  | Not applicable      | **"Absence of anti-CSRF tokens"** (ZAP 10202) on the forms                                                                                                                                                                                                                                                                                  | Those forms post to their own page, which changes nothing; every change goes through the API, which refuses a state-changing request without a matching `Origin` (`auth/origin.guard.ts`). Session cookies are `SameSite=Lax`             |
 
 ## By chapter
@@ -183,7 +183,7 @@ ZAP 2.17.0 (`zaproxy/zap-stable:2.17.0@sha256:9624669db72f54d86c4b46a7064518bd9b
 
 Two warnings came from the active scan alone:
 
-- "Proxy Disclosure" (40025): TRACE and OPTIONS reveal that a proxy exists, without its name or version. That is how OpsPilot is built.
+- "Proxy Disclosure" (40025): TRACE and OPTIONS reveal that a proxy exists, without its name or version. That is how GoLiveBoard is built.
 - "Timestamp Disclosure" (10096): a server time in a page. Nothing secret.
 
 The informational warnings:

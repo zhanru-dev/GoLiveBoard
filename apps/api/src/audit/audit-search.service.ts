@@ -1,5 +1,5 @@
 import { Inject, Injectable } from "@nestjs/common";
-import type { AuditEntry, AuditPage, AuditQuery } from "@opspilot/contracts";
+import type { AuditEntry, AuditPage, AuditQuery } from "@goliveboard/contracts";
 import { z } from "zod";
 
 import type { Actor } from "../auth/actor.js";

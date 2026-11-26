@@ -1,5 +1,5 @@
 import { Inject, Injectable } from "@nestjs/common";
-import type { UpdateWorkspaceRequest, Workspace } from "@opspilot/contracts";
+import type { UpdateWorkspaceRequest, Workspace } from "@goliveboard/contracts";
 
 import { recordAudit } from "../audit/audit.js";
 import type { Actor } from "../auth/actor.js";

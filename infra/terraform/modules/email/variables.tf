@@ -3,7 +3,7 @@ variable "name" {
 }
 
 variable "domain" {
-  description = "The domain mail is sent from, e.g. opspilot.example.com."
+  description = "The domain mail is sent from, e.g. goliveboard.example.com."
   type        = string
 }
 

@@ -284,7 +284,7 @@ export class ObjectStorage {
         },
       }),
     );
-    const marker = ".opspilot-ready";
+    const marker = ".goliveboard-ready";
     await this.client.send(
       new PutObjectCommand({ Bucket: this.bucket, Key: marker, Body: "" }),
     );
