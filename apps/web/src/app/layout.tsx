@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Geist } from "next/font/google";
+import { Geist, Geist_Mono } from "next/font/google";
 import { connection } from "next/server";
 import type { ReactNode } from "react";
 
@@ -12,6 +12,7 @@ import "./globals.css";
 
 // Self-hosted by Next.js at build time: no request to Google from the browser.
 const geist = Geist({ subsets: ["latin"], variable: "--font-sans" });
+const geistMono = Geist_Mono({ subsets: ["latin"], variable: "--font-mono" });
 
 export const metadata: Metadata = {
   title: { default: "GoLiveBoard", template: "%s · GoLiveBoard" },
@@ -29,7 +30,7 @@ export default async function RootLayout({
   // Read at request time, so one image serves every environment.
   const errorReporting = errorReportingSettings();
   return (
-    <html lang="en-GB" className={geist.variable}>
+    <html lang="en-GB" className={`${geist.variable} ${geistMono.variable}`}>
       <head>
         {errorReporting === null ? null : (
           <meta

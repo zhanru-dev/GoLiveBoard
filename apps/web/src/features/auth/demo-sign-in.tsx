@@ -9,10 +9,10 @@ import { api } from "@/lib/api";
 import { errorMessage } from "@/lib/errors";
 
 /**
- * One-click sign-in to the shared demo workspace (FR-AUTH-5). The sign-in
- * page shows it only when the server runs in demo mode.
+ * Signs in to the shared demo workspace and opens its events (FR-AUTH-5):
+ * for the sign-in page and the home page's buttons.
  */
-export function DemoSignIn() {
+export function useDemoSignIn() {
   const router = useRouter();
   const [error, setError] = useState("");
   const [pending, setPending] = useState(false);
@@ -29,6 +29,16 @@ export function DemoSignIn() {
       setPending(false);
     }
   }
+
+  return { signIn, pending, error };
+}
+
+/**
+ * One-click sign-in to the shared demo workspace (FR-AUTH-5). The sign-in
+ * page shows it only when the server runs in demo mode.
+ */
+export function DemoSignIn() {
+  const { signIn, pending, error } = useDemoSignIn();
 
   return (
     <section
