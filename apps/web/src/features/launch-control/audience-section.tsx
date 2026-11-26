@@ -71,7 +71,11 @@ export function AudienceSection({
   const { role } = useMe().activeWorkspace;
   const isManager = role !== "ANALYST";
   return (
-    <Section id="audience" title="Audience">
+    <Section
+      id="audience"
+      title="Audience"
+      description="Who has registered, and whether they have confirmed their address. Revoke access or erase someone on request."
+    >
       <p className="text-sm text-muted-foreground">
         Public page:{" "}
         <a className="underline" href={`/e/${event.slug}`}>

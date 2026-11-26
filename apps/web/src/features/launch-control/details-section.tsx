@@ -62,7 +62,11 @@ export function DetailsSection({
   };
 
   return (
-    <Section id="details" title="Details">
+    <Section
+      id="details"
+      title="Details"
+      description="The title, times, owner and description attendees see. An owner and a description add points to readiness."
+    >
       <EventForm
         // Saving bumps the version, which resets the form to what is stored.
         key={event.version}

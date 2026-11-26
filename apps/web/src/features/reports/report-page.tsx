@@ -3,6 +3,8 @@
 import { EventReport } from "@goliveboard/contracts";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import Link from "next/link";
+
+import { EventTabs } from "../events/event-tabs";
 import { toast } from "sonner";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -41,12 +43,16 @@ export function ReportPage({ eventId }: Readonly<{ eventId: string }>) {
 
   return (
     <div className="grid gap-8">
-      <Link
-        href={`/events/${eventId}`}
-        className="text-sm text-muted-foreground hover:underline"
-      >
-        ← Launch Control
-      </Link>
+      {report.data === undefined ? (
+        <Link
+          href={`/events/${eventId}`}
+          className="text-sm text-muted-foreground hover:underline"
+        >
+          ← Launch Control
+        </Link>
+      ) : (
+        <EventTabs event={report.data.event} current="report" />
+      )}
       {report.data === undefined ? (
         <h1 className="text-2xl font-semibold tracking-tight">Report</h1>
       ) : null}

@@ -8,6 +8,7 @@ import {
 import { useQuery } from "@tanstack/react-query";
 import { cn } from "cn";
 
+import { Term } from "@/components/term";
 import { api } from "@/lib/api";
 
 import { eventKeys } from "../events/event-keys";
@@ -31,12 +32,9 @@ export const SECTION_IDS: Readonly<Record<ReadinessSection, string>> = {
   DETAILS: "details",
 };
 
-/** FR-LC-2 to FR-LC-4: the score, its evidence and what to do next. */
-export function ReadinessPanel({
-  control,
-  eventId,
-}: Readonly<{ control: LaunchControl; eventId: string }>) {
-  const readiness = useQuery({
+/** The event's readiness, shared by the panel and the header (one request). */
+export function useReadiness(control: LaunchControl, eventId: string) {
+  return useQuery({
     queryKey: eventKeys.readiness(control.workspaceId, eventId),
     queryFn: ({ signal }) =>
       api(`/events/${eventId}/readiness`, {
@@ -46,15 +44,26 @@ export function ReadinessPanel({
       }),
     refetchInterval: LIVE_REFRESH_MS,
   });
+}
+
+/** FR-LC-2 to FR-LC-4: the score, its evidence and what to do next. */
+export function ReadinessPanel({
+  control,
+  eventId,
+}: Readonly<{ control: LaunchControl; eventId: string }>) {
+  const readiness = useReadiness(control, eventId);
 
   return (
     <aside
       aria-labelledby="readiness-heading"
       className="grid gap-4 rounded-2xl border bg-card p-5 sm:p-6 lg:sticky lg:top-6"
     >
-      <h2 id="readiness-heading" className="text-lg font-semibold">
-        Readiness
-      </h2>
+      <div className="flex flex-wrap items-center">
+        <h2 id="readiness-heading" className="text-lg font-semibold">
+          Readiness
+        </h2>
+        <Term term="readiness" label="Readiness" />
+      </div>
       {readiness.isPending ? <p role="status">Assessing readiness…</p> : null}
       {readiness.isError ? (
         <p role="alert">Could not assess readiness.</p>

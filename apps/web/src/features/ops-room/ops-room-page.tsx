@@ -15,6 +15,7 @@ import {
 import { timeInZone } from "@/lib/time";
 
 import { MinuteChart } from "../charts/minute-chart";
+import { EventTabs } from "../events/event-tabs";
 import { EventStatusBadge, STATUS_LABELS } from "../events/event-status";
 import { type Connection, useLiveOps } from "./use-live-ops";
 import { ErrorBoundary } from "@/components/error-boundary";
@@ -34,12 +35,16 @@ export function OpsRoomPage({ eventId }: Readonly<{ eventId: string }>) {
     // every component inside it dark.
     <div className="ink grid gap-8 rounded-3xl bg-background p-5 text-foreground sm:p-8">
       <header className="grid gap-2">
-        <Link
-          href={`/events/${eventId}`}
-          className="text-sm text-muted-foreground hover:underline"
-        >
-          ← Launch Control
-        </Link>
+        {room === undefined ? (
+          <Link
+            href={`/events/${eventId}`}
+            className="text-sm text-muted-foreground hover:underline"
+          >
+            ← Launch Control
+          </Link>
+        ) : (
+          <EventTabs event={room.event} current="ops-room" />
+        )}
         <div className="flex flex-wrap items-center gap-3">
           {room?.event.status === "LIVE" ? (
             <span className="flex items-center gap-2 rounded-md bg-live px-2.5 py-1 text-xs font-bold tracking-widest text-live-foreground">
