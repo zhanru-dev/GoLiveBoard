@@ -24,7 +24,10 @@ import { api, ApiError } from "@/lib/api";
 import { errorMessage } from "@/lib/errors";
 import { formatInZone } from "@/lib/time";
 
+import { EventLifecycle } from "../events/event-lifecycle";
 import { EventStatusBadge, transitionLabel } from "../events/event-status";
+import { EventTabs } from "../events/event-tabs";
+import { useReadiness } from "./readiness-panel";
 import type { LaunchControl } from "./use-launch-control";
 
 /** Moves that cannot be undone are confirmed first. */
@@ -52,6 +55,7 @@ export function EventHeader({
   event,
 }: Readonly<{ control: LaunchControl; event: EventDetail }>) {
   const [refusal, setRefusal] = useState<Refusal | undefined>();
+  const readiness = useReadiness(control, event.id);
   const move = useMutation({
     mutationFn: (to: EventStatus) =>
       api(`/events/${event.id}/transitions`, {
@@ -88,19 +92,11 @@ export function EventHeader({
         {formatInZone(event.startsAt, event.timeZone)} –{" "}
         {formatInZone(event.endsAt, event.timeZone)}
       </p>
-      <nav aria-label="Event pages" className="flex flex-wrap gap-4 text-sm">
-        <Link href={`/events/${event.id}/live`} className="underline">
-          Operations room
-        </Link>
-        {event.status === "COMPLETED" || event.status === "ARCHIVED" ? (
-          <Link href={`/events/${event.id}/report`} className="underline">
-            Report
-          </Link>
-        ) : null}
-        <Link href={`/audit?eventId=${event.id}`} className="underline">
-          Audit trail
-        </Link>
-      </nav>
+      <EventTabs event={event} current="launch-control" />
+      <EventLifecycle
+        status={event.status}
+        blockers={readiness.data?.blockers.length}
+      />
       {control.canEdit && event.allowedTransitions.length > 0 ? (
         <div
           className="flex flex-wrap gap-2"

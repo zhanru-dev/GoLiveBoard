@@ -112,7 +112,12 @@ export function HoldingSlateSection({
   }
 
   return (
-    <Section id="holding-slate" title="Holding slate">
+    <Section
+      id="holding-slate"
+      title="Holding slate"
+      term="holdingSlate"
+      description="Without one, the event cannot be marked ready."
+    >
       <p className="text-sm text-muted-foreground">
         Shown to attendees until the event goes live. JPEG, PNG or WebP, up to 5
         MB.

@@ -63,7 +63,11 @@ export function LiveSection({
   event,
 }: Readonly<{ control: LaunchControl; event: EventDetail }>) {
   return (
-    <Section id="live-interaction" title="Chat and Q&A">
+    <Section
+      id="live-interaction"
+      title="Chat and Q&A"
+      description="What attendees say and ask on the watch page. Make questions wait for your approval, answer or hide them, and let AI group duplicates."
+    >
       <PreModeration control={control} event={event} />
       {READABLE.includes(event.status) ? (
         <LiveRoom control={control} event={event} />

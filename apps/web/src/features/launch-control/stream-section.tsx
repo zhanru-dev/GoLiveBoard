@@ -26,7 +26,11 @@ export function StreamSection({
   event,
 }: Readonly<{ control: LaunchControl; event: EventDetail }>) {
   return (
-    <Section id="stream" title="Stream">
+    <Section
+      id="stream"
+      title="Stream"
+      description="The HLS link from your streaming provider. GoLiveBoard checks it every 30 seconds; while it fails, the event cannot go live, and once live a failure opens an incident."
+    >
       {control.canEdit ? (
         <StreamUrlForm key={event.streamUrl} control={control} event={event} />
       ) : (

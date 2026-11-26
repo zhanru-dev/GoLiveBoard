@@ -94,7 +94,12 @@ export function RunbookSection({
   });
 
   return (
-    <Section id="runbook" title="Runbook">
+    <Section
+      id="runbook"
+      title="Runbook"
+      term="runbook"
+      description="The checklist for this event. Mark what must be done before going live as critical: while a critical task is open, the event cannot be marked ready."
+    >
       {tasks.isPending ? <p role="status">Loading the runbook…</p> : null}
       {tasks.isError ? <p role="alert">Could not load the runbook.</p> : null}
       {tasks.isSuccess && tasks.data.length === 0 ? (

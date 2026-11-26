@@ -49,7 +49,12 @@ export function AccessPolicySection({
   });
 
   return (
-    <Section id="access-policy" title="Access policy">
+    <Section
+      id="access-policy"
+      title="Access policy"
+      term="accessPolicy"
+      description="Who may register. Until it is set, nobody can, and the event cannot be marked ready."
+    >
       {policy.isPending ? (
         <p role="status">Loading the access policy…</p>
       ) : null}
