@@ -139,7 +139,10 @@ class Started {
   private readonly exited: Promise<unknown>;
 
   constructor(readonly child: ChildProcess) {
-    this.exited = once(child, "exit");
+    // "close", not "exit": a process can exit before what it wrote last
+    // has been read from its pipes, and a busy CI runner then checked the
+    // output without the stop's final warning.
+    this.exited = once(child, "close");
     const keep = (chunk: Buffer) => {
       this.output += chunk.toString("utf8");
     };

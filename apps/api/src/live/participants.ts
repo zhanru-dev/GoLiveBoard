@@ -132,26 +132,28 @@ export class Participants {
    * Decides whether an identity takes part in an event, and how. Staff of
    * the event's workspace come first: their moderation rights matter more
    * than an attendee session in the same browser.
+   *
+   * @param client a caller's transaction, whose snapshot and locks then
+   * apply; without one, the attendee session is still read from a single
+   * snapshot of its own (AttendeeSessions.byId), never statement by
+   * statement, so a revocation is never seen half done.
    */
   async authorize(
     identity: Identity,
     ref: EventRef,
     requestId: string,
-    client: Prisma.TransactionClient = this.prisma,
+    client?: Prisma.TransactionClient,
   ): Promise<Authorization> {
+    const db = client ?? this.prisma;
     // One after the other: a transaction runs one statement at a time.
-    const event = await client.event.findFirst({
+    const event = await db.event.findFirst({
       where: "slug" in ref ? { slug: ref.slug } : { id: ref.id },
       select: { id: true, workspaceId: true, slug: true, status: true },
     });
     const actor =
       identity.staffSessionId === undefined
         ? undefined
-        : await this.actors.loadSession(
-            identity.staffSessionId,
-            requestId,
-            client,
-          );
+        : await this.actors.loadSession(identity.staffSessionId, requestId, db);
     const check =
       identity.attendeeSessionId === undefined
         ? undefined
