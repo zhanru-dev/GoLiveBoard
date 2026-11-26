@@ -33,6 +33,7 @@ export {
   PersonName,
   Role,
   SignInRequest,
+  SignUpCode,
   SignUpRequest,
 } from "./auth.js";
 export {

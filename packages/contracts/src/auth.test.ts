@@ -48,6 +48,22 @@ describe("SignUpRequest", () => {
       }).success,
     ).toBe(false);
   });
+
+  it("takes an optional invite code, trimmed, and refuses an empty one", () => {
+    const base = {
+      name: "Ada",
+      email: "ada@example.com",
+      password: "correct horse battery",
+    };
+
+    expect(SignUpRequest.parse(base).inviteCode).toBeUndefined();
+    expect(
+      SignUpRequest.parse({ ...base, inviteCode: " abc " }).inviteCode,
+    ).toBe("abc");
+    expect(SignUpRequest.safeParse({ ...base, inviteCode: "  " }).success).toBe(
+      false,
+    );
+  });
 });
 
 describe("SignInRequest", () => {

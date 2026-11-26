@@ -60,6 +60,7 @@ Each step creates billed resources; the demo's budget is set in step 3.
 
 3. **The environment:**
    - Copy `backend.hcl.example` to `backend.hcl` and `terraform.tfvars.example` to `terraform.tfvars`, and fill them in. Both are git-ignored.
+   - Check how the repository's OIDC tokens name it: `gh api repos/OWNER/GoLiveBoard/actions/oidc/customization/sub`. If `use_immutable_subject` is true, set `github_oidc_subject_prefix` to its `sub_claim_prefix`. Without it, the deploy fails with `Not authorized to perform sts:AssumeRoleWithWebIdentity`.
    - Then run:
 
      ```bash
@@ -72,7 +73,8 @@ Each step creates billed resources; the demo's budget is set in step 3.
 4. **By hand, never through Terraform or CI.** Add these values in Parameter Store, under the `parameter_path` output:
    - `ANTHROPIC_API_KEY` (SecureString), if `ai_provider = "anthropic"`;
    - `SENTRY_DSN`;
-   - `OTEL_EXPORTER_OTLP_ENDPOINT`, and `OTEL_EXPORTER_OTLP_HEADERS` (SecureString), for Grafana Cloud.
+   - `OTEL_EXPORTER_OTLP_ENDPOINT`, and `OTEL_EXPORTER_OTLP_HEADERS` (SecureString), for Grafana Cloud;
+   - `SIGN_UP_CODES` (SecureString), to make sign-up by invitation only: digests of invite codes, never the codes ([Issue or withdraw an invite code](../../docs/runbooks/issue-an-invite-code.md)). Without it, anyone can create a workspace.
 5. **GitHub:**
    - Create the environment `demo`, limited to the `main` branch.
    - Set its variables from the outputs:

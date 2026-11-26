@@ -18,6 +18,7 @@ Each runbook has two sections: **locally**, on the production-like stack (`npm r
 | [Stream check reports false outages](stream-false-outages.md)  | Incidents opened while the stream plays                                                                                                                |
 | [Demo reset failed](demo-reset-failed.md)                      | The demo workspace not reset by 06:00; a `demo-reset` error in Sentry                                                                                  |
 | [Cost emergency](cost-emergency.md)                            | A budget alert at 80% or more; a cost anomaly email; the host and database stopped by the cost guard                                                   |
+| [Issue or withdraw an invite code](issue-an-invite-code.md)    | Someone needs their own workspace where sign-up is by invitation; a code should stop working                                                           |
 
 **Where to look:**
 

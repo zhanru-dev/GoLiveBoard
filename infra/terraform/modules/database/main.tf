@@ -26,10 +26,14 @@ resource "aws_db_parameter_group" "this" {
   name   = var.name
   family = "postgres${var.engine_major_version}"
 
-  # Connections without TLS are refused (the URL asks for it too).
+  # Connections without TLS are refused (the URL asks for it too). A static
+  # parameter: RDS records it as pending-reboot, so saying so here keeps
+  # every later plan from showing a change. It is already 1 by default on
+  # PostgreSQL 15 and later, so a new database enforces TLS from the start.
   parameter {
-    name  = "rds.force_ssl"
-    value = "1"
+    name         = "rds.force_ssl"
+    value        = "1"
+    apply_method = "pending-reboot"
   }
   # Statements slower than a second are logged, with their duration.
   parameter {

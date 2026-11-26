@@ -44,6 +44,12 @@ variable "github_repository" {
   type        = string
 }
 
+variable "github_oidc_subject_prefix" {
+  description = "The repository's sub claim prefix when it uses immutable subjects (modules/github-oidc), e.g. repo:owner@123/GoLiveBoard@456."
+  type        = string
+  default     = null
+}
+
 variable "alert_email" {
   description = "Receives budget alerts, DMARC reports and certificate notices."
   type        = string

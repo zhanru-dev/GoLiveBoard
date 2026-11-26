@@ -13,6 +13,8 @@ locals {
   account = data.aws_caller_identity.current.account_id
   region  = data.aws_region.current.region
   issuer  = "token.actions.githubusercontent.com"
+  # What every subject this repository's tokens carry starts with.
+  subject = coalesce(var.subject_prefix, "repo:${var.repository}")
 }
 
 data "aws_iam_policy_document" "deploy_trust" {
@@ -31,7 +33,7 @@ data "aws_iam_policy_document" "deploy_trust" {
     condition {
       test     = "StringEquals"
       variable = "${local.issuer}:sub"
-      values   = ["repo:${var.repository}:environment:${var.deploy_environment}"]
+      values   = ["${local.subject}:environment:${var.deploy_environment}"]
     }
   }
 }
@@ -52,8 +54,8 @@ data "aws_iam_policy_document" "plan_trust" {
       test     = "StringEquals"
       variable = "${local.issuer}:sub"
       values = [
-        "repo:${var.repository}:pull_request",
-        "repo:${var.repository}:ref:refs/heads/main",
+        "${local.subject}:pull_request",
+        "${local.subject}:ref:refs/heads/main",
       ]
     }
   }

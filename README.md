@@ -4,7 +4,7 @@
 
 It answers the question operations teams struggle with most, **"is this event ready to go live?"**, and keeps the event under control while it runs: who is admitted, what the audience asks, whether the stream is healthy, and what happened afterwards.
 
-> **Live demo:** coming with the AWS deployment (milestone 10). Until then, the [production-like stack](#try-it-in-five-minutes) runs the same images on your machine, demo workspace included.
+> **Live demo:** [goliveboard.zhanru.dev](https://goliveboard.zhanru.dev). Choose **Try the demo** on the sign-in page; creating a workspace of your own there needs an invite code. The [production-like stack](#try-it-in-five-minutes) runs the same images on your machine, with open sign-up.
 
 **History.** GoLiveBoard was called OpsPilot until November 2026, so older commits use that name. This is its second version. The first was built in this repository from September to November 2026; the second was then written from a fresh design, milestone by milestone, in a separate repository, and its history merged here (commit `1f86d89`), so both are in `git log`. Its development was AI-assisted (Claude), as the commits' `Co-Authored-By` lines show; each milestone was reviewed independently, with mutation testing, before it was accepted ([docs/07](docs/07-delivery-plan.md)).
 
