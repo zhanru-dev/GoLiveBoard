@@ -15,6 +15,7 @@ export const ErrorCode = z.enum([
   "FORBIDDEN",
   "ORIGIN_FORBIDDEN",
   "DEMO_RESTRICTED",
+  "SIGN_UP_CODE_INVALID",
   "OWNER_REQUIRED",
   "MEMBERSHIP_EXISTS",
   "WORKSPACE_CHANGED",
@@ -80,6 +81,10 @@ export const ERROR_DEFINITIONS = {
   DEMO_RESTRICTED: {
     status: 403,
     title: "This is not available in the demo",
+  },
+  SIGN_UP_CODE_INVALID: {
+    status: 403,
+    title: "That invite code is not valid",
   },
   OWNER_REQUIRED: {
     status: 409,

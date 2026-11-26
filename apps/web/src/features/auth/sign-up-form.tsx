@@ -15,10 +15,14 @@ import { api, ApiError } from "@/lib/api";
 import { applyApiError } from "@/lib/form-errors";
 import { APP_HOME } from "@/lib/safe-next";
 
-export function SignUpForm() {
+export function SignUpForm({
+  codeRequired = false,
+}: Readonly<{ codeRequired?: boolean }>) {
   const router = useRouter();
   const [formError, setFormError] = useState("");
   const [checkEmail, setCheckEmail] = useState(false);
+  // The invite code field, when shown, sends "" until filled in, which the
+  // schema refuses ("Enter your invite code"); hidden, it sends nothing.
   const {
     register,
     handleSubmit,
@@ -31,8 +35,20 @@ export function SignUpForm() {
     try {
       await api("/auth/sign-up", { method: "POST", body: values });
     } catch (error) {
+      if (
+        error instanceof ApiError &&
+        error.problem.code === "SIGN_UP_CODE_INVALID"
+      ) {
+        setError("inviteCode", { message: error.problem.title });
+        return;
+      }
       setFormError(
-        applyApiError(error, setError, ["name", "email", "password"]),
+        applyApiError(error, setError, [
+          "name",
+          "email",
+          "password",
+          "inviteCode",
+        ]),
       );
       return;
     }
@@ -80,6 +96,16 @@ export function SignUpForm() {
       className="grid gap-4"
     >
       <FormAlert message={formError} />
+      {codeRequired ? (
+        <FormField
+          label="Invite code"
+          autoComplete="off"
+          spellCheck={false}
+          hint="Sign-up here is by invitation. Use the code you were given."
+          error={errors.inviteCode?.message}
+          {...register("inviteCode")}
+        />
+      ) : null}
       <FormField
         label="Your name"
         autoComplete="name"

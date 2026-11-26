@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import { digestSignUpCode } from "../auth/sign-up-codes.js";
 import { ConfigError, loadConfig } from "./app-config.js";
 
 /** The variables without defaults; everything else is optional. */
@@ -31,6 +32,7 @@ describe("loadConfig", () => {
         from: "GoLiveBoard <no-reply@goliveboard.test>",
       },
       demo: { enabled: false },
+      signUp: { codes: undefined },
       triage: {
         provider: "none",
         apiKey: undefined,
@@ -178,6 +180,26 @@ describe("loadConfig", () => {
     expect(() => loadConfig({ ...REQUIRED, S3_ACCESS_KEY_ID: "key" })).toThrow(
       /S3_SECRET_ACCESS_KEY/,
     );
+  });
+
+  it("reads invite codes as labelled digests, and treats an empty value as none", () => {
+    const sha256 = digestSignUpCode("a-code");
+
+    expect(
+      loadConfig({
+        ...REQUIRED,
+        SIGN_UP_CODES: `acme:${sha256.toString("hex")}`,
+      }).signUp.codes,
+    ).toEqual([{ label: "acme", sha256 }]);
+    expect(loadConfig({ ...REQUIRED, SIGN_UP_CODES: "" }).signUp.codes).toBe(
+      undefined,
+    );
+  });
+
+  it("refuses invite codes that are not digests, naming the variable", () => {
+    expect(() =>
+      loadConfig({ ...REQUIRED, SIGN_UP_CODES: "acme:a-code" }),
+    ).toThrow(/SIGN_UP_CODES.*label:sha256/s);
   });
 
   it("requires the connection strings", () => {

@@ -17,6 +17,7 @@ Each runbook has two sections: **locally**, on the production-like stack (`npm r
 | [Webhook endpoint failing](webhook-endpoint-failing.md)        | "Webhook endpoint failing"                                                                                                                             |
 | [Stream check reports false outages](stream-false-outages.md)  | Incidents opened while the stream plays                                                                                                                |
 | [Demo reset failed](demo-reset-failed.md)                      | The demo workspace not reset by 06:00; a `demo-reset` error in Sentry                                                                                  |
+| [Issue or withdraw an invite code](issue-an-invite-code.md)    | Someone needs their own workspace where sign-up is by invitation; a code should stop working                                                           |
 
 **Where to look:**
 

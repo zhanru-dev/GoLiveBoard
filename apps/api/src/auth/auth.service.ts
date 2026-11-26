@@ -16,6 +16,7 @@ import { DomainError } from "../shared/domain/domain-error.js";
 import { type AccessTokenKeys, signAccessToken } from "./access-token.js";
 import { REFRESH_TOKEN_TTL_MS, type SessionTokens } from "./cookies.js";
 import { accountExistsEmail, welcomeEmail } from "./emails.js";
+import { matchSignUpCode } from "./sign-up-codes.js";
 import { PasswordHasher } from "./password-hasher.js";
 import { generateToken, hashToken } from "./tokens.js";
 
@@ -66,7 +67,9 @@ export class AuthService {
    * case only sends the owner of the address an email.
    */
   async signUp(input: SignUpRequest, ip: string): Promise<void> {
+    // The limit comes first, so it also caps guesses at invite codes.
     await this.rateLimiter.consumeOrThrow(RATE_LIMITS.signUpPerIp, ip);
+    this.checkSignUpCode(input.inviteCode);
     // Hash first and always, so both outcomes take the same time.
     const passwordHash = await this.passwords.hash(input.password);
     const origin = this.config.app.origin;
@@ -92,6 +95,24 @@ export class AuthService {
       return;
     }
     this.sendInBackground(welcomeEmail(input.email, input.name, origin));
+  }
+
+  /**
+   * When the deployment sets invite codes, sign-up needs one of them. The
+   * label is logged, so it is known who signed up with which code; the code
+   * itself never is.
+   */
+  private checkSignUpCode(code: string | undefined): void {
+    const digests = this.config.signUp.codes;
+    if (digests === undefined) {
+      return;
+    }
+    const label =
+      code === undefined ? undefined : matchSignUpCode(digests, code);
+    if (label === undefined) {
+      throw new DomainError("SIGN_UP_CODE_INVALID");
+    }
+    this.logger.info({ signUpCode: label }, "sign-up with an invite code");
   }
 
   /**

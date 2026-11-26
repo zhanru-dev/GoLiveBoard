@@ -38,10 +38,21 @@ export const Password = z
 
 export const PersonName = z.string().trim().min(1).max(NAME_MAX_LENGTH);
 
+/**
+ * An invite code, which sign-up needs when the deployment sets any (the
+ * public demo does: its own workspaces are by invitation only).
+ */
+export const SignUpCode = z
+  .string()
+  .trim()
+  .min(1, { error: "Enter your invite code" })
+  .max(200);
+
 export const SignUpRequest = z.object({
   name: PersonName,
   email: Email,
   password: Password,
+  inviteCode: SignUpCode.optional(),
 });
 export type SignUpRequest = z.infer<typeof SignUpRequest>;
 
