@@ -98,47 +98,43 @@ export function AppShell({
               <Logo className="size-6.5" />
               GoLiveBoard
             </Link>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                {/* The name includes the visible text (WCAG 2.5.3), so voice
-                  users can say what they see. */}
-                <Button
-                  variant="outline"
-                  className="h-auto max-w-60 justify-start gap-2.5 px-2.5 py-2 text-left lg:max-w-none"
-                  aria-label={`Switch workspace: ${me.activeWorkspace.workspaceName}`}
-                >
-                  <span
-                    aria-hidden="true"
-                    className="flex size-7 shrink-0 items-center justify-center rounded-md bg-accent font-bold text-accent-foreground"
+            <div className="flex flex-col gap-1">
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  {/* The name includes the visible text (WCAG 2.5.3), so voice
+                    users can say what they see: the button shows the
+                    workspace's name and nothing else. */}
+                  <Button
+                    variant="outline"
+                    className="max-w-60 justify-between lg:max-w-none"
+                    aria-label={`Switch workspace: ${me.activeWorkspace.workspaceName}`}
                   >
-                    {me.activeWorkspace.workspaceName.slice(0, 1).toUpperCase()}
-                  </span>
-                  <span className="flex min-w-0 flex-1 flex-col">
                     <span className="truncate">
                       {me.activeWorkspace.workspaceName}
                     </span>
-                    <span className="text-xs font-normal text-subtle-foreground capitalize">
-                      {me.activeWorkspace.role.toLowerCase()}
-                    </span>
-                  </span>
-                  <ChevronsUpDown aria-hidden="true" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="start">
-                <DropdownMenuLabel>Workspaces</DropdownMenuLabel>
-                {me.memberships.map((membership) => (
-                  <DropdownMenuItem
-                    key={membership.workspaceId}
-                    disabled={
-                      membership.workspaceId === me.activeWorkspace.workspaceId
-                    }
-                    onSelect={() => void switchTo(membership.workspaceId)}
-                  >
-                    {membership.workspaceName}
-                  </DropdownMenuItem>
-                ))}
-              </DropdownMenuContent>
-            </DropdownMenu>
+                    <ChevronsUpDown aria-hidden="true" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start">
+                  <DropdownMenuLabel>Workspaces</DropdownMenuLabel>
+                  {me.memberships.map((membership) => (
+                    <DropdownMenuItem
+                      key={membership.workspaceId}
+                      disabled={
+                        membership.workspaceId ===
+                        me.activeWorkspace.workspaceId
+                      }
+                      onSelect={() => void switchTo(membership.workspaceId)}
+                    >
+                      {membership.workspaceName}
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
+              <p className="hidden px-1 text-xs text-subtle-foreground lg:block">
+                Your role: {ROLE_LABELS[me.activeWorkspace.role]}
+              </p>
+            </div>
             <nav
               aria-label="Main"
               className="flex flex-wrap gap-1 text-sm lg:flex-col lg:flex-nowrap lg:gap-0.5"
@@ -220,6 +216,12 @@ export function AppShell({
     </MeProvider>
   );
 }
+
+const ROLE_LABELS: Readonly<Record<Me["activeWorkspace"]["role"], string>> = {
+  OWNER: "Owner",
+  MANAGER: "Manager",
+  ANALYST: "Analyst",
+};
 
 /** Whether a link is for the page shown, or a page below it. */
 export function isCurrent(pathname: string, href: string): boolean {

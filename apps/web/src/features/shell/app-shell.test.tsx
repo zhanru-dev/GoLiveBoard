@@ -63,4 +63,12 @@ describe("AppShell", () => {
     expect(isCurrent("/eventsx", "/events")).toBe(false);
     expect(isCurrent("/settings/integrations", "/settings/team")).toBe(false);
   });
+
+  it("shows only the workspace's name on its switch button, which its accessible name contains (WCAG 2.5.3)", () => {
+    renderScreen(<AppShell me={OWNER}>Page</AppShell>);
+
+    const button = screen.getByRole("button", { name: /^Switch workspace/ });
+    expect(button).toHaveTextContent(/^Ada's workspace$/);
+    expect(button).toHaveAccessibleName("Switch workspace: Ada's workspace");
+  });
 });
