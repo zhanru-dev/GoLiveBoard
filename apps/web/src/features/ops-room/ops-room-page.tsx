@@ -30,7 +30,9 @@ const CONNECTION_TEXT: Record<Connection, string> = {
 export function OpsRoomPage({ eventId }: Readonly<{ eventId: string }>) {
   const { room, connection, retry } = useLiveOps(eventId);
   return (
-    <div className="grid gap-8">
+    // The control room is dark (docs/design/ui-direction.md): `.ink` turns
+    // every component inside it dark.
+    <div className="ink grid gap-8 rounded-3xl bg-background p-5 text-foreground sm:p-8">
       <header className="grid gap-2">
         <Link
           href={`/events/${eventId}`}
@@ -39,6 +41,15 @@ export function OpsRoomPage({ eventId }: Readonly<{ eventId: string }>) {
           ← Launch Control
         </Link>
         <div className="flex flex-wrap items-center gap-3">
+          {room?.event.status === "LIVE" ? (
+            <span className="flex items-center gap-2 rounded-md bg-live px-2.5 py-1 text-xs font-bold tracking-widest text-live-foreground">
+              <span
+                aria-hidden="true"
+                className="size-2 rounded-full bg-live-foreground motion-safe:animate-pulse"
+              />
+              ON AIR
+            </span>
+          ) : null}
           <h1 className="text-2xl font-semibold tracking-tight">
             {room === undefined
               ? "Operations room"
@@ -108,14 +119,20 @@ function Room({ room }: Readonly<{ room: LiveOps }>) {
       <ErrorBoundary what="the figures">
         <section
           aria-label="Figures"
-          className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4"
+          className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4"
         >
           <Tile title="Stream">
             {room.stream === null ? (
               <p>Not checked yet</p>
             ) : (
               <>
-                <p className="text-2xl font-semibold">
+                <p
+                  className={`flex items-center gap-2 text-2xl font-semibold ${room.stream.ok ? "" : "text-danger"}`}
+                >
+                  <span
+                    aria-hidden="true"
+                    className={`size-2.5 rounded-full ${room.stream.ok ? "bg-success" : "bg-live"}`}
+                  />
                   {room.stream.ok ? "Reachable" : "Unreachable"}
                 </p>
                 <p className="text-sm text-muted-foreground">
@@ -128,19 +145,21 @@ function Room({ room }: Readonly<{ room: LiveOps }>) {
             )}
           </Tile>
           <Tile title="Watching now">
-            <p className="text-2xl font-semibold">{room.audience.current}</p>
+            <p className="figures text-3xl font-semibold">
+              {room.audience.current}
+            </p>
             <p className="text-sm text-muted-foreground">
               Peak {room.audience.peak}
             </p>
           </Tile>
           <Tile title="Chat">
-            <p className="text-2xl font-semibold">
+            <p className="figures text-3xl font-semibold">
               {room.rates.messagesPerMinute}
             </p>
             <p className="text-sm text-muted-foreground">messages a minute</p>
           </Tile>
           <Tile title="Questions">
-            <p className="text-2xl font-semibold">
+            <p className="figures text-3xl font-semibold">
               {room.rates.questionsPerMinute}
             </p>
             <p className="text-sm text-muted-foreground">questions a minute</p>
@@ -175,7 +194,10 @@ function Room({ room }: Readonly<{ room: LiveOps }>) {
               {room.timeline.map((moment, index) => (
                 // The timeline only grows at its end.
                 <li key={index}>
-                  <time dateTime={moment.at} className="tabular-nums">
+                  <time
+                    dateTime={moment.at}
+                    className="figures mr-2 text-muted-foreground"
+                  >
                     {timeInZone(moment.at, zone)}
                   </time>{" "}
                   {describe(moment)}

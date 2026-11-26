@@ -13,7 +13,7 @@ export function Section({
     <section
       id={id}
       aria-labelledby={`${id}-heading`}
-      className="grid scroll-mt-6 gap-4 rounded-xl border p-5"
+      className="grid scroll-mt-6 gap-4 rounded-2xl border bg-card p-5 sm:p-6"
     >
       <h2 id={`${id}-heading`} className="text-lg font-semibold">
         {title}

@@ -6,8 +6,8 @@ import {
   type ReadinessSection,
 } from "@goliveboard/contracts";
 import { useQuery } from "@tanstack/react-query";
+import { cn } from "cn";
 
-import { Badge } from "@/components/ui/badge";
 import { api } from "@/lib/api";
 
 import { eventKeys } from "../events/event-keys";
@@ -50,7 +50,7 @@ export function ReadinessPanel({
   return (
     <aside
       aria-labelledby="readiness-heading"
-      className="grid gap-4 rounded-xl border p-5 lg:sticky lg:top-6"
+      className="grid gap-4 rounded-2xl border bg-card p-5 sm:p-6 lg:sticky lg:top-6"
     >
       <h2 id="readiness-heading" className="text-lg font-semibold">
         Readiness
@@ -65,62 +65,111 @@ export function ReadinessPanel({
 }
 
 function Assessment({ readiness }: Readonly<{ readiness: Readiness }>) {
+  const blocked = readiness.blockers.length > 0;
   return (
     <>
-      <p>
-        <span className="text-4xl font-semibold">{readiness.score}</span>
-        <span className="text-muted-foreground"> / 100</span>
+      <p className="flex items-baseline gap-1">
+        <span className="figures text-5xl font-semibold tracking-tight">
+          {readiness.score}
+        </span>
+        <span className="figures text-lg text-subtle-foreground">/100</span>
       </p>
-      <div aria-hidden="true" className="h-2 rounded-full bg-muted">
+      <div
+        aria-hidden="true"
+        className="h-2 overflow-hidden rounded-full bg-secondary"
+      >
         <div
-          className="h-2 rounded-full bg-primary"
+          className={cn(
+            "h-2 rounded-full",
+            blocked ? "bg-primary" : "bg-success",
+          )}
           style={{ width: `${String(readiness.score)}%` }}
         />
       </div>
-      <p className="text-sm">
-        {readiness.blockers.length === 0
-          ? "No hard blockers: the event can be marked ready."
-          : `${String(readiness.blockers.length)} hard ${readiness.blockers.length === 1 ? "blocker" : "blockers"} must be resolved before the event can be marked ready or go live.`}
+      <p
+        className={cn(
+          "text-sm",
+          blocked ? "font-medium text-danger" : "text-success",
+        )}
+      >
+        {blocked
+          ? `${String(readiness.blockers.length)} hard ${readiness.blockers.length === 1 ? "blocker" : "blockers"} must be resolved before the event can be marked ready or go live.`
+          : "No hard blockers: the event can be marked ready."}
       </p>
-      <ul className="grid gap-3" aria-label="Criteria">
-        {readiness.criteria.map((criterion) => (
-          <li key={criterion.criterion} className="grid gap-1 text-sm">
-            <div className="flex items-center gap-2">
-              <span className="font-medium">
-                {CRITERION_LABELS[criterion.criterion]}
-              </span>
-              <span className="text-muted-foreground">
-                {criterion.score}/{criterion.maxScore}
-              </span>
-              {criterion.blocking ? (
-                <Badge variant="destructive">Blocker</Badge>
-              ) : null}
-            </div>
-            <p className="text-muted-foreground">{criterion.evidence}</p>
-          </li>
-        ))}
+      <ul className="grid divide-y" aria-label="Criteria">
+        {readiness.criteria.map((criterion) => {
+          const status = statusOf(criterion);
+          return (
+            <li
+              key={criterion.criterion}
+              className="grid gap-1 py-3 text-sm first:pt-0"
+            >
+              <div className="flex items-center gap-2">
+                <span
+                  className={cn(
+                    "rounded px-1.5 py-0.5 text-xs font-semibold",
+                    STATUS_STYLES[status.tone],
+                  )}
+                >
+                  {status.label}
+                </span>
+                <span className="flex-1 font-medium">
+                  {CRITERION_LABELS[criterion.criterion]}
+                </span>
+                <span className="figures text-muted-foreground">
+                  {criterion.score}/{criterion.maxScore}
+                </span>
+              </div>
+              <p className="text-muted-foreground">{criterion.evidence}</p>
+            </li>
+          );
+        })}
       </ul>
       {readiness.nextActions.length === 0 ? null : (
-        <div className="grid gap-2">
+        <div className="grid gap-2 rounded-xl bg-muted p-4">
           <h3 className="font-medium">Next actions</h3>
-          <ol className="grid list-decimal gap-1 pl-5 text-sm">
+          <ol className="grid list-decimal gap-1.5 pl-5 text-sm">
             {readiness.nextActions.map((action) => (
               <li key={action.criterion}>
                 <a
                   href={`#${SECTION_IDS[action.section]}`}
-                  className="underline-offset-4 hover:underline"
+                  className="font-medium text-primary underline-offset-4 hover:underline"
                 >
                   {action.action}
                 </a>{" "}
-                <span className="text-muted-foreground">(+{action.gain})</span>
+                <span className="figures text-muted-foreground">
+                  (+{action.gain})
+                </span>
               </li>
             ))}
           </ol>
         </div>
       )}
-      <p className="text-xs text-muted-foreground">
+      <p className="text-xs text-subtle-foreground">
         Rule version {readiness.ruleVersion}
       </p>
     </>
   );
+}
+
+type Tone = "blocking" | "passed" | "partial";
+
+const STATUS_STYLES: Readonly<Record<Tone, string>> = {
+  blocking: "bg-danger-soft text-danger",
+  passed: "bg-success-soft text-success",
+  partial: "bg-warning-soft text-warning",
+};
+
+/** A criterion at a glance: a blocker, full marks, or something short of them. */
+export function statusOf(criterion: {
+  blocking: boolean;
+  score: number;
+  maxScore: number;
+}): { tone: Tone; label: string } {
+  if (criterion.blocking) {
+    return { tone: "blocking", label: "Blocker" };
+  }
+  return criterion.score === criterion.maxScore
+    ? { tone: "passed", label: "Passed" }
+    : { tone: "partial", label: "Partial" };
 }

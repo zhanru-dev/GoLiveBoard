@@ -52,6 +52,39 @@
   --radius: 0.625rem;
 }
 
+/*
+ * The dark "control room" surface (the ops room): the same names, so every
+ * component inside `.ink` turns dark without its own dark variants.
+ * tokens.test.ts checks these pairs too.
+ */
+.ink {
+  --background: #0a0f1c;
+  --foreground: #e2e8f0;
+  --card: #111827;
+  --card-foreground: #e2e8f0;
+  --popover: #111827;
+  --popover-foreground: #e2e8f0;
+  --primary: #93b4ff;
+  --primary-foreground: #0a0f1c;
+  --secondary: #1e293b;
+  --secondary-foreground: #e2e8f0;
+  --muted: #111827;
+  --muted-foreground: #94a3b8;
+  --subtle-foreground: #94a3b8;
+  --accent: #1e293b;
+  --accent-foreground: #c7d2fe;
+  --destructive: #fda4af;
+  --border: #1f2a44;
+  --input: #64748b;
+  --ring: #e2e8f0;
+  --success: #4ade80;
+  --success-soft: #052e16;
+  --warning: #fbbf24;
+  --warning-soft: #2a1a05;
+  --danger: #fda4af;
+  --danger-soft: #2a0a12;
+}
+
 @theme inline {
   --font-sans: var(--font-sans);
   --font-heading: var(--font-sans);
