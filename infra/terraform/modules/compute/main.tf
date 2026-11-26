@@ -44,9 +44,11 @@ resource "aws_vpc_security_group_ingress_rule" "http" {
 # Out to anywhere: stream checks and webhooks reach customers' servers, which
 # can be anywhere (their own SSRF checks run in the application), plus ECR,
 # SSM, S3, SES, the database and Anthropic.
+# The description: AWS allows only a-z A-Z 0-9, spaces and ._-:/()#,@[]+=&;{}!$*
+# in it, so no apostrophes.
 resource "aws_vpc_security_group_egress_rule" "all" {
   security_group_id = aws_security_group.this.id
-  description       = "Everything out: customers' streams and webhook receivers can be anywhere"
+  description       = "Everything out: customer streams and webhook receivers can be anywhere"
   cidr_ipv4         = "0.0.0.0/0"
   ip_protocol       = "-1"
 }
