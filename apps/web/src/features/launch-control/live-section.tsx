@@ -8,6 +8,7 @@ import {
   Question,
   QuestionList,
   type QuestionStatus,
+  PollList,
 } from "@goliveboard/contracts";
 import { useMutation } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
@@ -29,6 +30,8 @@ import { api, ApiError, refreshSession } from "@/lib/api";
 
 import { ChatPanel } from "../live/chat-panel";
 import { useChat, useLiveConnection, useQuestions } from "../live/use-live";
+import { usePolls } from "../live/use-polls";
+import { PollsPanel } from "./polls-panel";
 import { Section } from "./section";
 import { TriagePanel } from "./triage-panel";
 import type { LaunchControl } from "./use-launch-control";
@@ -126,7 +129,7 @@ function LiveRoom({
   event,
 }: Readonly<{ control: LaunchControl; event: EventDetail }>) {
   const { workspaceId, canEdit } = control;
-  const { connection, state } = useLiveConnection(event.slug, {
+  const { connection, state, joined } = useLiveConnection(event.slug, {
     refreshSession,
   });
   const sources = useMemo(
@@ -149,6 +152,9 @@ function LiveRoom({
     [event.id, workspaceId],
   );
   const chat = useChat(connection, event.slug, sources.chat);
+  const polls = usePolls(connection, joined, () =>
+    api(`/events/${event.id}/polls`, { schema: PollList, workspaceId }),
+  );
   const qa = useQuestions(connection, sources.questions);
   const [deleting, setDeleting] = useState<ChatMessage>();
 
@@ -202,6 +208,15 @@ function LiveRoom({
           questions={qa.questions}
         />
       ) : null}
+      <PollsPanel
+        eventId={event.id}
+        workspaceId={workspaceId}
+        polls={polls.polls}
+        canEdit={canEdit}
+        open={open}
+        onChange={polls.merge}
+        onDeleted={polls.forget}
+      />
       <div className="grid gap-3">
         <h3 className="font-medium">Questions</h3>
         {qa.questions.length === 0 ? (

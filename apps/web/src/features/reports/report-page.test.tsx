@@ -58,6 +58,17 @@ const REPORT: EventReport = {
   ],
   questions: { asked: 4, answered: 1 },
   chat: { messages: 3 },
+  polls: [
+    {
+      id: "0195f0a0-0000-7000-8000-0000000000f1",
+      question: "Which demo next?",
+      totalVotes: 4,
+      options: [
+        { label: "Dashboards", votes: 3 },
+        { label: "Webhooks", votes: 1 },
+      ],
+    },
+  ],
 };
 
 function figure(section: string, term: string) {
@@ -67,6 +78,22 @@ function figure(section: string, term: string) {
 }
 
 describe("ReportPage", () => {
+  it("lists the closed polls with their answers", async () => {
+    server.use(
+      http.get(`*/api/v1/events/${EVENT_ID}/report`, () =>
+        HttpResponse.json(REPORT),
+      ),
+    );
+    renderScreen(<ReportPage eventId={EVENT_ID} />, OWNER);
+
+    const polls = await screen.findByRole("region", { name: "Polls" });
+    expect(within(polls).getByText("Which demo next?")).toBeVisible();
+    expect(
+      within(polls).getByText("Dashboards").closest("li"),
+    ).toHaveTextContent("Dashboards3 (75%)");
+    expect(within(polls).getByText("4 answers")).toBeVisible();
+  });
+
   it("shows the funnel, the audience, the interaction and the incidents", async () => {
     server.use(
       http.get(`*/api/v1/events/${EVENT_ID}/report`, () =>

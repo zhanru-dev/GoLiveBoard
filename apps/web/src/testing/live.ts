@@ -1,4 +1,4 @@
-import type { RealtimeChannel } from "@goliveboard/contracts";
+import type { Poll, RealtimeChannel } from "@goliveboard/contracts";
 import { act } from "@testing-library/react";
 import { vi } from "vitest";
 
@@ -42,6 +42,24 @@ export class FakeRealtimeConnection {
 
   onConnect(): () => void {
     return () => undefined;
+  }
+
+  private readonly pollListeners = new Set<(poll: Poll) => void>();
+
+  onPoll(listener: (poll: Poll) => void): () => void {
+    this.pollListeners.add(listener);
+    return () => {
+      this.pollListeners.delete(listener);
+    };
+  }
+
+  /** The server announces a poll (`poll.updated`). */
+  announcePoll(poll: Poll): void {
+    act(() => {
+      for (const listener of this.pollListeners) {
+        listener(poll);
+      }
+    });
   }
 
   close(): void {

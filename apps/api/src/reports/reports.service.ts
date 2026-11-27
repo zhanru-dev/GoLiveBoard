@@ -47,7 +47,7 @@ export class ReportsService {
       event.completedAt !== null || event.status === "COMPLETED",
     );
     const audience = StoredReport.parse(stored.data);
-    const [registered, verified, asked, answered, messages, incidents] =
+    const [registered, verified, asked, answered, messages, incidents, polls] =
       await Promise.all([
         this.prisma.attendee.count({ where: { eventId } }),
         this.prisma.attendee.count({
@@ -61,6 +61,18 @@ export class ReportsService {
           FROM chat_messages WHERE event_id = ${eventId}::uuid
           GROUP BY 1`,
         this.incidents(eventId),
+        this.prisma.poll.findMany({
+          where: { eventId, status: "CLOSED" },
+          orderBy: [{ openedAt: "asc" }, { id: "asc" }],
+          select: {
+            id: true,
+            question: true,
+            options: {
+              select: { label: true, voteCount: true },
+              orderBy: { position: "asc" },
+            },
+          },
+        }),
       ]);
     const perMinute = new Map(
       messages.map(({ minute, messages: count }) => [minute.getTime(), count]),
@@ -100,6 +112,18 @@ export class ReportsService {
       chat: {
         messages: messages.reduce((sum, { messages: count }) => sum + count, 0),
       },
+      polls: polls.map((poll) => ({
+        id: poll.id,
+        question: poll.question,
+        totalVotes: poll.options.reduce(
+          (sum, { voteCount }) => sum + voteCount,
+          0,
+        ),
+        options: poll.options.map(({ label, voteCount }) => ({
+          label,
+          votes: voteCount,
+        })),
+      })),
     };
   }
 

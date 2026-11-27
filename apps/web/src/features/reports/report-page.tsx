@@ -196,6 +196,31 @@ function Report({
           </ul>
         )}
       </section>
+      {report.polls.length === 0 ? null : (
+        <section aria-labelledby="polls-heading" className="grid gap-3">
+          <h2 id="polls-heading" className="text-lg font-semibold">
+            Polls
+          </h2>
+          {report.polls.map((poll) => (
+            <div key={poll.id} className="grid gap-1.5 rounded-lg border p-4">
+              <h3 className="font-medium">{poll.question}</h3>
+              <ul className="grid gap-1 text-sm">
+                {poll.options.map((option) => (
+                  <li key={option.label} className="flex gap-2">
+                    <span className="grow">{option.label}</span>
+                    <span className="figures">
+                      {option.votes} {share(option.votes, poll.totalVotes)}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+              <p className="text-sm text-muted-foreground">
+                {poll.totalVotes} {poll.totalVotes === 1 ? "answer" : "answers"}
+              </p>
+            </div>
+          ))}
+        </section>
+      )}
       <p className="text-sm text-muted-foreground">
         Audience figures as of {formatInZone(report.generatedAt, zone)}.
       </p>

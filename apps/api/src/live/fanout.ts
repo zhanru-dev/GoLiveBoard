@@ -1,15 +1,21 @@
 import { Injectable, type OnApplicationShutdown } from "@nestjs/common";
 import type {
   ChatEvent,
+  PollUpdated,
   QuestionsEvent,
   RealtimeChannel,
 } from "@goliveboard/contracts";
 
-import { channelRoom } from "./rooms.js";
+import { channelRoom, scopeRoom } from "./rooms.js";
 
 /** What services send to an event's channel, one event at a time. */
 interface ChannelEvents {
   "questions.event": QuestionsEvent;
+}
+
+/** What services send to every connection on an event, whatever it joined. */
+interface EventEvents {
+  "poll.updated": PollUpdated;
 }
 
 /**
@@ -113,5 +119,14 @@ export class Fanout implements OnApplicationShutdown {
     payload: ChannelEvents[K],
   ): void {
     this.server?.to(rooms).except(except).emit(name, payload);
+  }
+
+  /** Sends to every connection on the event, on every instance. */
+  toEvent<K extends keyof EventEvents>(
+    eventId: string,
+    name: K,
+    payload: EventEvents[K],
+  ): void {
+    this.server?.to(scopeRoom("event", eventId)).emit(name, payload);
   }
 }

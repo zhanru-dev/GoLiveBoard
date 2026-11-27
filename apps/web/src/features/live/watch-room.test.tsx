@@ -93,6 +93,9 @@ function serveRoom() {
     http.get(`*/api/v1/public/events/${SLUG}/questions`, () =>
       HttpResponse.json({ items: [QUESTION], latestSequence: 1 }),
     ),
+    http.get(`*/api/v1/public/events/${SLUG}/polls`, () =>
+      HttpResponse.json({ items: [] }),
+    ),
   );
 }
 

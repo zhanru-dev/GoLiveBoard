@@ -2,6 +2,8 @@ import type {
   ChannelJoinAck,
   ChatEvent,
   EventStatusChanged,
+  Poll,
+  PollUpdated,
   QuestionsEvent,
   RealtimeChannel,
   RealtimeErrorCode,
@@ -161,6 +163,20 @@ export class RealtimeConnection {
     return (await this.socket
       .timeout(ACK_TIMEOUT_MS)
       .emitWithAck(name, payload)) as T;
+  }
+
+  /**
+   * Calls `listener` with every poll the server announces (`poll.updated`):
+   * the whole poll, to keep if its version is newer (FR-RN-8).
+   */
+  onPoll(listener: (poll: Poll) => void): () => void {
+    const handler = (message: PollUpdated) => {
+      listener(message.poll);
+    };
+    this.socket.on("poll.updated", handler);
+    return () => {
+      this.socket.off("poll.updated", handler);
+    };
   }
 
   /** Calls `listener` whenever the connection (re)connects. */

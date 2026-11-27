@@ -2,6 +2,8 @@
 
 import type {
   ChatPage,
+  Poll,
+  PollList,
   Question,
   QuestionList,
   WatchInfo,
@@ -14,9 +16,11 @@ import { requestPublic } from "@/lib/public-api";
 import { PublicNotice } from "../public/public-ui";
 import { ChatPanel } from "./chat-panel";
 import { Player } from "./player";
+import { PollCard } from "./poll-card";
 import { QuestionsPanel } from "./questions-panel";
 import type { ConnectionState } from "./realtime-connection";
 import { useChat, useLiveConnection, useQuestions } from "./use-live";
+import { usePolls } from "./use-polls";
 import { ErrorBoundary } from "@/components/error-boundary";
 
 /** FR-RN-7: attendees say they are watching every 30 seconds. */
@@ -58,6 +62,24 @@ export function WatchRoom({ info }: Readonly<{ info: WatchInfo }>) {
   const chat = useChat(connection, slug, sources.chat);
   const qa = useQuestions(connection, sources.questions);
   const [questionError, setQuestionError] = useState<string>();
+  const polls = usePolls(connection, joined, () =>
+    load<PollList>(`/public/events/${slug}/polls`),
+  );
+  const [pollError, setPollError] = useState<string>();
+
+  async function answer(poll: Poll, optionId: string): Promise<void> {
+    setPollError(undefined);
+    const response = await requestPublic<Poll>(
+      "PUT",
+      `/public/events/${slug}/polls/${poll.id}/vote`,
+      { body: { optionId } },
+    );
+    if (response.ok) {
+      polls.merge(response.body);
+    } else {
+      setPollError(response.message);
+    }
+  }
 
   // The stream's address comes with the page: reload it when the event
   // goes live, without the attendee doing anything.
@@ -150,6 +172,9 @@ export function WatchRoom({ info }: Readonly<{ info: WatchInfo }>) {
           slate={info.slate}
           title={info.title}
         />
+      </ErrorBoundary>
+      <ErrorBoundary what="the poll">
+        <PollCard polls={polls.polls} onAnswer={answer} error={pollError} />
       </ErrorBoundary>
       <div className="grid gap-8 md:grid-cols-2">
         <ErrorBoundary what="the chat">
