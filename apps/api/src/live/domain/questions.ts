@@ -80,6 +80,8 @@ export interface ModerationChange {
   readonly status?: QuestionStatus;
   /** Pin it (it takes the lowest free slot) or unpin it. */
   readonly pinned?: boolean;
+  /** Write or replace the answer, or remove it with null. */
+  readonly answer?: string | null;
 }
 
 export type ModerationPlan =
@@ -87,6 +89,7 @@ export type ModerationPlan =
       readonly allowed: true;
       readonly status: QuestionStatus;
       readonly pinSlot: number | null;
+      readonly answer: string | null;
     }
   | {
       readonly allowed: false;
@@ -103,6 +106,9 @@ export type ModerationPlan =
  *   sending it back to pending, unpins it.
  * - A newly pinned question takes the lowest slot no other question of the
  *   event holds. The database enforces the limit too, under concurrency.
+ * - Only an answered question has a written answer. Writing one on a
+ *   published question marks it answered; on a pending, hidden or merged
+ *   one it is refused (approve it first). Reopening removes the answer.
  *
  * @param usedSlots the slots other questions of the event hold
  */
@@ -112,33 +118,43 @@ export function planModeration(
     readonly pinSlot: number | null;
     /** A question merged into another is never pinned (FR-RN-6). */
     readonly mergedIntoId?: string | null;
+    readonly answer?: string | null;
   },
   change: ModerationChange,
   usedSlots: readonly number[],
 ): ModerationPlan {
-  const status = change.status ?? current.status;
+  const merged = (current.mergedIntoId ?? null) !== null;
+  const written = typeof change.answer === "string" ? change.answer : undefined;
+  // Answering a published question in writing answers it.
+  const answers = written !== undefined && current.status === "PUBLISHED";
+  const status = change.status ?? (answers ? "ANSWERED" : current.status);
   if (
     status !== current.status &&
     !TRANSITIONS[current.status].includes(status)
   ) {
     return { allowed: false, reason: "ILLEGAL_TRANSITION" };
   }
-  const visible =
-    (status === "PUBLISHED" || status === "ANSWERED") &&
-    (current.mergedIntoId ?? null) === null;
+  if (written !== undefined && (status !== "ANSWERED" || merged)) {
+    return { allowed: false, reason: "ILLEGAL_TRANSITION" };
+  }
+  // Left out, the answer stays; it goes whenever the question stops being answered.
+  const requested =
+    change.answer === undefined ? (current.answer ?? null) : change.answer;
+  const answer = status === "ANSWERED" ? requested : null;
+  const visible = (status === "PUBLISHED" || status === "ANSWERED") && !merged;
   const wantsPin = change.pinned ?? current.pinSlot !== null;
   if (!wantsPin || !visible) {
     if (change.pinned === true) {
       return { allowed: false, reason: "NOT_PINNABLE" };
     }
-    return { allowed: true, status, pinSlot: null };
+    return { allowed: true, status, pinSlot: null, answer };
   }
   if (current.pinSlot !== null) {
-    return { allowed: true, status, pinSlot: current.pinSlot };
+    return { allowed: true, status, pinSlot: current.pinSlot, answer };
   }
   const free = PIN_SLOTS.find((slot) => !usedSlots.includes(slot));
   if (free === undefined) {
     return { allowed: false, reason: "PIN_LIMIT_REACHED" };
   }
-  return { allowed: true, status, pinSlot: free };
+  return { allowed: true, status, pinSlot: free, answer };
 }

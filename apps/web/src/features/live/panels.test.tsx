@@ -62,6 +62,7 @@ describe("QuestionsPanel", () => {
   const base = {
     author: { kind: "ATTENDEE" as const, name: "Ada" },
     pinSlot: null,
+    answer: null,
     mergedIntoId: null,
     version: 1,
     createdAt: "2026-11-15T12:00:00.000Z",
@@ -102,6 +103,32 @@ describe("QuestionsPanel", () => {
     expect(onVote).toHaveBeenCalledOnce();
     expect(screen.queryByRole("button", { name: "Vote for: Mine" })).toBeNull();
     expect(screen.getByText(/Waiting for a moderator · Yours/)).toBeVisible();
+  });
+
+  it("shows the team's written answer under the question", () => {
+    renderScreen(
+      <QuestionsPanel
+        questions={[
+          {
+            ...base,
+            id: "20000000-0000-4000-8000-000000000004",
+            body: "When does it ship?",
+            status: "ANSWERED",
+            voteCount: 2,
+            answer: {
+              body: "Next week, to everyone.",
+              answeredAt: "2026-11-15T12:05:00.000Z",
+            },
+          },
+        ]}
+        onVote={vi.fn()}
+        onAsk={vi.fn()}
+      />,
+    );
+
+    const item = screen.getByRole("listitem");
+    expect(item).toHaveTextContent("Answer from the team");
+    expect(item).toHaveTextContent("Next week, to everyone.");
   });
 
   it("shows its author a question merged into another, without a vote button", () => {

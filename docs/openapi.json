@@ -2878,7 +2878,7 @@
         "tags": [
           "Live"
         ],
-        "summary": "Approve, hide, mark answered, reopen, pin or unpin",
+        "summary": "Approve, hide, answer (also in writing), reopen, pin or unpin",
         "description": "At most three questions are pinned, also under concurrency.\n\nManagers and Owners.",
         "security": [
           {
@@ -6048,6 +6048,18 @@
           },
           "pinned": {
             "type": "boolean"
+          },
+          "answer": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2000
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         }
       },
@@ -6376,6 +6388,30 @@
             "minimum": 0,
             "maximum": 9007199254740991
           },
+          "answer": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "body": {
+                    "type": "string"
+                  },
+                  "answeredAt": {
+                    "type": "string",
+                    "format": "date-time"
+                  }
+                },
+                "required": [
+                  "body",
+                  "answeredAt"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "mergedIntoId": {
             "anyOf": [
               {
@@ -6410,6 +6446,7 @@
           "author",
           "pinSlot",
           "voteCount",
+          "answer",
           "mergedIntoId",
           "version",
           "createdAt"
@@ -6477,6 +6514,30 @@
                   "minimum": 0,
                   "maximum": 9007199254740991
                 },
+                "answer": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "body": {
+                          "type": "string"
+                        },
+                        "answeredAt": {
+                          "type": "string",
+                          "format": "date-time"
+                        }
+                      },
+                      "required": [
+                        "body",
+                        "answeredAt"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
                 "mergedIntoId": {
                   "anyOf": [
                     {
@@ -6511,6 +6572,7 @@
                 "author",
                 "pinSlot",
                 "voteCount",
+                "answer",
                 "mergedIntoId",
                 "version",
                 "createdAt"

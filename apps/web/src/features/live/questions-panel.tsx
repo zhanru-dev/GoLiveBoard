@@ -4,6 +4,7 @@ import type { Question, QuestionStatus } from "@goliveboard/contracts";
 import { type SyntheticEvent, useState } from "react";
 
 import { PublicButton } from "../public/public-ui";
+import { WrittenAnswer } from "./written-answer";
 
 const MAX_LENGTH = 1_000;
 
@@ -93,6 +94,9 @@ export function QuestionsPanel({
           >
             <div className="grid gap-1">
               <p className="whitespace-pre-wrap">{question.body}</p>
+              {question.answer === null ? null : (
+                <WrittenAnswer answer={question.answer} />
+              )}
               <p className="text-xs text-muted-foreground">
                 {question.author.name}
                 {question.pinSlot === null ? "" : " · Pinned"}

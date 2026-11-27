@@ -141,6 +141,7 @@ export {
   LiveOpsStreamStatus,
 } from "./live-ops.js";
 export {
+  AnswerBody,
   AskQuestionRequest,
   ChannelJoin,
   ChannelJoinAck,

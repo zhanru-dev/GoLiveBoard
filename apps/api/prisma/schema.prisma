@@ -649,6 +649,10 @@ model Question {
   firstPublishedAt DateTime?      @map("first_published_at") @db.Timestamptz(3)
   /// Kept equal to the number of votes in the same transaction as each vote.
   voteCount        Int            @default(0) @map("vote_count")
+  /// A moderator's written answer: only on an ANSWERED question, with the
+  /// time it was written (CHECKs in the migration).
+  answer           String?
+  answeredAt       DateTime?      @map("answered_at") @db.Timestamptz(3)
   version          Int            @default(1)
   createdAt        DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt        DateTime       @default(now()) @map("updated_at") @db.Timestamptz(3)

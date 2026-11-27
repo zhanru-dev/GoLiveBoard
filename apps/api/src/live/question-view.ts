@@ -15,6 +15,8 @@ export const QUESTION_SELECT = {
   status: true,
   pinSlot: true,
   voteCount: true,
+  answer: true,
+  answeredAt: true,
   mergedIntoId: true,
   version: true,
   createdAt: true,
@@ -41,6 +43,10 @@ export function toQuestion(row: QuestionRow): Question {
         : { kind: "ATTENDEE", name: row.authorAttendee.name },
     pinSlot: row.pinSlot,
     voteCount: row.voteCount,
+    answer:
+      row.answer === null || row.answeredAt === null
+        ? null
+        : { body: row.answer, answeredAt: row.answeredAt.toISOString() },
     mergedIntoId: row.mergedIntoId,
     version: row.version,
     createdAt: row.createdAt.toISOString(),

@@ -867,7 +867,7 @@ export const ROUTES: readonly RouteSpec[] = [
     path: "/questions/{questionId}",
     operationId: "moderateQuestion",
     tag: "Live",
-    summary: "Approve, hide, mark answered, reopen, pin or unpin",
+    summary: "Approve, hide, answer (also in writing), reopen, pin or unpin",
     description: "At most three questions are pinned, also under concurrency.",
     access: MANAGER,
     params: ids("questionId"),
