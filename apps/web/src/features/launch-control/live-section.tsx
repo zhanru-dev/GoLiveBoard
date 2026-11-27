@@ -29,6 +29,8 @@ import { Button } from "@/components/ui/button";
 import { api, ApiError, refreshSession } from "@/lib/api";
 
 import { ChatPanel } from "../live/chat-panel";
+import { WrittenAnswer } from "../live/written-answer";
+import { AnswerForm, canAnswerInWriting } from "./answer-form";
 import { useChat, useLiveConnection, useQuestions } from "../live/use-live";
 import { usePolls } from "../live/use-polls";
 import { PollsPanel } from "./polls-panel";
@@ -157,6 +159,7 @@ function LiveRoom({
   );
   const qa = useQuestions(connection, sources.questions);
   const [deleting, setDeleting] = useState<ChatMessage>();
+  const [answering, setAnswering] = useState<string>();
 
   const moderate = useMutation({
     mutationFn: ({
@@ -164,7 +167,7 @@ function LiveRoom({
       change,
     }: {
       question: Question;
-      change: { status?: QuestionStatus; pinned?: boolean };
+      change: Action["change"];
     }) =>
       api(`/questions/${question.id}`, {
         method: "PATCH",
@@ -229,6 +232,9 @@ function LiveRoom({
                 className="grid gap-2 rounded-lg border p-3 text-sm"
               >
                 <p className="whitespace-pre-wrap">{question.body}</p>
+                {question.answer === null ? null : (
+                  <WrittenAnswer answer={question.answer} />
+                )}
                 <div className="flex flex-wrap items-center gap-2">
                   <Badge variant="outline">
                     {STATUS_LABELS[question.status]}
@@ -250,8 +256,41 @@ function LiveRoom({
                     {question.voteCount === 1 ? "vote" : "votes"}
                   </span>
                 </div>
-                {canEdit ? (
+                {canEdit && answering === question.id ? (
+                  <AnswerForm
+                    question={question}
+                    pending={moderate.isPending}
+                    onCancel={() => {
+                      setAnswering(undefined);
+                    }}
+                    onSave={(answer) => {
+                      moderate.mutate(
+                        { question, change: { answer } },
+                        {
+                          onSuccess: () => {
+                            setAnswering(undefined);
+                          },
+                        },
+                      );
+                    }}
+                  />
+                ) : null}
+                {canEdit && answering !== question.id ? (
                   <div className="flex flex-wrap gap-1">
+                    {canAnswerInWriting(question) ? (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        aria-label={`${question.answer === null ? "Answer in writing" : "Edit answer"}: ${question.body}`}
+                        onClick={() => {
+                          setAnswering(question.id);
+                        }}
+                      >
+                        {question.answer === null
+                          ? "Answer in writing"
+                          : "Edit answer"}
+                      </Button>
+                    ) : null}
                     {actionsFor(question).map((action) => (
                       <Button
                         key={action.label}
@@ -327,7 +366,11 @@ function chatClosedReason(canEdit: boolean, open: boolean) {
 
 interface Action {
   readonly label: string;
-  readonly change: { status?: QuestionStatus; pinned?: boolean };
+  readonly change: {
+    status?: QuestionStatus;
+    pinned?: boolean;
+    answer?: string | null;
+  };
 }
 
 /** What a moderator can do with a question, as the API allows it. */

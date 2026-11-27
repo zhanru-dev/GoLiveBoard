@@ -12,9 +12,11 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { api, ApiError, apiText } from "@/lib/api";
 import { errorMessage } from "@/lib/errors";
+import { saveFile } from "@/lib/save-file";
 import { formatInZone, timeInZone } from "@/lib/time";
 
 import { MinuteChart } from "../charts/minute-chart";
+import { Figure, share } from "./figures";
 import { remember } from "../onboarding/visits";
 import { useMe } from "../shell/me-context";
 
@@ -226,41 +228,4 @@ function Report({
       </p>
     </>
   );
-}
-
-function Figure({
-  term,
-  value,
-  share: part,
-}: Readonly<{ term: string; value: number; share?: string }>) {
-  return (
-    <div className="rounded-lg border p-4">
-      <dt className="text-sm text-muted-foreground">{term}</dt>
-      <dd className="text-2xl font-semibold">
-        {value}
-        {part === undefined ? null : (
-          <span className="ml-2 text-sm font-normal text-muted-foreground">
-            {part}
-          </span>
-        )}
-      </dd>
-    </div>
-  );
-}
-
-/** "(80%)", or nothing of zero. */
-function share(part: number, whole: number): string | undefined {
-  return whole === 0
-    ? undefined
-    : `(${String(Math.round((part / whole) * 100))}%)`;
-}
-
-/** Hands the text to the browser as a file to save. */
-function saveFile(name: string, text: string): void {
-  const url = URL.createObjectURL(new Blob([text], { type: "text/csv" }));
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = name;
-  link.click();
-  URL.revokeObjectURL(url);
 }

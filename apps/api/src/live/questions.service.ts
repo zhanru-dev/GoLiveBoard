@@ -234,7 +234,8 @@ export class QuestionsService {
   }
 
   /**
-   * A moderator's change (FR-RN-5): approve, hide, answer, pin or unpin.
+   * A moderator's change (FR-RN-5): approve, hide, answer (also in
+   * writing), reopen, pin or unpin.
    * Two moderators editing the same version: one wins, the other gets
    * `412`. Pins are decided under the event's row lock, and the database
    * allows three at most whatever happens.
@@ -277,20 +278,27 @@ export class QuestionsService {
       if (!plan.allowed) {
         throw new DomainError(REFUSAL[plan.reason]);
       }
-      if (plan.status === current.status && plan.pinSlot === current.pinSlot) {
+      if (
+        plan.status === current.status &&
+        plan.pinSlot === current.pinSlot &&
+        plan.answer === current.answer
+      ) {
         return { row: current, sequence: undefined };
       }
+      const now = this.clock.now();
       const row = await tx.question.update({
         where: { id: questionId },
         data: {
           status: plan.status,
           pinSlot: plan.pinSlot,
+          answer: plan.answer,
+          answeredAt: answeredAtFor(plan.answer, current, now),
           ...(current.firstPublishedAt === null &&
             (plan.status === "PUBLISHED" || plan.status === "ANSWERED") && {
-              firstPublishedAt: this.clock.now(),
+              firstPublishedAt: now,
             }),
           version: { increment: 1 },
-          updatedAt: this.clock.now(),
+          updatedAt: now,
         },
         select: QUESTION_SELECT,
       });
@@ -299,8 +307,16 @@ export class QuestionsService {
         targetType: "question",
         targetId: questionId,
         eventId,
-        before: { status: current.status, pinSlot: current.pinSlot },
-        after: { status: plan.status, pinSlot: plan.pinSlot },
+        before: {
+          status: current.status,
+          pinSlot: current.pinSlot,
+          answer: current.answer,
+        },
+        after: {
+          status: plan.status,
+          pinSlot: plan.pinSlot,
+          answer: plan.answer,
+        },
       });
       const sequence = await this.journal(tx, eventId, "UPDATED", questionId);
       return { row, sequence };
@@ -561,6 +577,16 @@ export class QuestionsService {
       withdrawn(sequence, row),
     );
   }
+}
+
+/** When the answer was written: now if it changed, as it was if not. */
+function answeredAtFor(
+  answer: string | null,
+  current: { readonly answer: string | null; readonly answeredAt: Date | null },
+  now: Date,
+): Date | null {
+  if (answer === null) return null;
+  return answer === current.answer ? current.answeredAt : now;
 }
 
 /** A journal entry to send once its transaction has committed. */

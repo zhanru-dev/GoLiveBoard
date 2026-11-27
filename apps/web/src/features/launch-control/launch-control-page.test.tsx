@@ -792,6 +792,7 @@ describe("LaunchControlPage", () => {
       author: { kind: "ATTENDEE" as const, name: "Ada" },
       pinSlot: null,
       voteCount: 2,
+      answer: null,
 
       mergedIntoId: null,
 

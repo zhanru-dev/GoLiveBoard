@@ -64,6 +64,7 @@ const QUESTION = {
   author: { kind: "ATTENDEE" as const, name: "Grace" },
   pinSlot: null,
   voteCount: 1,
+  answer: null,
 
   mergedIntoId: null,
 

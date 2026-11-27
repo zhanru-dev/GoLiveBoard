@@ -42,8 +42,10 @@ ARG QEMU_CPU
 # scan flagged (1 critical, 4 high) while 1.4-r0 and 3.5.9-r1 were already
 # out. So the runtime upgrades its OS packages at build time, and CI fails
 # an image that still has one with a newer version available
-# (scripts/check-image-packages.sh). Node.js bundles its own OpenSSL and
-# zlib; only apk and busybox use these.
+# (scripts/check-image-packages.sh), and so does the deploy, which builds
+# its own. These system libraries serve apk and busybox: Node.js bundles its
+# own OpenSSL and zlib, so they need Node.js upgrades of their own
+# (docs/security-review.md, "Container images").
 # tini runs as PID 1: it forwards SIGTERM to Node.js (which then shuts down
 # gracefully) and reaps orphaned processes, which Node.js does not do.
 RUN apk upgrade --no-cache \

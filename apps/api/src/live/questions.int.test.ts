@@ -695,10 +695,58 @@ describe("Q&A (FR-RN-4, FR-RN-5)", { timeout: 30_000 }, () => {
         [question.id],
       );
       expect(audit.map(({ after }) => after)).toEqual([
-        { status: "HIDDEN", pinSlot: null },
-        { status: "PUBLISHED", pinSlot: null },
-        { status: "ANSWERED", pinSlot: null },
+        { status: "HIDDEN", pinSlot: null, answer: null },
+        { status: "PUBLISHED", pinSlot: null, answer: null },
+        { status: "ANSWERED", pinSlot: null, answer: null },
       ]);
+    });
+
+    it("answers in writing: attendees see the answer at once, and reopening removes it", async () => {
+      const { api: client, owner, event, questions } = await withQuestions(1);
+      const question = at(questions, 0);
+      const viewer = await attendee(event.slug);
+      const watcher = await onQuestions(viewer.cookie, event.slug);
+
+      const answered = await moderate(client, owner, question, {
+        answer: "  Next week.  ",
+      });
+
+      expect(answered.status, answered.text).toBe(200);
+      const first = Question.parse(answered.body);
+      expect(first).toMatchObject({
+        status: "ANSWERED",
+        answer: { body: "Next week." },
+      });
+      await expect
+        .poll(() => watcher.received.at(-1), { timeout: DELIVERY_MS })
+        .toMatchObject({
+          kind: "UPDATED",
+          question: { id: question.id, answer: { body: "Next week." } },
+        });
+      expect((await list(viewer.browser, event.slug)).items).toMatchObject([
+        { id: question.id, answer: { body: "Next week." } },
+      ]);
+      const edited = Question.parse(
+        (await moderate(client, owner, first, { answer: "Tomorrow." })).body,
+      );
+      expect(edited.answer?.body).toBe("Tomorrow.");
+      const reopened = Question.parse(
+        (await moderate(client, owner, edited, { status: "PUBLISHED" })).body,
+      );
+      expect(reopened).toMatchObject({ status: "PUBLISHED", answer: null });
+    });
+
+    it("refuses an answer to a question not yet approved", async () => {
+      const { api: client, owner, event } = await setUp(true);
+      const pending = await asked(
+        (await attendee(event.slug)).browser,
+        event.slug,
+      );
+
+      expect(pending.status).toBe("PENDING");
+      expect(
+        code(await moderate(client, owner, pending, { answer: "Yes." })),
+      ).toBe("QUESTION_STATUS_INVALID");
     });
 
     it("refuses a move the rules do not allow", async () => {

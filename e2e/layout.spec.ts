@@ -145,6 +145,7 @@ test.describe("reflow and target size at 320 CSS pixels (NFR-6)", () => {
       `/events/${invited.id}`,
       `/events/${event.id}/live`,
       `/events/${event.id}/report`,
+      "/reports",
       "/audit",
       "/settings/team",
       "/settings/integrations",
