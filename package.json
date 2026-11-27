@@ -26,6 +26,7 @@
     "depcruise": "depcruise --config .dependency-cruiser.mjs packages apps",
     "test": "vitest run --project \"!*-int\"",
     "test:int": "vitest run --project \"*-int\"",
+    "contracts:openapi": "UPDATE_OPENAPI=1 vitest run --project contracts src/openapi",
     "test:e2e": "playwright test",
     "test:e2e:stack": "E2E_TARGET=stack playwright test",
     "test:watch": "vitest --project \"!*-int\"",

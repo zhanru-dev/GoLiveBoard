@@ -10,6 +10,11 @@
       "@goliveboard/source": "./src/index.ts",
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
+    },
+    "./openapi": {
+      "@goliveboard/source": "./src/openapi/index.ts",
+      "types": "./dist/openapi/index.d.ts",
+      "default": "./dist/openapi/index.js"
     }
   },
   "files": [

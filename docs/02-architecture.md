@@ -85,7 +85,7 @@ flowchart TB
 | Forms          | **React Hook Form** + Zod resolver                                                 | The same schema validates in the browser and on the server.                                                                                                                                             |
 | Charts         | **Plain SVG** (one small component)                                                | The operations room and report need per-minute line charts only; a chart library would cost most of the 150 kB script budget. Each chart is one named image with a summary, and its figures as a table. |
 | API            | **NestJS 12** (ES modules)                                                         | Modules, dependency injection and lifecycle hooks suit a growing modular monolith; native Standard Schema validation works with Zod.                                                                    |
-| Contracts      | **Zod 4.6** in `packages/contracts`                                                | Single source of truth for request and response shapes, real-time events and, once built, the OpenAPI document ([ADR-0004](adr/0004-shared-zod-contracts.md)).                                          |
+| Contracts      | **Zod 4.6** in `packages/contracts`                                                | Single source of truth for request and response shapes, real-time events and the OpenAPI document ([ADR-0004](adr/0004-shared-zod-contracts.md)).                                                       |
 | Database       | **PostgreSQL 18**                                                                  | Transactions, row locks, partial unique indexes and `SKIP LOCKED` cover the hard consistency requirements; built-in `uuidv7()`. Supported by Amazon RDS.                                                |
 | Data access    | **Prisma ORM 7.10** with the `pg` driver adapter (see exceptions)                  | Typed queries and migrations; raw SQL where locks or aggregates need it ([ADR-0006](adr/0006-postgres-prisma-concurrency.md)).                                                                          |
 | Queues         | **BullMQ 6** on **Valkey 9**                                                       | Retries, backoff, delayed and repeatable jobs; Valkey is the open-source Redis fork that Amazon ElastiCache offers.                                                                                     |
@@ -206,7 +206,7 @@ Two checks on every request: **who** (session valid, user or attendee active) an
 
 ### 7.3 Validation and contracts
 
-All request bodies, query strings, route parameters, real-time messages and job payloads are validated with schemas from `packages/contracts`. The web app uses the same schemas in forms. An OpenAPI 3.1 document generated from them is planned, not built yet ([docs/04, section 7](04-api-and-contracts.md#7-openapi-document)).
+All request bodies, query strings, route parameters, real-time messages and job payloads are validated with schemas from `packages/contracts`. The web app uses the same schemas in forms. An OpenAPI 3.1 document is generated from them: [`docs/openapi.json`](openapi.json), also served at `/api/v1/openapi.json` ([docs/04, section 7](04-api-and-contracts.md#7-openapi-document)).
 
 ### 7.4 Consistency and concurrency
 

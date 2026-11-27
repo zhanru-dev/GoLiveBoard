@@ -67,7 +67,7 @@ The demo cannot go live: visitors may not set a stream URL (docs/06, section 10)
 
 ## Architecture
 
-A **modular monolith** ([ADR-0002](docs/adr/0002-modular-monolith.md)) in three processes behind **one origin** ([ADR-0003](docs/adr/0003-single-origin.md)). Request and message shapes are **Zod schemas shared** by server and client ([ADR-0004](docs/adr/0004-shared-zod-contracts.md)).
+A **modular monolith** ([ADR-0002](docs/adr/0002-modular-monolith.md)) in three processes behind **one origin** ([ADR-0003](docs/adr/0003-single-origin.md)). Request and message shapes are **Zod schemas shared** by server and client ([ADR-0004](docs/adr/0004-shared-zod-contracts.md)), and the **OpenAPI 3.1 document** is generated from them: [docs/openapi.json](docs/openapi.json), also live at [/api/v1/openapi.json](https://goliveboard.zhanru.dev/api/v1/openapi.json).
 
 ```mermaid
 flowchart LR
@@ -157,7 +157,6 @@ Decisions made on purpose, and what they cost:
 **Known limits, stated plainly:**
 
 - **Not yet done by a person:** listening to the golden flow with a screen reader (planned before the public demo).
-- **Not built:** a generated OpenAPI document.
 - **Measured on a laptop:** the load test, and the runbook rehearsals, ran on the local stack. Both run again on AWS in milestone 10.
 
 ---

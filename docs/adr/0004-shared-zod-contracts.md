@@ -29,4 +29,4 @@ All boundary shapes are Zod 4 schemas in `packages/contracts`, with TypeScript t
 Reviewed at the end of milestone 9; the decision stands, with one deliberate exception and one gap:
 
 - **The public registration form does not use Zod in the browser.** The public event page has a script budget of 150 kB compressed (NFR-3, docs/05). Zod plus a form library would have taken a large share of it, so the form uses plain inputs with a few checks of its own (`registration-form.tsx`). The API still validates every field with the shared schema and answers with field errors, which the form shows. So the rules are the server's, and the browser's checks only save a round trip. The signed-in app keeps the resolver, as decided.
-- **API documentation:** the context above lists API documentation among the places the schemas serve. The OpenAPI document generated from them is planned, not built (docs/04, section 7).
+- **API documentation:** the OpenAPI 3.1 document is generated from the schemas through a route registry, and tests keep the registry in line with the controllers and the committed document in line with the registry (docs/04, section 7).
