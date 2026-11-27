@@ -22,7 +22,7 @@ variables {
   deploy_document_name = "goliveboard-test-deploy"
 }
 
-run "the_host_requires_imdsv2_and_containers_cannot_reach_its_credentials" {
+run "the_host_requires_imdsv2_and_its_containers_can_reach_its_credentials" {
   command = plan
 
   assert {
@@ -30,8 +30,8 @@ run "the_host_requires_imdsv2_and_containers_cannot_reach_its_credentials" {
     error_message = "IMDSv1 must be off."
   }
   assert {
-    condition     = aws_instance.host.metadata_options[0].http_put_response_hop_limit == 1
-    error_message = "A hop limit of 1 keeps containers from the instance's credentials."
+    condition     = aws_instance.host.metadata_options[0].http_put_response_hop_limit == 2
+    error_message = "Containers sign S3 URLs and send mail with the instance's role: from Docker's bridge network, IMDSv2 needs a hop limit of 2."
   }
 }
 

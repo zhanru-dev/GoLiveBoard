@@ -119,6 +119,17 @@ export class ObjectStorage {
    * A URL the browser can `PUT` exactly this file to. The content type and
    * length are signed, so storage itself refuses a different type or size.
    */
+  /**
+   * Resolves the credentials URLs are signed with: in AWS, the host role's,
+   * from the instance metadata service. Signing makes no request to S3, so
+   * without this check missing credentials show only when someone uploads,
+   * and SES, on the same default chain, only when mail goes out. Readiness
+   * runs it (AwsCredentialsHealthIndicator).
+   */
+  async checkCredentials(): Promise<void> {
+    await this.signer.config.credentials();
+  }
+
   presignUpload(
     key: string,
     contentType: string,

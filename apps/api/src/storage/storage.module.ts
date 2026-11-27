@@ -6,6 +6,7 @@ import {
 } from "@nestjs/common";
 
 import { APP_CONFIG, type AppConfig } from "../config/app-config.js";
+import { AwsCredentialsHealthIndicator } from "./aws-credentials-health.indicator.js";
 import { ObjectStorage } from "./object-storage.js";
 
 @Module({
@@ -15,8 +16,9 @@ import { ObjectStorage } from "./object-storage.js";
       inject: [APP_CONFIG],
       useFactory: (config: AppConfig) => new ObjectStorage(config),
     },
+    AwsCredentialsHealthIndicator,
   ],
-  exports: [ObjectStorage],
+  exports: [ObjectStorage, AwsCredentialsHealthIndicator],
 })
 export class StorageModule
   implements OnApplicationBootstrap, OnApplicationShutdown

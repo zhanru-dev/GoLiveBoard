@@ -45,13 +45,17 @@ describe("readiness with real dependencies", () => {
 
   const ready = () => request(app.getHttpServer()).get("/api/v1/health/ready");
 
-  it("is ready when the database and Valkey answer", async () => {
+  it("is ready when the database and Valkey answer, and AWS credentials resolve", async () => {
     const response = await ready();
 
     expect(response.status).toBe(200);
     expect(HealthReport.parse(response.body)).toMatchObject({
       status: "ok",
-      checks: { database: { status: "up" }, valkey: { status: "up" } },
+      checks: {
+        database: { status: "up" },
+        valkey: { status: "up" },
+        aws_credentials: { status: "up" },
+      },
     });
   });
 
