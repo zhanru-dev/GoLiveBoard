@@ -2,19 +2,24 @@ import "reflect-metadata";
 
 import { readdirSync } from "node:fs";
 
+import * as contracts from "@goliveboard/contracts";
 import { type Role } from "@goliveboard/contracts";
 import { ROUTES, type RouteSpec } from "@goliveboard/contracts/openapi";
 import { RequestMethod } from "@nestjs/common";
 import {
+  CUSTOM_ROUTE_ARGS_METADATA,
   GUARDS_METADATA,
   HTTP_CODE_METADATA,
   METHOD_METADATA,
   PATH_METADATA,
+  ROUTE_ARGS_METADATA,
 } from "@nestjs/common/constants";
+import { RouteParamtypes } from "@nestjs/common/enums/route-paramtypes.enum.js";
 import { describe, expect, it } from "vitest";
 
 import { AttendeeGuard } from "../attendees/attendee.guard.js";
 import { IS_PUBLIC, REQUIRED_ROLE } from "../auth/actor.js";
+import { IfMatchVersion } from "../http/concurrency.js";
 
 type Constructor = abstract new (...args: never[]) => unknown;
 
@@ -61,8 +66,54 @@ function accessOf(handler: object, controller: object): string {
   return attendee ? "attendee" : "public";
 }
 
+/** Contract schemas by identity, so a route can name the one it uses. */
+const SCHEMA_NAMES = new Map<unknown, string>(
+  Object.entries(contracts).map(([name, value]) => [value, name]),
+);
+
+function schemaName(schema: unknown): string {
+  if (schema === undefined) return "-";
+  return SCHEMA_NAMES.get(schema) ?? "(unnamed schema)";
+}
+
+interface RouteArgument {
+  readonly schema?: unknown;
+  readonly factory?: unknown;
+}
+
+/** The factory `@IfMatchVersion()` registers, to recognise it on handlers. */
+const IF_MATCH_FACTORY = (() => {
+  class Probe {
+    handle(@IfMatchVersion() version: number): number {
+      return version;
+    }
+  }
+  const args = Reflect.getMetadata(
+    ROUTE_ARGS_METADATA,
+    Probe,
+    "handle",
+  ) as Record<string, RouteArgument>;
+  return Object.values(args)[0]?.factory;
+})();
+
+/** `body:CreatePollRequest query:- ifMatch`, from a handler's parameters. */
+function inputsOf(controller: Constructor, name: string): string {
+  const args = Object.entries(
+    (Reflect.getMetadata(ROUTE_ARGS_METADATA, controller, name) as
+      Record<string, RouteArgument> | undefined) ?? {},
+  );
+  const of = (type: RouteParamtypes) =>
+    args.find(([key]) => key.split(":")[0] === String(type))?.[1].schema;
+  const ifMatch = args.some(
+    ([key, argument]) =>
+      key.includes(CUSTOM_ROUTE_ARGS_METADATA) &&
+      argument.factory === IF_MATCH_FACTORY,
+  );
+  return `body:${schemaName(of(RouteParamtypes.BODY))} query:${schemaName(of(RouteParamtypes.QUERY))}${ifMatch ? " ifMatch" : ""}`;
+}
+
 /** `GET /events/{eventId} staff:ANALYST 200`, from the controllers' decorators. */
-async function routesInControllers(): Promise<string[]> {
+async function routesInControllers(withInputs = false): Promise<string[]> {
   const modules = await Promise.all(
     CONTROLLER_FILES.map(
       (file) => import(file) as Promise<Record<string, unknown>>,
@@ -91,7 +142,9 @@ async function routesInControllers(): Promise<string[]> {
         Reflect.getMetadata(PATH_METADATA, handler) as string | undefined,
       );
       found.push(
-        `${verb} ${path} ${accessOf(handler, controller)} ${String(status)}`,
+        withInputs
+          ? `${verb} ${path} ${inputsOf(controller, name)}`
+          : `${verb} ${path} ${accessOf(handler, controller)} ${String(status)}`,
       );
     }
   }
@@ -109,10 +162,22 @@ function routeInRegistry(route: RouteSpec): string {
   return `${route.method.toUpperCase()} ${route.path} ${accessInRegistry(route)} ${String(route.status)}`;
 }
 
+function inputsInRegistry(route: RouteSpec): string {
+  // A raw body (an upload) is read by the handler, not by a schema.
+  const body = route.body === undefined ? "-" : schemaName(route.body);
+  return `${route.method.toUpperCase()} ${route.path} body:${body} query:${schemaName(route.query)}${route.ifMatch === true ? " ifMatch" : ""}`;
+}
+
 describe("the OpenAPI route registry", () => {
   it("matches every controller route: path, method, session, role and status", async () => {
     const inControllers = await routesInControllers();
     expect(inControllers.length).toBeGreaterThan(0);
     expect(ROUTES.map(routeInRegistry).sort()).toEqual(inControllers);
+  });
+
+  it("documents the body and query each handler validates, and whether it needs If-Match", async () => {
+    const inControllers = await routesInControllers(true);
+    expect(inControllers.join("\n")).not.toContain("(unnamed schema)");
+    expect(ROUTES.map(inputsInRegistry).sort()).toEqual(inControllers);
   });
 });
