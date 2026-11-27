@@ -47,6 +47,7 @@ test("pages without a session have no WCAG 2.2 AA violations", async ({
     `/e/${event.slug}`,
     `/e/${event.slug}/verify`,
     "/reminders/unsubscribe",
+    "/how-its-built",
     ...(E2E_TARGET === "stack" ? ["/demo-inbox"] : []),
   ];
   for (const path of paths) {

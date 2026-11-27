@@ -107,6 +107,7 @@ test.describe("reflow and target size at 320 CSS pixels (NFR-6)", () => {
       "/sign-in",
       "/sign-up",
       "/forgot-password",
+      "/how-its-built",
       `/e/${event.slug}`,
     ]) {
       const problems = await layoutProblems(visitor, path);

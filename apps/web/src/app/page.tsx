@@ -51,9 +51,9 @@ export default function HomePage() {
             <a href={DOCS} className="hover:text-foreground">
               Docs
             </a>
-            <a href={ARCHITECTURE} className="hover:text-foreground">
-              Architecture
-            </a>
+            <Link href="/how-its-built" className="hover:text-foreground">
+              How it&apos;s built
+            </Link>
           </div>
           <div className="ml-auto flex items-center gap-2 md:ml-0">
             <Link
@@ -167,7 +167,8 @@ export default function HomePage() {
             links={[
               [DOCS, "Docs"],
               [`${REPOSITORY}/blob/main/docs/04-api-and-contracts.md`, "API"],
-              [ARCHITECTURE, "Architecture"],
+              ["/how-its-built", "How it's built"],
+              [ARCHITECTURE, "Architecture decisions"],
             ]}
           />
           <FooterColumn
