@@ -257,6 +257,16 @@ test("questions wait for a moderator, then everyone sees them and votes live (FR
   ).toContainText("1");
   await expect(page.getByText(/Ada Lovelace · 1 vote$/)).toBeVisible();
 
+  // A written answer reaches every attendee at once, and answers the question.
+  await page
+    .getByRole("button", { name: "Answer in writing: Will it ship on time?" })
+    .click();
+  await page.getByLabel("Your answer").fill("Yes, on 1 December.");
+  await page.getByRole("button", { name: "Publish answer" }).click();
+  await expect(grace.page.getByText("Yes, on 1 December.")).toBeVisible();
+  await expect(ada.page.getByText("Yes, on 1 December.")).toBeVisible();
+  await expect(vote).toHaveCount(0);
+
   await ada.context.close();
   await grace.context.close();
 });

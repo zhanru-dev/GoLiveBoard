@@ -120,6 +120,9 @@ export type ChatPage = z.infer<typeof ChatPage>;
 /** What a question may say. */
 export const QuestionBody = z.string().trim().min(1).max(1000);
 
+/** What a moderator's written answer may say. */
+export const AnswerBody = z.string().trim().min(1).max(2000);
+
 /** `POST …/questions`, with an `Idempotency-Key` to make retries safe. */
 export const AskQuestionRequest = z.object({ body: QuestionBody });
 export type AskQuestionRequest = z.infer<typeof AskQuestionRequest>;
@@ -133,6 +136,10 @@ export const Question = z.object({
   /** 1 to 3 while pinned (FR-RN-5). */
   pinSlot: z.int().min(1).max(3).nullable(),
   voteCount: z.int().min(0),
+  /** A moderator's written answer; only an ANSWERED question has one. */
+  answer: z
+    .object({ body: z.string(), answeredAt: z.iso.datetime() })
+    .nullable(),
   /**
    * Set when a moderator merged it into another question (AI triage,
    * FR-RN-6). Only moderators and its author still see it; its votes moved
@@ -193,15 +200,23 @@ export const QuestionList = z.object({
 });
 export type QuestionList = z.infer<typeof QuestionList>;
 
-/** `PATCH /questions/:id` (Managers), with If-Match. */
+/**
+ * `PATCH /questions/:id` (Managers), with If-Match. Writing an answer on a
+ * published question also marks it answered; `answer: null` removes it.
+ */
 export const ModerateQuestionRequest = z
-  .object({ status: QuestionStatus, pinned: z.boolean() })
+  .object({
+    status: QuestionStatus,
+    pinned: z.boolean(),
+    answer: AnswerBody.nullable(),
+  })
   .partial()
   .refine(
-    (change) => change.status !== undefined || change.pinned !== undefined,
-    {
-      error: "Change the status, the pin, or both",
-    },
+    (change) =>
+      change.status !== undefined ||
+      change.pinned !== undefined ||
+      change.answer !== undefined,
+    { error: "Change the status, the pin or the answer" },
   );
 export type ModerateQuestionRequest = z.infer<typeof ModerateQuestionRequest>;
 

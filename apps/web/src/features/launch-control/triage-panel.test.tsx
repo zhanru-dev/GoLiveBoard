@@ -21,6 +21,7 @@ const question = (n: number, body: string): Question => ({
   author: { kind: "ATTENDEE", name: "Ada" },
   pinSlot: null,
   voteCount: 0,
+  answer: null,
   mergedIntoId: null,
   version: 1,
   createdAt: "2026-11-17T10:00:00.000Z",

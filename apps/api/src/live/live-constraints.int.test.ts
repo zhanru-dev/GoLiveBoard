@@ -125,4 +125,26 @@ describe("live interaction constraints", () => {
     await entry();
     await expect(entry()).rejects.toThrow(/realtime_journal_pkey/);
   });
+
+  it("keeps a written answer on answered questions only, with its time", async () => {
+    const [published] = await question("PUBLISHED");
+    await expect(
+      database.query(
+        "UPDATE questions SET answer = 'Yes', answered_at = now() WHERE id = $1",
+        [published?.id],
+      ),
+    ).rejects.toThrow(/questions_answer_only_when_answered/);
+    const [answered] = await question("ANSWERED");
+    await expect(
+      database.query("UPDATE questions SET answer = 'Yes' WHERE id = $1", [
+        answered?.id,
+      ]),
+    ).rejects.toThrow(/questions_answer_has_time/);
+    await expect(
+      database.query(
+        "UPDATE questions SET answer = 'Yes', answered_at = now() WHERE id = $1",
+        [answered?.id],
+      ),
+    ).resolves.toBeDefined();
+  });
 });
