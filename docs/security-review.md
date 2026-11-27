@@ -168,6 +168,21 @@ The holding slate is uploaded straight to object storage with a presigned PUT.
 - **Errors** are reported to Sentry, throttled and scrubbed.
 - **Failures** are answered with problem details and a request ID, never internal detail.
 
+## Container images
+
+**November 2026: ECR flagged 1 critical and 4 high CVEs** in the runtime image's Alpine packages: zlib `1.3.2-r1` (CVE-2026-4738) and OpenSSL `3.5.9-r0` (CVE-2026-95691, CVE-2026-88823, CVE-2026-95692, CVE-2026-107496). The runtime now upgrades its OS packages as it builds, and both CI and the deploy fail an image with an outdated package (`scripts/check-image-packages.sh`), #29.
+
+**That fixed the system libraries, not Node.js.** Node.js does not link them: it bundles its own OpenSSL and zlib. Node 26.13.1 bundles OpenSSL 3.5.9, the same upstream release; Alpine's `3.5.9-r1` is a patched build. An independent review caught that #29 had called the application unaffected for the wrong reason. Whether it is affected depends on what each CVE touches:
+
+| CVE                            | Rated by OpenSSL or zlib | What it touches                              | GoLiveBoard                               |
+| ------------------------------ | ------------------------ | -------------------------------------------- | ----------------------------------------- |
+| CVE-2026-95691, CVE-2026-88822 | Low                      | QUIC                                         | No QUIC: HTTP/1.1 and WebSockets over TLS |
+| CVE-2026-88823, CVE-2026-95692 | Low                      | The AES-GCM-SIV cipher API                   | Not used                                  |
+| CVE-2026-107496                | Low                      | `CMS_encrypt()`                              | Not used; Node.js does not expose CMS     |
+| CVE-2026-4738 (zlib)           | Critical (CVSS)          | `contrib/infback9`, outside the zlib library | Not part of Node.js's zlib                |
+
+None of the OpenSSL issues affects ordinary TLS clients or servers, which is all GoLiveBoard does with OpenSSL (PostgreSQL, webhooks, Sentry, SES). **Next:** OpenSSL 3.5.10, with all five fixes, is scheduled for 1 December 2026; the Node.js 26 release that bundles it replaces the base image then.
+
 ## Dynamic scan
 
 ZAP 2.17.0 (`zaproxy/zap-stable:2.17.0@sha256:9624669db72f54d86c4b46a7064518bd9bf79d8c61a4c31befa9923489f328af`) ran against the production-like stack, inside its network, over HTTPS. [`scripts/zap-scan.sh`](../scripts/zap-scan.sh) runs the three scans below exactly as they ran: `bash scripts/zap-scan.sh <output directory> [baseline|signed-in|active]`.

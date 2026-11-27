@@ -107,6 +107,9 @@ jobs:
               continue
             fi
             docker build --file infra/docker/Dockerfile --target "$target" --tag "$image" .
+            # This build, not CI's, is what runs: it gets CI's package check
+            # too (the runtime upgrades its OS packages as it builds).
+            scripts/check-image-packages.sh "$image"
             docker push "$image"
           done
 
