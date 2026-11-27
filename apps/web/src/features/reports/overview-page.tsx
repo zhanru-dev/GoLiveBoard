@@ -177,7 +177,7 @@ function Overview({
         <p className="text-muted-foreground">
           No event completed in this span. An event counts here once it has gone
           live and been marked completed;{" "}
-          <Link href="/events" className="text-primary hover:underline">
+          <Link href="/events" className="underline underline-offset-4">
             see your events
           </Link>
           .
