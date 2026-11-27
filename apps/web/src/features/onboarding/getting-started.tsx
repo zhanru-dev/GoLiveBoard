@@ -168,10 +168,14 @@ function StepItem({
           {step.title}
         </span>
         {step.done ? null : (
-          <span className="text-sm text-muted-foreground">{step.why}</span>
+          <>
+            <span className="text-sm text-muted-foreground">{step.why}</span>
+            {/* Under the text, not beside it: beside it, a long action
+                pushed the page sideways at 320 px (WCAG 1.4.10). */}
+            <StepLink step={step} onOpen={onOpen} />
+          </>
         )}
       </span>
-      {step.done ? null : <StepLink step={step} onOpen={onOpen} />}
     </li>
   );
 }
@@ -181,7 +185,7 @@ function StepLink({
   onOpen,
 }: Readonly<{ step: Step; onOpen: () => void }>) {
   const className =
-    "text-sm font-semibold whitespace-nowrap text-primary hover:underline";
+    "self-start text-sm font-semibold text-primary hover:underline";
   return step.external === true ? (
     <a
       href={step.href}
