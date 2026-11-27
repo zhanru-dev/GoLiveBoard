@@ -43,12 +43,13 @@ export function reportCsv(report: EventReport): string {
     ]),
   ];
   return [figures, minutes, incidents]
-    .map((table) => table.map((row) => row.map(cell).join(",")).join("\r\n"))
+    .map((table) => table.map((row) => row.map(csvCell).join(",")).join("\r\n"))
     .join("\r\n\r\n")
     .concat("\r\n");
 }
 
-function cell(value: string | number): string {
+/** One CSV field: quoted as RFC 4180 asks, a would-be formula defused. */
+export function csvCell(value: string | number): string {
   if (typeof value === "number") {
     return String(value);
   }

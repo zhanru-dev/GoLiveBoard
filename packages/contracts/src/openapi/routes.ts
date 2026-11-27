@@ -41,6 +41,7 @@ import {
   Me,
   Member,
   ModerateQuestionRequest,
+  OverviewQuery,
   MoveRunbookTaskRequest,
   PageQuery,
   PasswordResetConfirmRequest,
@@ -78,6 +79,7 @@ import {
   WebhookEndpointCreated,
   WebhookSecret,
   Workspace,
+  WorkspaceOverview,
 } from "../index.js";
 
 /**
@@ -1029,6 +1031,33 @@ export const ROUTES: readonly RouteSpec[] = [
     response: {
       contentType: "text/csv",
       description: "Figures, minutes and incidents as three tables",
+    },
+  },
+  {
+    method: "get",
+    path: "/reports/overview",
+    operationId: "getWorkspaceOverview",
+    tag: "Record",
+    summary: "Completed events over a span: totals, months and each event",
+    description:
+      "`from` and `to` are days (UTC), both included, given together; without them, the last twelve calendar months. At most three years.",
+    access: ANALYST,
+    query: OverviewQuery,
+    status: 200,
+    response: WorkspaceOverview,
+  },
+  {
+    method: "get",
+    path: "/reports/overview.csv",
+    operationId: "getWorkspaceOverviewCsv",
+    tag: "Record",
+    summary: "The overview as CSV",
+    access: ANALYST,
+    query: OverviewQuery,
+    status: 200,
+    response: {
+      contentType: "text/csv",
+      description: "Totals, months and events as three tables",
     },
   },
   {
