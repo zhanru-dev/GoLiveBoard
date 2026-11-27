@@ -24,6 +24,7 @@ Status: agreed, November 2026; built in steps. Mockups: the Design canvas, page 
 
 - Done in the first PR: 3 (event navigation), 4 (lifecycle and next step), 5 (section explainers and glossary).
 - Done in the second: 1 (getting-started checklist) and 7 (help and feature map, linked from the sidebar).
+- Done in the third: 6 (guided demo).
 
 ## Constraint found
 

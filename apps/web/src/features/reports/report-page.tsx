@@ -3,6 +3,7 @@
 import { EventReport } from "@goliveboard/contracts";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import Link from "next/link";
+import { useEffect } from "react";
 
 import { EventTabs } from "../events/event-tabs";
 import { toast } from "sonner";
@@ -14,11 +15,16 @@ import { errorMessage } from "@/lib/errors";
 import { formatInZone, timeInZone } from "@/lib/time";
 
 import { MinuteChart } from "../charts/minute-chart";
+import { remember } from "../onboarding/visits";
 import { useMe } from "../shell/me-context";
 
 /** FR-RC-3: the report of a completed event, for every role. */
 export function ReportPage({ eventId }: Readonly<{ eventId: string }>) {
   const { workspaceId } = useMe().activeWorkspace;
+  // For the demo guide: this browser has opened a report.
+  useEffect(() => {
+    remember(workspaceId, "report");
+  }, [workspaceId]);
   const report = useQuery({
     queryKey: ["report", workspaceId, eventId],
     queryFn: ({ signal }) =>

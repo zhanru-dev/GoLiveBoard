@@ -14,6 +14,8 @@ import { Button } from "@/components/ui/button";
 import { api, ApiError } from "@/lib/api";
 import { errorMessage } from "@/lib/errors";
 
+import { remember } from "../onboarding/visits";
+
 /** How often a run's state is read while it is queued or running. */
 export const POLL_MS = 1_000;
 
@@ -59,6 +61,8 @@ export function TriagePanel({
     },
     onSuccess: ({ id }) => {
       setRunId(id);
+      // For the demo guide: questions have been sent to triage.
+      remember(workspaceId, "triage");
     },
     onError: (error) => {
       setRefusal(

@@ -5,7 +5,20 @@ import { useSyncExternalStore } from "react";
  * light convenience (docs/design/learnability.md), so storage that is
  * missing, full or refused only means a step stays unticked.
  */
-export type Visit = "ops-room" | "public-page" | "dismissed";
+export type Visit =
+  | "ops-room"
+  | "public-page"
+  | "dismissed"
+  // The demo guide's steps, and whether it is folded away.
+  | "launch-control"
+  | "task-done"
+  | "registered"
+  | "triage"
+  | "report"
+  | "demo-guide-closed";
+
+/** Where the public pages, outside any workspace, keep what they saw. */
+export const PUBLIC = "public";
 
 const key = (workspaceId: string, visit: Visit) =>
   `goliveboard:${workspaceId}:${visit}`;
@@ -17,6 +30,15 @@ export function remember(workspaceId: string, visit: Visit): void {
     window.localStorage.setItem(key(workspaceId, visit), "1");
   } catch {
     // Storage refused: the step stays unticked.
+  }
+  window.dispatchEvent(new Event(CHANGED));
+}
+
+export function forget(workspaceId: string, visit: Visit): void {
+  try {
+    window.localStorage.removeItem(key(workspaceId, visit));
+  } catch {
+    // Storage refused: nothing was kept anyway.
   }
   window.dispatchEvent(new Event(CHANGED));
 }

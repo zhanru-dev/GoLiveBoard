@@ -4,6 +4,7 @@ import { type SyntheticEvent, useId, useState } from "react";
 
 import { postPublic } from "@/lib/public-api";
 
+import { PUBLIC, remember } from "../onboarding/visits";
 import { PublicButton, PublicField, PublicNotice } from "./public-ui";
 
 type Fields = "name" | "email" | "consent";
@@ -64,6 +65,8 @@ export function RegistrationForm({
     setBusy(false);
     if (result.ok) {
       setSent(true);
+      // For the demo guide, read back in the staff app of this browser.
+      remember(PUBLIC, "registered");
       return;
     }
     const placed: Errors = {};

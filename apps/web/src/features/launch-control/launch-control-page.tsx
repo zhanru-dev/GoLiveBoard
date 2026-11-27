@@ -1,6 +1,10 @@
 "use client";
 
+import { useEffect } from "react";
+
 import { ApiError } from "@/lib/api";
+
+import { remember } from "../onboarding/visits";
 
 import { AccessPolicySection } from "./access-policy-section";
 import { AudienceSection } from "./audience-section";
@@ -20,7 +24,11 @@ import { ErrorBoundary } from "@/components/error-boundary";
  */
 export function LaunchControlPage({ eventId }: Readonly<{ eventId: string }>) {
   const control = useLaunchControl(eventId);
-  const { event } = control;
+  const { event, workspaceId } = control;
+  // For the demo guide: this browser has opened a Launch Control.
+  useEffect(() => {
+    remember(workspaceId, "launch-control");
+  }, [workspaceId]);
 
   if (event.isPending) {
     return <p role="status">Loading the event…</p>;
