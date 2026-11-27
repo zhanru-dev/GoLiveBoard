@@ -126,7 +126,14 @@ describe("live interaction constraints", () => {
     await expect(entry()).rejects.toThrow(/realtime_journal_pkey/);
   });
 
-  it("keeps a written answer with its time and length", async () => {
+  it("keeps a written answer on answered questions only, with its time and length", async () => {
+    const [published] = await question("PUBLISHED");
+    await expect(
+      database.query(
+        "UPDATE questions SET answer = 'Yes', answered_at = now() WHERE id = $1",
+        [published?.id],
+      ),
+    ).rejects.toThrow(/questions_answer_only_when_answered/);
     const [answered] = await question("ANSWERED");
     await expect(
       database.query("UPDATE questions SET answer = 'Yes' WHERE id = $1", [
@@ -144,21 +151,5 @@ describe("live interaction constraints", () => {
         answered?.id,
       ]),
     ).rejects.toThrow(/questions_answer_length/);
-  });
-
-  it("lets the release before answers reopen an answered question (expand and contract)", async () => {
-    // A rollback runs that release on this schema: it reopens a question
-    // by its status alone and knows nothing of the answer.
-    const [answered] = await question("ANSWERED");
-    await database.query(
-      "UPDATE questions SET answer = 'Yes', answered_at = now() WHERE id = $1",
-      [answered?.id],
-    );
-    await expect(
-      database.query(
-        "UPDATE questions SET status = 'PUBLISHED' WHERE id = $1",
-        [answered?.id],
-      ),
-    ).resolves.toBeDefined();
   });
 });
