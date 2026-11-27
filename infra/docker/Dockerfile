@@ -37,9 +37,17 @@ ENV NEXT_TELEMETRY_DISABLED=1
 # time, and npm's own dependencies would only bring vulnerabilities to patch.
 FROM node:26.13.1-alpine3.24@sha256:6bd9ab43c0ec0190ca7b2d193906cb8b7edf6e7f4afa43ddeccd6452710bffb5 AS runtime
 ARG QEMU_CPU
+# Alpine publishes security fixes before the Node.js image is rebuilt on
+# them: the image above ships zlib 1.3.2-r1 and OpenSSL 3.5.9-r0, which ECR's
+# scan flagged (1 critical, 4 high) while 1.4-r0 and 3.5.9-r1 were already
+# out. So the runtime upgrades its OS packages at build time, and CI fails
+# an image that still has one with a newer version available
+# (scripts/check-image-packages.sh). Node.js bundles its own OpenSSL and
+# zlib; only apk and busybox use these.
 # tini runs as PID 1: it forwards SIGTERM to Node.js (which then shuts down
 # gracefully) and reaps orphaned processes, which Node.js does not do.
-RUN apk add --no-cache tini \
+RUN apk upgrade --no-cache \
+ && apk add --no-cache tini \
  && rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx
 WORKDIR /app
 

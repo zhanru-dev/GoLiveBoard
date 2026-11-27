@@ -164,6 +164,10 @@ jobs:
           df -h /
       - name: Build the api and web images
         run: docker compose --file docker-compose.prod.yml build
+      # Alpine ships security fixes before scanners know of them; an image
+      # built without one that is already out fails here.
+      - name: No outdated OS packages in the images
+        run: scripts/check-image-packages.sh goliveboard-api:local goliveboard-web:local
       # Fixable HIGH and CRITICAL vulnerabilities fail the build, and so does
       # any secret found in an image. Unfixed ones are reported by Dependabot
       # and Trivy runs once a fix exists.
