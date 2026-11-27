@@ -110,6 +110,12 @@ export const FEATURE_GROUPS: readonly FeatureGroup[] = [
         keywords: "report csv analytics audience peak",
       },
       {
+        name: "Reports across events",
+        what: "Completed events over a span compared: registrations, attendance, peaks, questions and incidents, month by month, also as CSV.",
+        where: "Reports",
+        keywords: "overview trends statistics analytics month compare csv",
+      },
+      {
         name: "Audit trail",
         what: "Every change, by whom and when.",
         where: "Audit trail",

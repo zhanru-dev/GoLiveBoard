@@ -1,11 +1,22 @@
 import { Inject, Injectable } from "@nestjs/common";
-import type { EventReport, Incident } from "@goliveboard/contracts";
+import type {
+  EventReport,
+  Incident,
+  OverviewEvent,
+  OverviewQuery,
+  WorkspaceOverview,
+} from "@goliveboard/contracts";
 
 import type { Actor } from "../auth/actor.js";
 import { PRISMA } from "../database/prisma.js";
 import type { PrismaClient } from "../generated/prisma/client.js";
 import { CLOCK, type Clock } from "../shared/clock.js";
 import { DomainError } from "../shared/domain/domain-error.js";
+import {
+  overviewSpan,
+  spanBounds,
+  summariseOverview,
+} from "./domain/overview.js";
 import { recordReport, StoredReport } from "./report-store.js";
 
 const MINUTE_MS = 60_000;
@@ -101,6 +112,61 @@ export class ReportsService {
         messages: messages.reduce((sum, { messages: count }) => sum + count, 0),
       },
     };
+  }
+
+  /**
+   * The workspace's completed events that started in a span, with their
+   * reports' figures, totals and months. Every role may read it.
+   */
+  async overview(
+    actor: Actor,
+    query: OverviewQuery,
+  ): Promise<WorkspaceOverview> {
+    const span = overviewSpan(query, this.clock.now());
+    const { start, end } = spanBounds(span);
+    // An event that completed before reports were stored gets one now, as
+    // its own report would.
+    const missing = await this.prisma.$queryRaw<{ id: string }[]>`
+      SELECT e.id FROM events e
+      LEFT JOIN event_reports r ON r.event_id = e.id
+      WHERE e.workspace_id = ${actor.workspaceId}::uuid
+        AND e.completed_at IS NOT NULL
+        AND e.starts_at >= ${start} AND e.starts_at < ${end}
+        AND r.event_id IS NULL`;
+    for (const { id } of missing) {
+      await this.prisma.$transaction(async (tx) => {
+        await recordReport(tx, id, this.clock.now());
+      });
+    }
+    const rows = await this.prisma.$queryRaw<
+      (Omit<OverviewEvent, "startsAt"> & { startsAt: Date })[]
+    >`
+      SELECT e.id, e.title, e.starts_at AS "startsAt",
+        (SELECT count(*) FROM attendees a WHERE a.event_id = e.id)::int
+          AS registered,
+        (SELECT count(*) FROM attendees a
+          WHERE a.event_id = e.id AND a.verified_at IS NOT NULL)::int
+          AS verified,
+        coalesce((r.data->>'attended')::int, 0) AS attended,
+        coalesce((r.data->>'peak')::int, 0) AS "peakAudience",
+        (SELECT count(*) FROM questions q WHERE q.event_id = e.id)::int
+          AS "questionsAsked",
+        (SELECT count(*) FROM questions q
+          WHERE q.event_id = e.id AND q.status = 'ANSWERED')::int
+          AS "questionsAnswered",
+        (SELECT count(*) FROM chat_messages m WHERE m.event_id = e.id)::int
+          AS "chatMessages",
+        (SELECT count(*) FROM incidents i WHERE i.event_id = e.id)::int
+          AS incidents
+      FROM events e
+      LEFT JOIN event_reports r ON r.event_id = e.id
+      WHERE e.workspace_id = ${actor.workspaceId}::uuid
+        AND e.completed_at IS NOT NULL
+        AND e.starts_at >= ${start} AND e.starts_at < ${end}`;
+    return summariseOverview(
+      span,
+      rows.map((row) => ({ ...row, startsAt: row.startsAt.toISOString() })),
+    );
   }
 
   /**

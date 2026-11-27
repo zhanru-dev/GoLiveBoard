@@ -67,6 +67,7 @@ export function AppShell({
 
   const links = [
     { href: "/events", label: "Events" },
+    { href: "/reports", label: "Reports" },
     { href: "/audit", label: "Audit trail" },
     { href: "/settings/team", label: "Team" },
     // Webhooks are the Owners' alone, in the API too.

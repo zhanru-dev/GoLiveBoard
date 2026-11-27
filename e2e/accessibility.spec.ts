@@ -69,6 +69,7 @@ test("pages of the signed-in app have no WCAG 2.2 AA violations", async ({
     `/events/${event.id}`,
     `/events/${event.id}/live`,
     `/events/${event.id}/report`,
+    "/reports",
     "/audit",
     "/settings/team",
     "/settings/integrations",

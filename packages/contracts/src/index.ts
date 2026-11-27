@@ -123,7 +123,13 @@ export {
   Workspace,
 } from "./workspace.js";
 export { QuestionStatus, RealtimeChannel } from "./live.js";
-export { EventReport } from "./reports.js";
+export {
+  EventReport,
+  OVERVIEW_MAX_DAYS,
+  OverviewEvent,
+  OverviewQuery,
+  WorkspaceOverview,
+} from "./reports.js";
 export {
   TriageDecision,
   TriageDecisionRequest,
