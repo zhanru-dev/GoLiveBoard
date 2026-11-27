@@ -157,6 +157,14 @@ const AppConfigSchema = z
      */
     DEMO_MODE: Flag,
     /**
+     * The one stream the demo workspace may use (an https HLS playlist, a
+     * public test stream): with it, a demo event can become Ready and go
+     * live. Unset, the demo refuses every stream URL.
+     */
+    DEMO_STREAM_URL: optional(
+      z.url({ protocol: /^https$/, error: "Must be an https URL" }),
+    ),
+    /**
      * Invite codes for sign-up (FR-WS-1), as `label:sha256,…`: the digests
      * of the codes, never the codes. Unset, anyone may sign up; set, sign-up
      * needs one of them (docs/runbooks/issue-an-invite-code.md).
@@ -268,7 +276,7 @@ const AppConfigSchema = z
             // The refinement above guarantees it for smtp.
             smtpUrl: env.SMTP_URL ?? "",
           },
-    demo: { enabled: env.DEMO_MODE },
+    demo: { enabled: env.DEMO_MODE, streamUrl: env.DEMO_STREAM_URL },
     signUp: { codes: env.SIGN_UP_CODES },
     triage: {
       provider: env.AI_PROVIDER,
