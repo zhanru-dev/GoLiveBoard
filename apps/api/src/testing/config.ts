@@ -18,6 +18,10 @@ export const TEST_ENV: Readonly<Record<string, string>> = {
   JWT_SECRET: "test-signing-key-that-is-long-enough",
   SMTP_URL: "smtp://127.0.0.1:1",
   MAIL_FROM: "GoLiveBoard <no-reply@goliveboard.test>",
+  // Storage signs with these, never with whatever AWS credentials the
+  // machine running the tests has (readiness resolves them).
+  S3_ACCESS_KEY_ID: "test-access-key",
+  S3_SECRET_ACCESS_KEY: "test-secret-key",
   // One per test file (each file loads this module afresh): the apps of a
   // file share real-time traffic, files running side by side do not.
   REALTIME_CHANNEL_PREFIX: `test-${randomUUID().slice(0, 8)}`,

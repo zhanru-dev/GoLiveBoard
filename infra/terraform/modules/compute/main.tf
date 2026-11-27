@@ -145,11 +145,17 @@ resource "aws_instance" "host" {
 
   vpc_security_group_ids = [aws_security_group.this.id]
 
-  # IMDSv2 only, and one hop: containers cannot read the host's credentials.
+  # IMDSv2 only. Two hops, because the containers sign S3 URLs and send
+  # mail with this role (ADR-0010): from Docker's bridge network a token
+  # response needs a second hop, and with one the SDK finds no credentials
+  # (every upload and email failed until 27 November 2026). The containers
+  # already hold the application's secrets; the role adds the assets bucket,
+  # SES and reading those same parameters. The API's readiness check fails
+  # without credentials, so a deploy cannot go live without them.
   metadata_options {
     http_endpoint               = "enabled"
     http_tokens                 = "required"
-    http_put_response_hop_limit = 1
+    http_put_response_hop_limit = 2
   }
 
   root_block_device {
