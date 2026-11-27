@@ -15,6 +15,7 @@ import {
 import { lockEvent } from "../events/event-lock.queries.js";
 import { EventsService } from "../events/events.service.js";
 import type { Prisma, PrismaClient } from "../generated/prisma/client.js";
+import { closeOpenPolls } from "../live/polls.queries.js";
 import { RealtimeSignals } from "../live/realtime-signals.js";
 import { writeOutbox } from "../outbox/outbox.js";
 import { recordReport } from "../reports/report-store.js";
@@ -83,6 +84,10 @@ export class TransitionsService {
           ...(to === "COMPLETED" && { completedAt: now }),
         },
       });
+      if (to === "COMPLETED" || to === "CANCELLED") {
+        // Interaction ends: an open poll closes with it (FR-RN-8).
+        await closeOpenPolls(tx, actor, eventId, to, now);
+      }
       if (to === "COMPLETED") {
         // The audience figures, now final (FR-RC-3).
         await recordReport(tx, eventId, now);

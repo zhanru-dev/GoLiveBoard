@@ -97,6 +97,12 @@ export const FEATURE_GROUPS: readonly FeatureGroup[] = [
         where: "Chat and Q&A › Suggest groups",
         keywords: "ai claude group duplicate urgent",
       },
+      {
+        name: "Live polls",
+        what: "Ask the whole audience a question with 2 to 6 answers; each attendee answers once and everyone sees the counts live.",
+        where: "Launch Control › Chat and Q&A › Polls",
+        keywords: "poll vote survey audience answer",
+      },
     ],
   },
   {

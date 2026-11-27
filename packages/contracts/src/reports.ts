@@ -47,6 +47,15 @@ export const EventReport = z.object({
   questions: z.object({ asked: Count, answered: Count }),
   /** Every message sent, removed ones too. */
   chat: z.object({ messages: Count }),
+  /** Its closed polls, in the order they opened (FR-RN-8). */
+  polls: z.array(
+    z.object({
+      id: z.uuid(),
+      question: z.string(),
+      totalVotes: Count,
+      options: z.array(z.object({ label: z.string(), votes: Count })),
+    }),
+  ),
 });
 export type EventReport = z.infer<typeof EventReport>;
 

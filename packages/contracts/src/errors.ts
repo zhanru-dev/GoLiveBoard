@@ -41,6 +41,11 @@ export const ErrorCode = z.enum([
   "QUESTION_NOT_PINNABLE",
   "PIN_LIMIT_REACHED",
   "QUESTION_NOT_VOTABLE",
+  "POLL_NOT_EDITABLE",
+  "POLL_ALREADY_OPEN",
+  "POLL_NOT_OPEN",
+  "POLL_ALREADY_VOTED",
+  "POLL_OPTION_INVALID",
   "DELIVERY_PENDING",
   "RATE_LIMITED",
   "INTERNAL_ERROR",
@@ -179,6 +184,26 @@ export const ERROR_DEFINITIONS = {
   QUESTION_NOT_VOTABLE: {
     status: 409,
     title: "Only published questions take votes",
+  },
+  POLL_NOT_EDITABLE: {
+    status: 409,
+    title: "Only a draft poll can be changed, opened or deleted",
+  },
+  POLL_ALREADY_OPEN: {
+    status: 409,
+    title: "Another poll of this event is open; close it first",
+  },
+  POLL_NOT_OPEN: {
+    status: 409,
+    title: "The poll is not open",
+  },
+  POLL_ALREADY_VOTED: {
+    status: 409,
+    title: "You have already answered this poll",
+  },
+  POLL_OPTION_INVALID: {
+    status: 422,
+    title: "That is not one of the poll's options",
   },
   DELIVERY_PENDING: {
     status: 409,

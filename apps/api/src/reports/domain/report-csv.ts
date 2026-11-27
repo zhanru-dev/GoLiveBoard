@@ -1,9 +1,9 @@
 import type { EventReport } from "@goliveboard/contracts";
 
 /**
- * The report as CSV (FR-RC-3), in three tables separated by an empty line:
- * the figures as `metric,value`, the audience per minute, and the
- * incidents. Fields are quoted as RFC 4180 asks, and a text that a
+ * The report as CSV (FR-RC-3), in four tables separated by an empty line:
+ * the figures as `metric,value`, the audience per minute, the incidents,
+ * and the closed polls' answers (a row per option). Fields are quoted as RFC 4180 asks, and a text that a
  * spreadsheet would run as a formula (it starts with =, +, -, @, a tab or a
  * carriage return) is prefixed with an apostrophe, so it is shown, not run.
  */
@@ -42,7 +42,18 @@ export function reportCsv(report: EventReport): string {
       incident.resolvedAt ?? "",
     ]),
   ];
-  return [figures, minutes, incidents]
+  const polls: (string | number)[][] = [
+    ["poll", "question", "option", "votes"],
+    ...report.polls.flatMap((poll) =>
+      poll.options.map((option) => [
+        poll.id,
+        poll.question,
+        option.label,
+        option.votes,
+      ]),
+    ),
+  ];
+  return [figures, minutes, incidents, polls]
     .map((table) => table.map((row) => row.map(csvCell).join(",")).join("\r\n"))
     .join("\r\n\r\n")
     .concat("\r\n");

@@ -6,6 +6,7 @@ import {
   type ChatEvent,
   type ChatSendAck,
   type EventStatusChanged,
+  type PollUpdated,
   type QuestionsEvent,
   REALTIME_PATH,
   type SessionRevoked,
@@ -100,6 +101,10 @@ export class RealtimeClient {
   /** Calls `listener` with every `questions.event` from now on. */
   onQuestions(listener: (event: QuestionsEvent) => void): void {
     this.socket.on("questions.event", listener);
+  }
+
+  onPoll(listener: (message: PollUpdated) => void): void {
+    this.socket.on("poll.updated", listener);
   }
 
   /**

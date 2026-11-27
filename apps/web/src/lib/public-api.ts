@@ -91,6 +91,8 @@ export type PublicResponse<T> =
       readonly ok: false;
       readonly status: number;
       readonly message: string;
+      /** The problem's machine-readable code, when the API sent one. */
+      readonly code?: string;
     };
 
 /**
@@ -127,9 +129,11 @@ export async function requestPublic<T>(
   if (response.ok) {
     return { ok: true, body: body as T };
   }
+  const code = textOf(body, "code");
   return {
     ok: false,
     status: response.status,
+    ...(code !== undefined && { code }),
     message:
       textOf(body, "detail") ??
       textOf(body, "title") ??

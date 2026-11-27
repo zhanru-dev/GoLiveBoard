@@ -43,10 +43,21 @@ const report = (title: string): EventReport => ({
   ],
   questions: { asked: 4, answered: 1 },
   chat: { messages: 2 },
+  polls: [
+    {
+      id: "0193f2a4-0000-7000-8000-0000000000bb",
+      question: "Which demo next?",
+      totalVotes: 3,
+      options: [
+        { label: "Dashboards", votes: 2 },
+        { label: "=Webhooks", votes: 1 },
+      ],
+    },
+  ],
 });
 
 describe("reportCsv", () => {
-  it("writes the figures, the minutes and the incidents as three tables", () => {
+  it("writes the figures, the minutes, the incidents and the polls as four tables", () => {
     expect(reportCsv(report("Launch")).split("\r\n")).toEqual([
       "metric,value",
       "event,Launch",
@@ -69,6 +80,10 @@ describe("reportCsv", () => {
       "",
       "incident,kind,opened_at,resolved_at",
       "0193f2a4-0000-7000-8000-0000000000aa,STREAM_UNREACHABLE,2026-12-01T17:01:10.000Z,",
+      "",
+      "poll,question,option,votes",
+      "0193f2a4-0000-7000-8000-0000000000bb,Which demo next?,Dashboards,2",
+      "0193f2a4-0000-7000-8000-0000000000bb,Which demo next?,'=Webhooks,1",
       "",
     ]);
   });

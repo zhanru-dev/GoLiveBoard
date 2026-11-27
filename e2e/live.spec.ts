@@ -271,6 +271,42 @@ test("questions wait for a moderator, then everyone sees them and votes live (FR
   await grace.context.close();
 });
 
+test("a Manager runs a poll; attendees answer once and see the counts live (FR-RN-8)", async ({
+  page,
+  browser,
+}) => {
+  const event = await openEvent(page.request);
+  const ada = await attendee(browser, event, "Ada Lovelace");
+  const grace = await attendee(browser, event, "Grace Hopper");
+  await openWatchPage(ada.page, event);
+  await openWatchPage(grace.page, event);
+
+  await page.goto(`/events/${event.id}`);
+  await page.getByLabel("New poll question").fill("Which demo next?");
+  await page.getByLabel("Option 1").fill("Dashboards");
+  await page.getByLabel("Option 2").fill("Webhooks");
+  await page.getByRole("button", { name: "Save as draft" }).click();
+  await page.getByRole("button", { name: "Open: Which demo next?" }).click();
+
+  // The poll reaches the watch pages without a reload.
+  await ada.page.getByRole("radio", { name: "Webhooks" }).check();
+  await ada.page.getByRole("button", { name: "Send answer" }).click();
+  await expect(ada.page.getByText("Webhooks · Your answer")).toBeVisible();
+  await expect(ada.page.getByText("100% (1)")).toBeVisible();
+  // Grace has not answered: she sees the question, not the counts.
+  await expect(
+    grace.page.getByRole("radio", { name: "Webhooks" }),
+  ).toBeVisible();
+  await expect(grace.page.getByText("100% (1)")).toHaveCount(0);
+  await expect(page.getByText("1 answer")).toBeVisible();
+
+  await page.getByRole("button", { name: "Close: Which demo next?" }).click();
+  await expect(grace.page.getByText("1 answer · Closed")).toBeVisible();
+
+  await ada.context.close();
+  await grace.context.close();
+});
+
 test("a revoked attendee's watch page says so within seconds (FR-AD-4)", async ({
   page,
   browser,

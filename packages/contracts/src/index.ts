@@ -199,3 +199,16 @@ export {
   BrowserTelemetryRequest,
   WebVital,
 } from "./browser-telemetry.js";
+export {
+  CreatePollRequest,
+  Poll,
+  POLL_OPTIONS_MAX,
+  POLL_OPTIONS_MIN,
+  PollList,
+  PollOptionLabel,
+  PollQuestion,
+  PollStatus,
+  PollUpdated,
+  PollVoteRequest,
+  UpdatePollRequest,
+} from "./polls.js";

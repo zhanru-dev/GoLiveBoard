@@ -3328,6 +3328,406 @@
         }
       }
     },
+    "/events/{eventId}/polls": {
+      "get": {
+        "operationId": "listPolls",
+        "tags": [
+          "Live"
+        ],
+        "summary": "The event's polls, newest first, drafts included",
+        "description": "Any member of the workspace.",
+        "security": [
+          {
+            "staffSession": []
+          }
+        ],
+        "x-required-role": "ANALYST",
+        "parameters": [
+          {
+            "name": "eventId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/WorkspaceId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Done",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PollList"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      },
+      "post": {
+        "operationId": "createPoll",
+        "tags": [
+          "Live"
+        ],
+        "summary": "Prepare a poll: a question and 2 to 6 options, as a draft",
+        "description": "Managers and Owners.",
+        "security": [
+          {
+            "staffSession": []
+          }
+        ],
+        "x-required-role": "MANAGER",
+        "parameters": [
+          {
+            "name": "eventId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/WorkspaceId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreatePollRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Done",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Poll"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      }
+    },
+    "/polls/{pollId}": {
+      "patch": {
+        "operationId": "updatePoll",
+        "tags": [
+          "Live"
+        ],
+        "summary": "Edit a draft poll",
+        "description": "Managers and Owners.",
+        "security": [
+          {
+            "staffSession": []
+          }
+        ],
+        "x-required-role": "MANAGER",
+        "parameters": [
+          {
+            "name": "pollId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "If-Match",
+            "in": "header",
+            "required": true,
+            "description": "The resource's current `ETag`.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/WorkspaceId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdatePollRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Done",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Poll"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      },
+      "delete": {
+        "operationId": "deletePoll",
+        "tags": [
+          "Live"
+        ],
+        "summary": "Delete a draft poll",
+        "description": "Managers and Owners.",
+        "security": [
+          {
+            "staffSession": []
+          }
+        ],
+        "x-required-role": "MANAGER",
+        "parameters": [
+          {
+            "name": "pollId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "If-Match",
+            "in": "header",
+            "required": true,
+            "description": "The resource's current `ETag`.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/WorkspaceId"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Done"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      }
+    },
+    "/polls/{pollId}/open": {
+      "post": {
+        "operationId": "openPoll",
+        "tags": [
+          "Live"
+        ],
+        "summary": "Open a draft poll; one open poll per event",
+        "description": "While the event takes interaction (configuring, ready, live). `409 POLL_ALREADY_OPEN` while another poll of the event is open.\n\nManagers and Owners.",
+        "security": [
+          {
+            "staffSession": []
+          }
+        ],
+        "x-required-role": "MANAGER",
+        "parameters": [
+          {
+            "name": "pollId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/WorkspaceId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Done",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Poll"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      }
+    },
+    "/polls/{pollId}/close": {
+      "post": {
+        "operationId": "closePoll",
+        "tags": [
+          "Live"
+        ],
+        "summary": "Close an open poll, for good",
+        "description": "Managers and Owners.",
+        "security": [
+          {
+            "staffSession": []
+          }
+        ],
+        "x-required-role": "MANAGER",
+        "parameters": [
+          {
+            "name": "pollId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/WorkspaceId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Done",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Poll"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      }
+    },
+    "/public/events/{slug}/polls": {
+      "get": {
+        "operationId": "listAttendeePolls",
+        "tags": [
+          "Live"
+        ],
+        "summary": "Open and closed polls, with the attendee's own answers",
+        "description": "Needs an attendee session.",
+        "security": [
+          {
+            "attendeeSession": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Done",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PollList"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      }
+    },
+    "/public/events/{slug}/polls/{pollId}/vote": {
+      "put": {
+        "operationId": "answerPoll",
+        "tags": [
+          "Live"
+        ],
+        "summary": "Answer an open poll: one answer per attendee, final",
+        "description": "Sending the same answer again returns the poll without counting it twice; another answer is refused with POLL_ALREADY_VOTED.\n\nNeeds an attendee session.",
+        "security": [
+          {
+            "attendeeSession": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100
+            }
+          },
+          {
+            "name": "pollId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PollVoteRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Done",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Poll"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      }
+    },
     "/events/{eventId}/live-ops": {
       "get": {
         "operationId": "getLiveOps",
@@ -4926,6 +5326,30 @@
           "role"
         ]
       },
+      "CreatePollRequest": {
+        "type": "object",
+        "properties": {
+          "question": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "options": {
+            "minItems": 2,
+            "maxItems": 6,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 80
+            }
+          }
+        },
+        "required": [
+          "question",
+          "options"
+        ]
+      },
       "CreateRunbookTaskRequest": {
         "type": "object",
         "properties": {
@@ -5469,6 +5893,54 @@
               "messages"
             ],
             "additionalProperties": false
+          },
+          "polls": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                "question": {
+                  "type": "string"
+                },
+                "totalVotes": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "options": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "label": {
+                        "type": "string"
+                      },
+                      "votes": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 9007199254740991
+                      }
+                    },
+                    "required": [
+                      "label",
+                      "votes"
+                    ],
+                    "additionalProperties": false
+                  }
+                }
+              },
+              "required": [
+                "id",
+                "question",
+                "totalVotes",
+                "options"
+              ],
+              "additionalProperties": false
+            }
           }
         },
         "required": [
@@ -5478,7 +5950,8 @@
           "audience",
           "incidents",
           "questions",
-          "chat"
+          "chat",
+          "polls"
         ],
         "additionalProperties": false
       },
@@ -6217,6 +6690,240 @@
           "email"
         ]
       },
+      "Poll": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "question": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "DRAFT",
+              "OPEN",
+              "CLOSED"
+            ]
+          },
+          "options": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                "label": {
+                  "type": "string"
+                },
+                "votes": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                }
+              },
+              "required": [
+                "id",
+                "label",
+                "votes"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "totalVotes": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "openedAt": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "closedAt": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "myOptionId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "question",
+          "status",
+          "options",
+          "totalVotes",
+          "version",
+          "openedAt",
+          "closedAt",
+          "createdAt"
+        ],
+        "additionalProperties": false
+      },
+      "PollList": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                "question": {
+                  "type": "string"
+                },
+                "status": {
+                  "type": "string",
+                  "enum": [
+                    "DRAFT",
+                    "OPEN",
+                    "CLOSED"
+                  ]
+                },
+                "options": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string",
+                        "format": "uuid"
+                      },
+                      "label": {
+                        "type": "string"
+                      },
+                      "votes": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 9007199254740991
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "label",
+                      "votes"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "totalVotes": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "version": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 9007199254740991
+                },
+                "openedAt": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "closedAt": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "createdAt": {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                "myOptionId": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "id",
+                "question",
+                "status",
+                "options",
+                "totalVotes",
+                "version",
+                "openedAt",
+                "closedAt",
+                "createdAt"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "additionalProperties": false
+      },
+      "PollVoteRequest": {
+        "type": "object",
+        "properties": {
+          "optionId": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "required": [
+          "optionId"
+        ]
+      },
       "ProblemDetails": {
         "type": "object",
         "properties": {
@@ -6267,6 +6974,11 @@
               "QUESTION_NOT_PINNABLE",
               "PIN_LIMIT_REACHED",
               "QUESTION_NOT_VOTABLE",
+              "POLL_NOT_EDITABLE",
+              "POLL_ALREADY_OPEN",
+              "POLL_NOT_OPEN",
+              "POLL_ALREADY_VOTED",
+              "POLL_OPTION_INVALID",
               "DELIVERY_PENDING",
               "RATE_LIMITED",
               "INTERNAL_ERROR",
@@ -7523,6 +8235,26 @@
         "required": [
           "role"
         ]
+      },
+      "UpdatePollRequest": {
+        "type": "object",
+        "properties": {
+          "question": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "options": {
+            "minItems": 2,
+            "maxItems": 6,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 80
+            }
+          }
+        }
       },
       "UpdateRunbookTaskRequest": {
         "type": "object",

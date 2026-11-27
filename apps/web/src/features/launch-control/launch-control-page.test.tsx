@@ -91,6 +91,9 @@ function serveEvent(
     http.get(`*/api/v1/events/${EVENT_ID}/questions`, () =>
       HttpResponse.json({ items: [], latestSequence: 0 }),
     ),
+    http.get(`*/api/v1/events/${EVENT_ID}/polls`, () =>
+      HttpResponse.json({ items: [] }),
+    ),
   );
 }
 
