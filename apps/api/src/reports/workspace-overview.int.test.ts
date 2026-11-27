@@ -151,6 +151,30 @@ describe("the workspace overview (FR-RC-4)", { timeout: 30_000 }, () => {
     expect(overview.events.map(({ id }) => id)).toEqual([november, october]);
   });
 
+  it("counts an event starting on the span's first instant, not one starting on the day after its last", async () => {
+    const client = new ApiClient(app, newAddress());
+    const owner = await client.newOwner();
+    const workspaceId = (await client.me(owner)).activeWorkspace.workspaceId;
+    const first = await completed(workspaceId, "2026-10-01T00:00:00.000Z");
+    const last = await completed(workspaceId, "2026-11-30T23:59:00.000Z");
+    await completed(workspaceId, "2026-09-30T23:59:59.999Z");
+    await completed(workspaceId, "2026-12-01T00:00:00.000Z");
+
+    const overview = WorkspaceOverview.parse(
+      (await client.get(owner, `/reports/overview${SPAN}`)).body,
+    );
+
+    expect(overview.events.map(({ id }) => id).sort()).toEqual(
+      [first, last].sort(),
+    );
+    expect(overview.months.map(({ month, events }) => [month, events])).toEqual(
+      [
+        ["2026-10", 1],
+        ["2026-11", 1],
+      ],
+    );
+  });
+
   it("lets Analysts read it, and exports it as CSV", async () => {
     const client = new ApiClient(app, newAddress());
     const owner = await client.newOwner();
