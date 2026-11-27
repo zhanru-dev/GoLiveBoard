@@ -22,7 +22,14 @@ import { ErrorBoundary } from "@/components/error-boundary";
  * Launch Control (FR-LC-1 to FR-LC-4): everything that decides whether the
  * event can go live, with the readiness score that sums it up.
  */
-export function LaunchControlPage({ eventId }: Readonly<{ eventId: string }>) {
+export function LaunchControlPage({
+  eventId,
+  demoStreamUrl,
+}: Readonly<{
+  eventId: string;
+  /** The one stream the demo workspace may use (DEMO_STREAM_URL). */
+  demoStreamUrl?: string;
+}>) {
   const control = useLaunchControl(eventId);
   const { event, workspaceId } = control;
   // For the demo guide: this browser has opened a Launch Control.
@@ -56,7 +63,11 @@ export function LaunchControlPage({ eventId }: Readonly<{ eventId: string }>) {
             <AccessPolicySection control={control} eventId={eventId} />
           </ErrorBoundary>
           <ErrorBoundary what="the stream">
-            <StreamSection control={control} event={event.data} />
+            <StreamSection
+              control={control}
+              event={event.data}
+              demoStreamUrl={demoStreamUrl}
+            />
           </ErrorBoundary>
           <ErrorBoundary what="the holding slate">
             <HoldingSlateSection control={control} eventId={eventId} />

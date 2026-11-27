@@ -135,6 +135,35 @@ describe("LaunchControlPage", () => {
     );
   });
 
+  it("offers the demo its test stream instead of an address field", async () => {
+    serveEvent();
+    const demo = {
+      ...OWNER,
+      activeWorkspace: { ...OWNER.activeWorkspace, isDemo: true },
+    };
+    const { unmount } = renderScreen(
+      <LaunchControlPage
+        eventId={EVENT_ID}
+        demoStreamUrl="https://test-streams.example.com/demo.m3u8"
+      />,
+      demo,
+    );
+
+    expect(
+      await screen.findByRole("button", { name: "Use the demo test stream" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByLabelText("HLS playback URL")).toBeNull();
+    unmount();
+
+    // Without a test stream, the demo cannot set one at all.
+    serveEvent();
+    renderScreen(<LaunchControlPage eventId={EVENT_ID} />, demo);
+    expect(
+      await screen.findByText(/Stream checks are switched off in the demo/),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /stream/i })).toBeNull();
+  });
+
   it("lists the blockers when going ready is refused", async () => {
     serveEvent();
     server.use(

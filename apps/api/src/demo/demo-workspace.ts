@@ -168,15 +168,24 @@ export async function demoHasRoomForQuestion(
 /**
  * Stream checks fetch the URL a Manager enters, every 30 seconds. Anyone can
  * be the demo's Manager, so in the demo nobody can enter one: it would let
- * strangers point the demo's requests at any public site.
+ * strangers point the demo's requests at any public site. The one exception
+ * is the deployment's own test stream (DEMO_STREAM_URL), compared exactly,
+ * so a demo event can still become Ready and go live.
  *
- * @throws DomainError `DEMO_RESTRICTED` in the demo workspace
+ * @throws DomainError `DEMO_RESTRICTED` in the demo workspace, for any other
+ * URL
  */
-export function assertNotDemoStream(workspaceId: string): void {
-  if (isDemoWorkspace(workspaceId)) {
+export function assertDemoStream(
+  workspaceId: string,
+  url: string,
+  allowed: string | undefined,
+): void {
+  if (isDemoWorkspace(workspaceId) && url !== allowed) {
     throw new DomainError("DEMO_RESTRICTED", {
       detail:
-        "Stream checks are switched off in the demo, because they send requests to the address entered.",
+        allowed === undefined
+          ? "Stream checks are switched off in the demo, because they send requests to the address entered."
+          : "In the demo, only the demo test stream can be used: stream checks send requests to the address entered.",
     });
   }
 }
