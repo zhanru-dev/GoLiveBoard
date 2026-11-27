@@ -20,6 +20,7 @@ import { NetModule } from "./net/net.module.js";
 import type { SafeHttpOptions } from "./net/safe-http.js";
 import { StreamsModule } from "./streams/streams.module.js";
 import { HealthModule } from "./health/health.module.js";
+import { OpenApiModule } from "./openapi/openapi.module.js";
 import { ProblemDetailsFilter } from "./http/problem-details.filter.js";
 import { createValidationPipe } from "./http/request-validation.js";
 import { createLogger } from "./observability/logger.js";
@@ -70,6 +71,7 @@ export class AppModule {
         TriageModule,
         BrowserTelemetryModule,
         WebhooksModule,
+        OpenApiModule,
       ],
       providers: [
         { provide: APP_FILTER, useClass: ProblemDetailsFilter },
