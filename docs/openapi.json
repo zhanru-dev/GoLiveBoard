@@ -3674,7 +3674,7 @@
           "Live"
         ],
         "summary": "Answer an open poll: one answer per attendee, final",
-        "description": "Needs an attendee session.",
+        "description": "Sending the same answer again returns the poll without counting it twice; another answer is refused with POLL_ALREADY_VOTED.\n\nNeeds an attendee session.",
         "security": [
           {
             "attendeeSession": []

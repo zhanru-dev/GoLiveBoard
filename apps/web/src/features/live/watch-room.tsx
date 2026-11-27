@@ -62,12 +62,12 @@ export function WatchRoom({ info }: Readonly<{ info: WatchInfo }>) {
   const chat = useChat(connection, slug, sources.chat);
   const qa = useQuestions(connection, sources.questions);
   const [questionError, setQuestionError] = useState<string>();
-  const polls = usePolls(connection, joined, () =>
+  const polls = usePolls(connection, joined, current, () =>
     load<PollList>(`/public/events/${slug}/polls`),
   );
   const [pollError, setPollError] = useState<string>();
 
-  async function answer(poll: Poll, optionId: string): Promise<void> {
+  async function answer(poll: Poll, optionId: string): Promise<boolean> {
     setPollError(undefined);
     const response = await requestPublic<Poll>(
       "PUT",
@@ -76,9 +76,14 @@ export function WatchRoom({ info }: Readonly<{ info: WatchInfo }>) {
     );
     if (response.ok) {
       polls.merge(response.body);
-    } else {
-      setPollError(response.message);
+      return true;
     }
+    setPollError(response.message);
+    if (response.code === "POLL_ALREADY_VOTED") {
+      // Answered elsewhere (another tab): show the answer given.
+      polls.reload();
+    }
+    return false;
   }
 
   // The stream's address comes with the page: reload it when the event

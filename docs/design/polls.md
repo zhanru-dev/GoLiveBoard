@@ -5,8 +5,8 @@ The first version (OpsPilot) had live polls; GoLiveBoard listed them out of scop
 ## What a poll is
 
 - A **question** (1–200 characters) and **2 to 6 options** (1–80 characters each, no two alike).
-- **Draft → Open → Closed.** Only a draft can be edited or deleted. A poll opens while the event takes interaction (as chat and Q&A do: configuring, ready, live), and **at most one poll is open per event**, so the watch page has one thing to answer. Closing is final. When the event completes or is cancelled, its open poll closes in the same transaction.
-- **One vote per attendee per poll**, final. Staff do not vote. A vote needs the attendee to be admitted now (the same check as a question's vote, under the event's lock).
+- **Draft → Open → Closed.** Only a draft can be edited or deleted. A poll opens while the event takes interaction (as chat and Q&A do: configuring, ready, live), and **at most one poll is open per event**, so the watch page has one thing to answer. Closing is final. When the event completes or is cancelled, its open poll closes in the same transaction, audited as a close by whoever moved the event; clients reload their polls when the new status reaches them.
+- **One vote per attendee per poll**, final. Staff do not vote. A vote needs the attendee to be admitted now (the same check as a question's vote, under the event's lock). Closing takes that lock too, so a vote counts before the close or is refused, never after. The same answer sent again (a retry, a second tab) succeeds without counting twice; a different one is refused with `POLL_ALREADY_VOTED`, and the page reloads to show the answer given.
 
 ## Who sees what
 
@@ -22,7 +22,7 @@ Counts are **not secret**: every participant receives them, as a vote count on a
 
 A poll is **state, not a log**: what matters is the latest counts, not every vote in order. So, unlike chat and Q&A, polls get no journal and no replay. Every change sends the whole poll, with a `version` that only increases, to every connection on the event (the event room that `event.status` already uses), across instances through the Valkey adapter. A client keeps the poll with the highest version it has seen, and reloads the list over HTTP whenever it (re)joins. A lost message is therefore corrected by the next one or by the next join.
 
-Votes are counted in the same transaction as the vote (`vote_count` per option, as `vote_count` per question). Announcements of votes are coalesced per poll to **at most one every 500 ms**, reading the counts at send time, so 500 attendees voting at once cost a few broadcasts, not 500.
+Votes are counted in the same transaction as the vote (`vote_count` per option, as `vote_count` per question). Announcements of votes are coalesced per poll to **at most one every 500 ms**, reading the counts at send time, so 500 attendees voting at once cost a few broadcasts, not 500. The votes themselves queue on the event's row lock, one short transaction each; that is the price of deciding admission and the close under one lock.
 
 ## Enforced by the database
 

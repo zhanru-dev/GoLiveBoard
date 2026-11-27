@@ -1,7 +1,7 @@
 "use client";
 
 import type { Poll } from "@goliveboard/contracts";
-import { useId, useState } from "react";
+import { useId, useRef, useState } from "react";
 
 import { PublicButton } from "../public/public-ui";
 import { PollResults } from "./poll-results";
@@ -25,12 +25,15 @@ export function PollCard({
   error,
 }: Readonly<{
   polls: readonly Poll[];
-  onAnswer: (poll: Poll, optionId: string) => Promise<void>;
+  /** Resolves whether the answer was taken. */
+  onAnswer: (poll: Poll, optionId: string) => Promise<boolean>;
   error?: string;
 }>) {
   const poll = currentPoll(polls);
   const [choice, setChoice] = useState<string>();
   const [busy, setBusy] = useState(false);
+  const [sent, setSent] = useState(false);
+  const heading = useRef<HTMLHeadingElement>(null);
   const name = useId();
   if (poll === undefined) {
     return null;
@@ -43,7 +46,16 @@ export function PollCard({
       aria-labelledby={`${name}-heading`}
       className="grid gap-3 rounded-lg border p-4"
     >
-      <h2 id={`${name}-heading`} className="text-sm font-semibold">
+      {/* The form goes once answered: keep the place and say so. */}
+      <p role="status" className="sr-only">
+        {sent ? "Answer sent. The results are below." : ""}
+      </p>
+      <h2
+        id={`${name}-heading`}
+        ref={heading}
+        tabIndex={-1}
+        className="text-sm font-semibold"
+      >
         {poll.status === "OPEN" ? "Live poll" : "Poll results"}
       </h2>
       {answering ? (
@@ -54,9 +66,16 @@ export function PollCard({
             submitted.preventDefault();
             if (choice === undefined) return;
             setBusy(true);
-            void onAnswer(poll, choice).finally(() => {
-              setBusy(false);
-            });
+            void onAnswer(poll, choice)
+              .then((taken) => {
+                if (taken) {
+                  setSent(true);
+                  heading.current?.focus();
+                }
+              })
+              .finally(() => {
+                setBusy(false);
+              });
           }}
         >
           <fieldset className="grid gap-2">

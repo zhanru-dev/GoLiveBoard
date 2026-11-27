@@ -1060,6 +1060,8 @@ export const ROUTES: readonly RouteSpec[] = [
     operationId: "answerPoll",
     tag: "Live",
     summary: "Answer an open poll: one answer per attendee, final",
+    description:
+      "Sending the same answer again returns the poll without counting it twice; another answer is refused with POLL_ALREADY_VOTED.",
     access: ATTENDEE,
     params: { ...slug, ...ids("pollId") },
     body: PollVoteRequest,

@@ -86,7 +86,7 @@ export class TransitionsService {
       });
       if (to === "COMPLETED" || to === "CANCELLED") {
         // Interaction ends: an open poll closes with it (FR-RN-8).
-        await closeOpenPolls(tx, eventId, now);
+        await closeOpenPolls(tx, actor, eventId, to, now);
       }
       if (to === "COMPLETED") {
         // The audience figures, now final (FR-RC-3).

@@ -39,15 +39,19 @@ export function orderPolls(polls: Iterable<Poll>): Poll[] {
 
 /**
  * An event's polls, live (FR-RN-8): loaded over HTTP, again whenever the
- * connection joins a channel (so after a reconnect), and updated by every
- * `poll.updated` the server sends.
+ * connection joins a channel (so after a reconnect) or the event's status
+ * changes (completing or cancelling it closes its open poll, which is not
+ * announced), and updated by every `poll.updated` the server sends.
  */
 export function usePolls(
   connection: RealtimeConnection | undefined,
   joined: ReadonlySet<RealtimeChannel>,
+  /** The event's status as the page knows it (staff or public terms). */
+  status: string,
   list: () => Promise<PollList>,
 ) {
   const [polls, setPolls] = useState<ReadonlyMap<string, Poll>>(new Map());
+  const [reloads, setReloads] = useState(0);
   const listRef = useRef(list);
 
   const merge = useCallback((poll: Poll) => {
@@ -67,7 +71,12 @@ export function usePolls(
     return () => {
       cancelled = true;
     };
-  }, [joined]);
+  }, [joined, status, reloads]);
+
+  /** Loads the list again, as the server has it. */
+  const reload = useCallback(() => {
+    setReloads((count) => count + 1);
+  }, []);
 
   useEffect(() => connection?.onPoll(merge), [connection, merge]);
 
@@ -81,5 +90,5 @@ export function usePolls(
   }, []);
 
   const ordered = useMemo(() => orderPolls(polls.values()), [polls]);
-  return { polls: ordered, merge, forget };
+  return { polls: ordered, merge, forget, reload };
 }

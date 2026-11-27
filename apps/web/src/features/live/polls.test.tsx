@@ -1,5 +1,5 @@
 import type { Poll } from "@goliveboard/contracts";
-import { screen } from "@testing-library/react";
+import { renderHook, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
@@ -7,7 +7,7 @@ import { renderScreen } from "@/testing/render";
 
 import { currentPoll, PollCard } from "./poll-card";
 import { percentOf } from "./poll-results";
-import { mergePoll, orderPolls } from "./use-polls";
+import { mergePoll, orderPolls, usePolls } from "./use-polls";
 
 const poll = (changes: Partial<Poll> = {}): Poll => ({
   id: "0195f0a0-0000-7000-8000-0000000000a1",
@@ -88,7 +88,7 @@ describe("currentPoll and percentOf", () => {
 
 describe("PollCard (FR-RN-8)", () => {
   it("asks for one answer, and hides the counts until then", async () => {
-    const onAnswer = vi.fn().mockResolvedValue(undefined);
+    const onAnswer = vi.fn().mockResolvedValue(true);
     const open = poll({ myOptionId: null });
     renderScreen(<PollCard polls={[open]} onAnswer={onAnswer} />);
     const user = userEvent.setup();
@@ -100,6 +100,38 @@ describe("PollCard (FR-RN-8)", () => {
     await user.click(send);
 
     expect(onAnswer).toHaveBeenCalledWith(open, open.options[1]?.id);
+  });
+
+  it("says the answer was sent and keeps the keyboard's place, once taken", async () => {
+    const open = poll({ myOptionId: null });
+    renderScreen(
+      <PollCard polls={[open]} onAnswer={vi.fn().mockResolvedValue(true)} />,
+    );
+    const user = userEvent.setup();
+
+    await user.click(screen.getByRole("radio", { name: "Webhooks" }));
+    await user.click(screen.getByRole("button", { name: "Send answer" }));
+
+    await vi.waitFor(() => {
+      expect(screen.getByRole("status")).toHaveTextContent("Answer sent");
+    });
+    expect(screen.getByRole("heading", { name: "Live poll" })).toHaveFocus();
+  });
+
+  it("says nothing was sent when the answer is refused", async () => {
+    const onAnswer = vi.fn().mockResolvedValue(false);
+    renderScreen(
+      <PollCard polls={[poll({ myOptionId: null })]} onAnswer={onAnswer} />,
+    );
+    const user = userEvent.setup();
+
+    await user.click(screen.getByRole("radio", { name: "Webhooks" }));
+    await user.click(screen.getByRole("button", { name: "Send answer" }));
+
+    await vi.waitFor(() => {
+      expect(onAnswer).toHaveBeenCalledOnce();
+    });
+    expect(screen.getByRole("status")).toHaveTextContent("");
   });
 
   it("shows the counts after answering, marking the attendee's answer", () => {
@@ -130,5 +162,31 @@ describe("PollCard (FR-RN-8)", () => {
       <PollCard polls={[poll({ status: "DRAFT" })]} onAnswer={vi.fn()} />,
     );
     expect(screen.queryByRole("heading")).toBeNull();
+  });
+});
+
+describe("usePolls (FR-RN-8)", () => {
+  it("loads the polls again when the event's status changes, and on request", async () => {
+    const list = vi.fn().mockResolvedValue({ items: [] });
+    const joined = new Set<never>();
+    const { rerender, result } = renderHook(
+      ({ status }: { status: "LIVE" | "COMPLETED" }) =>
+        usePolls(undefined, joined, status, list),
+      { initialProps: { status: "LIVE" } },
+    );
+    await vi.waitFor(() => {
+      expect(list).toHaveBeenCalledTimes(1);
+    });
+
+    // Completing the event closes its open poll without announcing it.
+    rerender({ status: "COMPLETED" });
+    await vi.waitFor(() => {
+      expect(list).toHaveBeenCalledTimes(2);
+    });
+
+    result.current.reload();
+    await vi.waitFor(() => {
+      expect(list).toHaveBeenCalledTimes(3);
+    });
   });
 });

@@ -291,10 +291,13 @@ export class PollsService {
 
   /**
    * An admitted attendee's answer: one per poll, final. Decided under the
-   * event's lock, which every change to who may take part also takes.
+   * event's lock, which every change to who may take part also takes, and
+   * closing the poll too: an answer counts before the close or not at all.
+   * The same answer again (a retry, another tab) is taken as already given.
    *
    * @throws NOT_FOUND, FORBIDDEN (staff), INTERACTION_CLOSED, POLL_NOT_OPEN,
-   * POLL_OPTION_INVALID, POLL_ALREADY_VOTED, RATE_LIMITED
+   * POLL_OPTION_INVALID, POLL_ALREADY_VOTED (for another option),
+   * RATE_LIMITED
    */
   async vote(
     viewer: Viewer,
@@ -305,7 +308,7 @@ export class PollsService {
     const { eventId } = requireParticipant(
       await this.participants.authorize(viewer.identity, ref, viewer.requestId),
     );
-    const row = await this.prisma.$transaction(async (tx) => {
+    const { row, counted } = await this.prisma.$transaction(async (tx) => {
       // Decided again under the event's lock, which every change to who
       // may take part also takes.
       if (!(await lockEventById(tx, eventId))) {
@@ -348,19 +351,29 @@ export class PollsService {
         VALUES (${pollId}::uuid, ${attendeeId}::uuid, ${optionId}::uuid)
         ON CONFLICT DO NOTHING`;
       if (inserted === 0) {
-        throw new DomainError("POLL_ALREADY_VOTED");
+        const given = await tx.pollVote.findUnique({
+          where: { pollId_attendeeId: { pollId, attendeeId } },
+          select: { optionId: true },
+        });
+        if (given?.optionId !== optionId) {
+          throw new DomainError("POLL_ALREADY_VOTED");
+        }
+        return { row: poll, counted: false };
       }
       await tx.pollOption.update({
         where: { id: optionId },
         data: { voteCount: { increment: 1 } },
       });
-      return tx.poll.update({
+      const updated = await tx.poll.update({
         where: { id: pollId },
         data: { version: { increment: 1 } },
         select: POLL_SELECT,
       });
+      return { row: updated, counted: true };
     });
-    this.announce(row.eventId, row.id);
+    if (counted) {
+      this.announce(row.eventId, row.id);
+    }
     return toPoll(row, optionId);
   }
 

@@ -152,7 +152,7 @@ function LiveRoom({
     [event.id, workspaceId],
   );
   const chat = useChat(connection, event.slug, sources.chat);
-  const polls = usePolls(connection, joined, () =>
+  const polls = usePolls(connection, joined, event.status, () =>
     api(`/events/${event.id}/polls`, { schema: PollList, workspaceId }),
   );
   const qa = useQuestions(connection, sources.questions);

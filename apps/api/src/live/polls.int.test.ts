@@ -86,6 +86,18 @@ describe("live polls (FR-RN-8)", { timeout: 30_000 }, () => {
 
   type Attendee = Awaited<ReturnType<typeof attendee>>;
 
+  /** The event's only attendee. */
+  async function attendeeId(eventId: string): Promise<string> {
+    const rows = await database.query<{ id: string }>(
+      "SELECT id FROM attendees WHERE event_id = $1",
+      [eventId],
+    );
+    if (rows.length !== 1 || rows[0] === undefined) {
+      throw new Error(`Expected one attendee, found ${String(rows.length)}`);
+    }
+    return rows[0].id;
+  }
+
   /** A connection on another instance, recording every poll it is sent. */
   async function watcher(cookie: string, slug: string) {
     const client = await RealtimeClient.connect(secondUrl, {
@@ -165,6 +177,13 @@ describe("live polls (FR-RN-8)", { timeout: 30_000 }, () => {
     const answered = await vote(ada, event.slug, poll.id, option(poll, 1));
     expect(answered.status, answered.text).toBe(200);
     expect(Poll.parse(answered.body)).toMatchObject({
+      totalVotes: 1,
+      myOptionId: option(poll, 1),
+    });
+    // The same answer again (a retry, another tab) is the answer given.
+    const again = await vote(ada, event.slug, poll.id, option(poll, 1));
+    expect(again.status, again.text).toBe(200);
+    expect(Poll.parse(again.body)).toMatchObject({
       totalVotes: 1,
       myOptionId: option(poll, 1),
     });
@@ -318,16 +337,161 @@ describe("live polls (FR-RN-8)", { timeout: 30_000 }, () => {
         other.id,
       ]),
     ).rejects.toThrow(/polls_times_match_status/);
-    const [someone] = await database.query<{ id: string }>(
-      "SELECT id FROM attendees LIMIT 1",
+    await attendee(event.slug);
+    const ada = await attendeeId(event.id);
+    await expect(
+      database.query(
+        "INSERT INTO poll_votes (poll_id, attendee_id, option_id) VALUES ($1, $2, $3)",
+        [poll.id, ada, option(other, 0)],
+      ),
+    ).rejects.toThrow(/poll_votes_option_id_poll_id_fkey/);
+  });
+
+  it("completing the event closes its open poll, audited, and opens no other", async () => {
+    const { client, owner, event } = await setUp();
+    const ada = await attendee(event.slug);
+    const poll = await draft(client, owner, event.id);
+    const later = await draft(client, owner, event.id);
+    await run(client, owner, poll, "open");
+    expect((await vote(ada, event.slug, poll.id, option(poll, 2))).status).toBe(
+      200,
     );
-    if (someone !== undefined) {
-      await expect(
-        database.query(
-          "INSERT INTO poll_votes (poll_id, attendee_id, option_id) VALUES ($1, $2, $3)",
-          [poll.id, someone.id, option(other, 0)],
-        ),
-      ).rejects.toThrow(/poll_votes_option_id_poll_id_fkey/);
-    }
+    await database.query("UPDATE events SET status = 'LIVE' WHERE id = $1", [
+      event.id,
+    ]);
+
+    const completed = await client.send(
+      owner,
+      "post",
+      `/events/${event.id}/transitions`,
+      { to: "COMPLETED" },
+    );
+    expect(completed.status, completed.text).toBe(200);
+
+    const staffList = PollList.parse(
+      (await client.get(owner, `/events/${event.id}/polls`)).body,
+    );
+    expect(staffList.items.find(({ id }) => id === poll.id)).toMatchObject({
+      status: "CLOSED",
+      totalVotes: 1,
+    });
+    const userId = (await client.me(owner)).user.id;
+    const audit = await database.query<{
+      action: string;
+      actor_user_id: string | null;
+      after: unknown;
+    }>(
+      `SELECT action, actor_user_id, after FROM audit_entries
+        WHERE target_id = $1 ORDER BY created_at`,
+      [poll.id],
+    );
+    expect(audit.at(-1)).toEqual({
+      action: "poll.closed",
+      actor_user_id: userId,
+      after: { totalVotes: 1, because: "event completed" },
+    });
+    // Interaction is over: no poll opens on a completed event.
+    expect(code(await run(client, owner, later, "open"))).toBe(
+      "INTERACTION_CLOSED",
+    );
+    const report = await client.get(owner, `/events/${event.id}/report`);
+    expect(report.status, report.text).toBe(200);
+    expect((report.body as { polls: unknown[] }).polls).toMatchObject([
+      { id: poll.id, totalVotes: 1 },
+    ]);
+  });
+
+  it(
+    "counts a vote racing the close before the close, or refuses it",
+    { timeout: 90_000 },
+    async () => {
+      // A vote that read the poll as open must not land after the close: the
+      // close's own count would then be wrong, and the report with it.
+      for (let round = 0; round < 4; round += 1) {
+        const { client, owner, event } = await setUp();
+        const voters = await Promise.all(
+          Array.from({ length: 8 }, () => attendee(event.slug)),
+        );
+        const poll = await draft(client, owner, event.id);
+        await run(client, owner, poll, "open");
+        const votes = voters.map((who) =>
+          vote(who, event.slug, poll.id, option(poll, 0)),
+        );
+
+        const outcomes = await Promise.all([
+          ...votes.slice(0, 4),
+          run(client, owner, poll, "close"),
+          ...votes.slice(4),
+        ]);
+
+        const closed = outcomes.splice(4, 1)[0];
+        expect(closed?.status, closed?.text).toBe(200);
+        const counted = outcomes.filter(({ status }) => status === 200).length;
+        expect(
+          outcomes.filter(({ status }) => status !== 200).map(code),
+        ).toEqual(Array.from({ length: 8 - counted }, () => "POLL_NOT_OPEN"));
+        expect(Poll.parse(closed?.body).totalVotes).toBe(counted);
+        const [stored] = await database.query<{ votes: number }>(
+          "SELECT count(*)::int AS votes FROM poll_votes WHERE poll_id = $1",
+          [poll.id],
+        );
+        expect(stored?.votes).toBe(counted);
+      }
+    },
+  );
+
+  it("takes answers only from attendees admitted now", async () => {
+    const { client, owner, event } = await setUp();
+    const ada = await attendee(event.slug);
+    const poll = await draft(client, owner, event.id);
+    await run(client, owner, poll, "open");
+
+    const revoked = await client.send(
+      owner,
+      "post",
+      `/events/${event.id}/attendees/${await attendeeId(event.id)}/revoke`,
+      {},
+    );
+    expect(revoked.status, revoked.text).toBe(200);
+
+    expect([401, 403]).toContain(
+      (await vote(ada, event.slug, poll.id, option(poll, 0))).status,
+    );
+    expect([401, 403]).toContain(
+      (await ada.browser.get(`/public/events/${event.slug}/polls`)).status,
+    );
+    const [stored] = await database.query<{ votes: number }>(
+      "SELECT count(*)::int AS votes FROM poll_votes WHERE poll_id = $1",
+      [poll.id],
+    );
+    expect(stored?.votes).toBe(0);
+  });
+
+  it("announces a poll once it opens, never as a draft", async () => {
+    const { client, owner, event } = await setUp();
+    const ada = await attendee(event.slug);
+    const received = await watcher(ada.cookie, event.slug);
+    const poll = await draft(client, owner, event.id);
+    const edited = await client
+      .send(owner, "patch", `/polls/${poll.id}`, { question: "Which one?" })
+      .set("If-Match", '"1"');
+    expect(edited.status, edited.text).toBe(200);
+    const doomed = await draft(client, owner, event.id);
+    const removed = await client
+      .send(owner, "delete", `/polls/${doomed.id}`, undefined)
+      .set("If-Match", '"1"');
+    expect(removed.status, removed.text).toBe(204);
+
+    await run(client, owner, poll, "open");
+
+    await expect
+      .poll(() => received.some(({ status }) => status === "OPEN"), {
+        timeout: DELIVERY_MS,
+      })
+      .toBe(true);
+    // Sent in order: a draft's announcement would have come first.
+    expect(received.map(({ id, status }) => [id, status])).toEqual([
+      [poll.id, "OPEN"],
+    ]);
   });
 });

@@ -85,6 +85,38 @@ const info = (changes: Partial<WatchInfo> = {}): WatchInfo => ({
   ...changes,
 });
 
+const POLL = {
+  id: "0195f0a0-0000-7000-8000-0000000000a1",
+  question: "Which demo next?",
+  status: "OPEN",
+  options: [
+    {
+      id: "0195f0a0-0000-7000-8000-0000000000b1",
+      label: "Dashboards",
+      votes: 0,
+    },
+    { id: "0195f0a0-0000-7000-8000-0000000000b2", label: "Webhooks", votes: 1 },
+  ],
+  totalVotes: 1,
+  version: 3,
+  openedAt: "2026-11-27T18:00:00.000Z",
+  closedAt: null,
+  createdAt: "2026-11-27T17:50:00.000Z",
+  myOptionId: null,
+};
+
+/** Serves the polls in turn, the last one from then on. */
+function servePolls(...lists: object[][]) {
+  let served = 0;
+  server.use(
+    http.get(`*/api/v1/public/events/${SLUG}/polls`, () => {
+      const items = lists[Math.min(served, lists.length - 1)];
+      served += 1;
+      return HttpResponse.json({ items });
+    }),
+  );
+}
+
 function serveRoom() {
   server.use(
     http.get(`*/api/v1/public/events/${SLUG}/chat/messages`, () =>
@@ -200,6 +232,53 @@ describe("WatchRoom (FR-RN-1)", () => {
     await vi.waitFor(() => {
       expect(calls).toEqual(["PUT", "DELETE"]);
     });
+  });
+
+  it("shows a poll's result once the event's end closes it", async () => {
+    serveRoom();
+    servePolls([POLL], [{ ...POLL, status: "CLOSED", version: 4 }]);
+    renderScreen(<WatchRoom info={info({ status: "LIVE" })} />);
+    expect(
+      await screen.findByRole("heading", { name: "Live poll" }),
+    ).toBeVisible();
+
+    act(() => {
+      FakeRealtimeConnection.last?.options.onStatus?.({
+        slug: SLUG,
+        status: "ENDED",
+      });
+    });
+
+    expect(
+      await screen.findByRole("heading", { name: "Poll results" }),
+    ).toBeVisible();
+  });
+
+  it("shows the answer already given elsewhere, rather than a form that cannot be sent", async () => {
+    serveRoom();
+    servePolls([POLL], [{ ...POLL, myOptionId: POLL.options[0]?.id }]);
+    server.use(
+      http.put(`*/api/v1/public/events/${SLUG}/polls/${POLL.id}/vote`, () =>
+        HttpResponse.json(
+          {
+            code: "POLL_ALREADY_VOTED",
+            status: 409,
+            title: "You have already answered this poll",
+          },
+          { status: 409 },
+        ),
+      ),
+    );
+    renderScreen(<WatchRoom info={info({ status: "LIVE" })} />);
+    const user = userEvent.setup();
+
+    await user.click(await screen.findByRole("radio", { name: "Webhooks" }));
+    await user.click(screen.getByRole("button", { name: "Send answer" }));
+
+    expect(await screen.findByText("Dashboards · Your answer")).toBeVisible();
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "You have already answered this poll",
+    );
   });
 
   it("asks with an idempotency key", async () => {
