@@ -22,6 +22,7 @@ What milestone 9 measured and checked, kept next to the documents it holds to ac
 - **[Accessibility audit](accessibility-audit.md)** — WCAG 2.2 AA, criterion by criterion, with the keyboard walkthrough; the [screen-reader pass](screen-reader-pass.md) is the script for listening to it.
 - **[Security review](security-review.md)** — OWASP ASVS 5.0 level 2, with a ZAP scan.
 - **[Runbooks](runbooks/README.md)** — what to do when something goes wrong, each rehearsed once.
+- **[Production acceptance, 27 November 2026](acceptance/2026-11-27-production.md)** — the live site checked by hand after the November features, and the credentials bug it found.
 
 ## Conventions used in these documents
 
